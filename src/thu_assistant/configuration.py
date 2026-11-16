@@ -71,12 +71,10 @@ _STORAGE_FIELDS = (
     "storage.temp_dir",
     "storage.log_dir",
 )
-_REQUIRED_PACKAGE_FILES = (
-    "gateway.js",
-    "services.json",
-    "security.js",
-    "cookies.js",
-    "package-lock.json",
+_REQUIRED_PACKAGE_FILES = tuple(
+    spec.relative_path
+    for spec in paths.RESOURCE_SPECS
+    if spec.scope == "package" and spec.required and spec.kind == "file"
 )
 
 _ENV_FIELDS = {
