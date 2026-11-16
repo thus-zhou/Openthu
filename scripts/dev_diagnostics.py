@@ -116,29 +116,35 @@ def _command_version(path):
     def read_output():
         assert process.stdout is not None
         while len(captured) <= MAX_DIAGNOSTIC_OUTPUT:
-            chunk = process.stdout.read(1024)
+            try:
+                chunk = process.stdout.read(1024)
+            except (OSError, ValueError):
+                break
             if not chunk:
                 break
             captured.extend(chunk)
 
     reader = threading.Thread(target=read_output, daemon=True)
     reader.start()
+    timed_out = False
     try:
         process.wait(timeout=15)
     except subprocess.TimeoutExpired:
+        timed_out = True
         try:
             process.kill()
             process.wait(timeout=2)
         except (OSError, subprocess.SubprocessError):
             pass
-        return None
     finally:
+        reader.join(timeout=2)
         if process.stdout is not None:
             try:
                 process.stdout.close()
             except OSError:
                 pass
-    reader.join(timeout=2)
+    if timed_out:
+        return None
     if process.returncode != 0 or len(captured) > MAX_DIAGNOSTIC_OUTPUT:
         return None
     output = captured.decode("utf-8", errors="replace").strip()
