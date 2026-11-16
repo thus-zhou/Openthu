@@ -157,7 +157,9 @@ for index in range(12):
     try:
         original_write_all = keys._write_all
         original_harden = keys._harden_windows_acl
+        last_payload = {"data": b""}
         def spy_write_all(fd, data, _original=original_write_all):
+            last_payload["data"] = data
             print("write_all_len", len(data))
             return _original(fd, data)
         def spy_harden(path, _original=original_harden):
@@ -172,6 +174,12 @@ for index in range(12):
         keys._harden_windows_acl = original_harden
         loop_raw = loop_key.read_bytes()
         loop_payload = loop_raw[len(keys.DPAPI_KEY_MAGIC) :]
+        print(
+            "prefix_eq",
+            loop_raw[: len(last_payload["data"])] == last_payload["data"],
+            "extra",
+            loop_raw[len(last_payload["data"]) :].hex(),
+        )
         loop_restored = keys._dpapi("unprotect", loop_payload)
         print(
             "loop",
