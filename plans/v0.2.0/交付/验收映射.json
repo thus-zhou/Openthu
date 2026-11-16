@@ -270,7 +270,7 @@
         "Domain identities, date/time precision, integer status mapping, role digest and same-title/different-id relations validated against course-v1 and query fixtures.",
         "Cursor c1 bound to parameters, account scope and snapshot-v2 for learn, authenticated pages and account-bound services; cancelled second page keeps the first segment but stays partial.",
         "tests/test_query_contracts.py: 40 passed; clean-tree full offline suite at 734d41a Python 622 passed/5 skipped, Node 64 passed; check 402 files/0 findings.",
-        "GitHub Actions ubuntu-24.04 and windows-2025 succeeded at 4281df0 (run 43942584816).",
+        "GitHub Actions ubuntu-24.04 and windows-2025 succeeded at final 3.2 audit-fix head 456e7a5 (run 43945010355); the earlier head 4281df0 also passed (run 43942584816).",
         "Audit remediation 734d41a (follow-up a579c2f) fixes P1-1..P1-4 and the P2 findings; remaining P3 limits are recorded in the module result.",
         "Result mirrored at plans/v0.2.0/交付/模块结果/3.2.json; no live campus, model or business calls.",
         "All three batch-3 modules are module-accepted; batch 3 stays ready until the single integration commit records the joint suite and CI."
@@ -308,11 +308,12 @@
         "File boundary: regular file, no symlink/reparse point, POSIX readable bit, one open with fstat identity check, bounded streaming.",
         "Image limits 8 MiB / 4 per request / 16 MiB total / 16 Mpx / 20000 side; a small PNG declaring 20000x20000 fails before decode.",
         "Orientation applied and EXIF/GPS/XMP/ICC/comment removed by re-encoding; derived hash differs from source hash and is re-verified on read.",
-        "References bound to account scope, task, purpose and expiry; cross-account, cross-task and expired resolution rejected.",
+        "References bound to account scope (acct_ pseudonym only; none rejected), task, purpose and expiry; cross-account, cross-task and expired resolution rejected.",
         "Model bundle preview plus request-bound single-use grant; capability probe reads no bytes; no network client imported.",
-        "Temporary area 0700/0600 with .part atomic rename; disk-full, cancel and timeout leave nothing; cleanup keeps live unexpired references and foreign files.",
-        "Encrypted reference state via 2.2 secure store restores across processes and rejects a different account.",
-        "tests/test_media_assets.py: 69 passed on Linux; isolated module tree at d897ccc: Python 600/5, Node 54, check 392 files 0 findings; joint batch tree at 1c54b0c: Python 610/5, Node 64, check 402/0."
+        "Temporary area 0700/0600 with .part atomic rename and .media-lock single-owner lock; disk-full, cancel and timeout leave nothing; cleanup keeps live unexpired references and foreign files.",
+        "Encrypted reference state via 2.2 secure store restores across processes and rejects a different account; SecureStore.account_scope() is the sanctioned pseudonym derivation.",
+        "tests/test_media_assets.py: 84 passed at 036a00d; joint batch tree Python 645/7, Node 66/0, check 402/0; validators ok.",
+        "No live campus, model or business calls; Windows conclusions come from windows-2025 CI on the batch-3 tree."
       ]
     },
     {

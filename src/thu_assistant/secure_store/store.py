@@ -350,6 +350,32 @@ class SecureStore:
             raise SecureStoreCorrupt("active records directory is unavailable")
         return directory
 
+    def account_scope(
+        self,
+        account: str,
+        *,
+        purpose: str,
+        account_domain: str = "CAMPUS",
+        service_domain: str = "LOCAL",
+    ) -> str:
+        """Return the stable pseudonym callers may use as an opaque account scope.
+
+        The token is derived with this store's protected account namespace, so
+        it is stable across data-key rotation and never contains the raw
+        account.  Media references (module 3.3) require exactly this shape and
+        treat it as an opaque scope; callers must not build ``acct_`` tokens by
+        hashing an account id themselves.
+        """
+        if not isinstance(account, str):
+            raise SecureInputError("account must be text")
+        return self.provider.account_reference(
+            account,
+            purpose=purpose,
+            account_domain=account_domain,
+            service_domain=service_domain,
+            namespace_key=self._namespace_key,
+        )
+
     def _prepare_data_dir(self) -> None:
         if self.data_dir.is_symlink():
             raise SecureDataDirError("data directory cannot be a link")

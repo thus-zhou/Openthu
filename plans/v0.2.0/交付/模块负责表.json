@@ -217,6 +217,14 @@
         "Browser state is sealed through the owned gateway; gateway stdout contains ciphertext only, never a cookie value.",
         "learn_assistant/auth.py writes session.secure with scope learn-session; captured _dpapi_protect/_dpapi_unprotect references in action_store and todos reach the new provider.",
         "Audit remediation 6930dde through b0ecc64 adds Learn account binding, ACTION-only compatibility decrypt, fail-closed access helper, browser identity rejection, default-key discovery, verified temp-file writes and real Windows DPAPI migration coverage."
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/secure_store/keys.py (owned by 2.2): the private DPAPI backend now calls _dpapi_protect_legacy/_dpapi_unprotect_legacy from learn_assistant.auth so the provider master key cannot re-enter the secure provider; behaviour unchanged, 2.2 tests pass.",
+        "contracts/v0.2/error-classification.json (owned by 1.1): session/storage codes registered in the batch-3 integration commit after 3.1's explicit request; additive registry entries only.",
+        "src/learn_assistant/models.py, providers/web.py and thu_assistant/mcp_stdio.py (owned by 6.1/7.3): LoginStatus.error_code and account-scoped Learn session wiring; wording follows SecureSessionStore.protection.",
+        "src/thu_assistant/action_store.py (owned by 4.4): outer THU-ACTION-1 container and stable record_id remain 4.4 scope; 3.1 only narrows compatibility unseal to ACTION envelopes.",
+        "src/thu_assistant/todos.py (owned by 5.4): outer THU-TODOS-1 container and stable record_id remain 5.4 scope.",
+        "crypto_service.py / crypto-bridge.js packaging and default key creation (owned by 6.3)."
       ]
     },
     {
@@ -256,15 +264,21 @@
       "integration_order": 6,
       "status": "accepted",
       "accepted_at": "2026-11-17",
-      "delivery_commit": "ec2f617",
+      "delivery_commit": "ec2f61723a332777cf21c7d2d73e335ca566ee5c",
       "audit_fix": "3.2-audit-20261117 P1/P2 via 734d41a (follow-up a579c2f)",
       "evidence": [
         "source-state-v1 completeness triad, source-evidence builder and error-classification mirror; 40 module tests passed",
         "domain-models-v1 stable identities, time precision, integer status mapping and same-title/different-id relations; cache-v2 live/directory/history policies",
         "cursor c1 bound to parameters/account/snapshot-v2 for learn, authenticated pages and account-bound services; cancelled continuation stays partial",
         "clean-tree full offline suite at 734d41a: Python 622 passed/5 skipped, Node 64 passed; check 402 files/0 findings; validators ok",
-        "GitHub Actions ubuntu-24.04 and windows-2025 succeeded at final 3.2 audit-fix head 4281df0 (run 43942584816)",
+        "GitHub Actions ubuntu-24.04 and windows-2025 succeeded at final 3.2 audit-fix head 456e7a5 (run 43945010355); the earlier head 4281df0 also passed (run 43942584816)",
         "no live campus, model or business calls; batch 3 remains ready for the single integration commit"
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/gateway.js and mcp_stdio.py (owned by 6.1): the facade must use source_state.public_error and preserve the 29 legacy tools; pagination.js keeps both expectedPages and expected_pages for compatibility.",
+        "contracts/v0.2/error-classification.json (owned by 1.1): cursor/completeness codes added during 3.2 implementation; additive registry entries only.",
+        "4.1/4.2/4.3/4.5/5.1/5.3/5.4: adapters must use domain_models for stable identities, time precision and duplicate relations, and cache_policy for history fallback.",
+        "6.2: cursors and snapshots are process-local; a second process cannot resume another process's cursor."
       ]
     },
     {
@@ -296,7 +310,23 @@
         "图片/附件本地检查、临时目录、哈希和媒体引用"
       ],
       "integration_order": 7,
-      "status": "accepted"
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "036a00dc0f49d0efdd0633b72b47e8a51818a304",
+      "audit_fix": "3.3-audit-20261117 P1/P2 via 036a00d; P2-8 coverage gaps and P3 items retained as documented limits",
+      "evidence": [
+        "84 module tests at 036a00d; content signature, image limits, metadata removal, account/task/purpose/expiry binding, single-use model grant, locked temp root.",
+        "Shared tree Python 645 passed/7 skipped, Node 66 passed/0 failed, check 402 files/0 findings; validators ok.",
+        "Encrypted reference state restores across processes through the 2.2 secure store and rejects a different account.",
+        "No live campus, model or business call; Windows conclusions come from windows-2025 CI."
+      ],
+      "cross_module_handoffs": [
+        "pyproject.toml (owned by 6.3) and requirements-dev.txt (owned by 1.1): added Pillow==13.0.0 per the frozen dependency proposal; 6.3 keeps the final lock, wheel resource manifest and packaging validation.",
+        "contracts/v0.2/error-classification.json (owned by 1.1/6.1): MEDIA_* codes are module-internal until 6.1 registers them before facade exposure.",
+        "SecureStore.account_scope() (owned by 2.2, added in the batch-3 integration commit): the sanctioned derivation for the acct_ pseudonym that media references require.",
+        "4.2/4.5/6.1: pass the configured 2.1 temp_dir as MediaAssets(temp_root), use purpose COURSE_RESOURCE/MODEL_INPUT, and send only through prepare/authorize/consume.",
+        "7.2: include tests/test_media_assets.py and tests/test_batch3_integration.py in cross-platform fault-injection regression."
+      ]
     },
     {
       "id": "4.1",

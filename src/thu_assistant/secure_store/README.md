@@ -19,7 +19,11 @@ cursors.  It does not change the existing Windows DPAPI records in place.
   different envelopes.  Keys are split by purpose through HKDF.
 - **Account reference:** an HMAC-SHA256 pseudonym scoped by purpose, account
   domain and service domain.  The raw account is used only in memory.  A bare
-  hash of a low-entropy account is not used as an identifier.
+  hash of a low-entropy account is not used as an identifier.  `SecureStore.
+  account_scope()` is the public derivation entry point for callers that bind
+  their own records to an account (module 3.3 media references require the
+  `acct_...` shape); the token is stable across data-key rotation and must be
+  treated as opaque.
 
 ## Key backends
 
