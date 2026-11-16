@@ -131,7 +131,7 @@
       "accepted_at": null,
       "entry_condition": "all batch 2 modules accepted and integrated",
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
-      "gate_note": "3.1 accepted at 4895404 (code 24ecdb7); 3.2 accepted at ec2f617; 3.3 accepted at 1d681d0. All three modules are accepted, but the batch remains ready until the batch integration commit records the joint check and full offline suite. Ubuntu/Windows CI at 4895404: 43937664679 success."
+      "gate_note": "3.1 accepted at 0784367 (code 24ecdb7); 3.2 accepted at ec2f617; 3.3 accepted at 1d681d0. All three modules are accepted, but the batch remains ready until the batch integration commit records the joint check and full offline suite. Ubuntu/Windows CI at 0784367: 43941862411 success."
     },
     {
       "batch": 4,
