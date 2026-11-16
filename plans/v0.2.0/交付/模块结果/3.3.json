@@ -116,8 +116,9 @@
         "note": "both platforms completed with no failing job at the final code commit; local joint-tree run: Python 610 passed / 5 skipped, Node 64 passed, check 402 files / 0 findings"
       },
       "036a00d": {
-        "ubuntu_24_04": "pending at handoff",
-        "windows_2025": "pending at handoff"
+        "ubuntu_24_04": "success",
+        "windows_2025": "success",
+        "note": "both platforms completed with no failing job; local isolated-tree run at the same commit: Python 637 passed / 6 skipped, Node 64, check 402/0"
       }
     },
     "module_tests_windows": {
