@@ -35,4 +35,4 @@ python contracts/v0.2/sources/validate.py
 python -m pytest tests/test_source_contracts.py
 ```
 
-期望结果：29 sources、10 models、8 tasks、14 readiness、7 fixtures、9 schema samples、21 rejection samples，`ok=true`。
+期望结果：29 sources、10 models、8 tasks、14 readiness、7 fixtures、9 schema samples、24 rejection samples，`ok=true`。

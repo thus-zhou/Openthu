@@ -175,7 +175,7 @@
       "evidence": [
         "Source registry: 29 sources, 8 source tasks, 14 adapter-readiness rows.",
         "Domain model manifest: 10 models; event reuses calendar-event-v1.",
-        "Validator: 9 schema samples, 21 rejection samples, 7 fixtures, ok=true.",
+        "Validator: 9 schema samples, 24 rejection samples, 7 fixtures, ok=true.",
         "Tests: tests/test_source_contracts.py passed; no live campus, model, payment or submission calls."
       ]
     },

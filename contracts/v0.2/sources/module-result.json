@@ -9,7 +9,7 @@
   "branch": "hermes/1-install-diagnostics",
   "version_pr": 2,
   "baseline_commit": "970cb0d266ef814a1372d3756ea7faf85e472233",
-  "delivery_commit": "the commit containing this record",
+  "delivery_commit": "f7fe6408ad3e9e16bdee2ca041cb648a2fc2b2ab",
   "checked_at": "2026-11-16",
   "paths": {
     "source_contracts": "contracts/v0.2/sources/",
@@ -20,12 +20,12 @@
   "checks": {
     "plan_validator": "ok: 24 modules, 9 batches",
     "contract_validator": "ok: 9 schema samples, 35 rejection samples, 8 extra fixtures",
-    "source_validator": "ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures, 9 schema samples, 21 rejection samples",
-    "source_tests": "3 passed",
+    "source_validator": "ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures, 9 schema samples, 24 rejection samples",
+    "source_tests": "5 passed",
     "dev_check": "ok: 367 files, 0 privacy findings, 29 MCP tools",
-    "dev_test_shared_tree": "470 Python passed, 5 skipped, 1 warning in a 2.1 diagnostics thread test; 54 Node passed; shared tree also contains the committed 2.1/2.2 modules, so this is not a 2.3-only count",
-    "ci_ubuntu": "success (both runs for 3b848d3; also success for 173922e)",
-    "ci_windows": "failure (both runs for 3b848d3); 173922e fixes the 2.1 root-path test; the 2.2 secure-store key permission/ACL failure remains; not a 2.3 failure",
+    "dev_test_shared_tree": "481 Python passed, 5 skipped, 0 failed; 54 Node passed; shared tree also contains the committed 2.1/2.2 modules, so this is not a 2.3-only count",
+    "ci_ubuntu": "success for 3b848d3, 173922e and a273d0e",
+    "ci_windows": "failure for 3b848d3 and a273d0e; a273d0e: 461 passed / 3 skipped / 5 failed / 6 errors, all in 2.2 secure_store; 2.3 tests pass; 173922e fixed the 2.1 root-path test",
     "live_campus_calls": 0,
     "model_calls": 0,
     "business_submissions": 0
@@ -52,7 +52,7 @@
       "status": "BLOCKED_SOURCE_EVIDENCE"
     }
   ],
-  "next_action": "2.3 is accepted. The 2.1 Windows root-path fix is in 173922e; the 2.2 secure-store Windows key permission/ACL failure still blocks batch 2. After 2.2 is fixed, reconnect all three modules and pass the full offline suite and both-platform CI before batch 3 unlocks.",
+  "next_action": "2.3 is accepted. 2.1 is accepted at 690cbab; the 2.2 secure-store Windows key permission/ACL failure still blocks batch 2. After 2.2 is fixed, reconnect all three modules and pass the full offline suite and both-platform CI before batch 3 unlocks.",
   "privacy": {
     "raw_payload_included": false,
     "personal_records_included": false,

@@ -90,7 +90,7 @@ def _read_posix(path: Path) -> bytes:
     except FileNotFoundError:
         raise SecureKeyNotConfigured("key file is missing") from None
     _check_posix_file(path, before)
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
     try:
         fd = os.open(path, flags)
     except OSError:
@@ -325,7 +325,7 @@ def create_key_file(
 
     created = False
     try:
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
         try:
             fd = os.open(target, flags, 0o600)
         except FileExistsError:

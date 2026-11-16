@@ -111,10 +111,10 @@
     "adapter_readiness": 14,
     "fixtures": 7,
     "schema_samples": 9,
-    "rejection_samples": 21,
+    "rejection_samples": 24,
     "validator": "contracts/v0.2/sources/validate.py",
     "test": "tests/test_source_contracts.py",
-    "delivery_commit": "the commit containing this record"
+    "delivery_commit": "f7fe6408ad3e9e16bdee2ca041cb648a2fc2b2ab"
   },
   "batches": {
     "total": 9,
