@@ -156,12 +156,20 @@ for index in range(12):
     loop_key = root / "keys" / f"loop-{index}.key"
     try:
         original_write_all = keys._write_all
+        original_harden = keys._harden_windows_acl
         def spy_write_all(fd, data, _original=original_write_all):
             print("write_all_len", len(data))
             return _original(fd, data)
+        def spy_harden(path, _original=original_harden):
+            print("before_harden_size", len(path.read_bytes()))
+            result = _original(path)
+            print("after_harden_size", len(path.read_bytes()))
+            return result
         keys._write_all = spy_write_all
+        keys._harden_windows_acl = spy_harden
         keys.create_key_file(loop_key, "windows-dpapi")
         keys._write_all = original_write_all
+        keys._harden_windows_acl = original_harden
         loop_raw = loop_key.read_bytes()
         loop_payload = loop_raw[len(keys.DPAPI_KEY_MAGIC) :]
         loop_restored = keys._dpapi("unprotect", loop_payload)
