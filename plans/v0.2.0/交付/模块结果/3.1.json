@@ -6,12 +6,14 @@
   "status": "accepted",
   "baseline_commit": "4d60e8bbca91d771dc6c4db478de4863922a2b07",
   "integration_parent_commit": "d897ccc7d1e6b4b75e344a28aaa6b4adcb392eef",
-  "delivery_commit": "4528b0a6ab6c5bae3fcb1847ba9486bf8a0d8d7b",
+  "delivery_commit": "48954044efb1a40904f004be22a1a9f87847145c",
   "code_commits": [
     "24ecdb7",
     "e81ceb9",
     "19f68e9",
-    "4528b0a"
+    "4528b0a",
+    "feb3a79",
+    "4895404"
   ],
   "branch": "hermes/1-install-diagnostics",
   "version_pr": 2,
@@ -139,15 +141,24 @@
       ]
     },
     "full_offline_suite_linux": {
-      "python_passed": 608,
+      "python_passed": 609,
       "python_skipped": 5,
       "python_failed": 0,
       "node_passed": 64,
       "node_failed": 0,
-      "check_files": 392,
+      "check_files": 402,
       "check_findings": 0,
       "commands": ["python scripts/dev.py check", "python scripts/dev.py test"],
       "note": "Shared tree includes the accepted 3.2 and 3.3 modules; these are not 3.1-only counts."
+    },
+    "full_offline_suite_windows": {
+      "python_passed": 603,
+      "python_skipped": 11,
+      "python_failed": 0,
+      "node_passed": 64,
+      "node_failed": 0,
+      "check_files": 402,
+      "check_findings": 0
     },
     "contracts": {
       "plan_validator": "ok: 24 modules, 9 batches",
@@ -155,10 +166,12 @@
       "source_validator": "ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures"
     },
     "github_actions": {
-      "head_sha": "24ecdb73a3abf4897ba6389a175735e269300c18",
-      "status": "recorded after the code push; see the run list on the branch",
-      "ubuntu_24_04": "pending-or-recorded-in-run",
-      "windows_2025": "pending-or-recorded-in-run"
+      "head_sha": "48954044efb1a40904f004be22a1a9f87847145c",
+      "run_id": 43937664679,
+      "ubuntu_24_04": "success",
+      "windows_2025": "success",
+      "ubuntu_result": "609 passed, 5 skipped, 0 failed; Node 64 passed",
+      "windows_result": "603 passed, 11 skipped, 0 failed; Node 64 passed"
     },
     "live_campus_calls": 0,
     "model_calls": 0,
