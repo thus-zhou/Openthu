@@ -343,8 +343,6 @@ def test_learn_session_store_discovers_default_key(tmp_path, monkeypatch):
     home = tmp_path / "home"
     config = home / ".config"
     key = config / "openthu" / "keys" / "master.key"
-    key.parent.mkdir(parents=True, mode=0o700)
-    key.parent.chmod(0o700)
     create_key_file(key)
     learn = tmp_path / "learn"
     for name in ("THU_SECURE_KEY_FILE", "OPENTHU_SECURE_KEY_FILE", "THU_SECURE_BACKEND", "OPENTHU_SECURE_BACKEND"):
