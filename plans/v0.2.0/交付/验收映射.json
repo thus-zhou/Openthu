@@ -100,7 +100,8 @@
         "plan validator ok (24 modules/9 batches); contract validator ok (9/35/8 samples)",
         "audit report P1/P2/P3 2.1 items fixed; cross-module legacy path items recorded for 4.2/6.3",
         "Windows CI a273d0e: 2.1 test files 0 failures; the then-failing 2.2 secure_store was fixed later and the batch is accepted at 4519117",
-        "re-verified head 34c463d: both platforms green; 2.1 tests included; check 369/0"
+        "re-verified head 34c463d: both platforms green; 2.1 tests included; check 369/0",
+        "final re-audit tree: check 371/0; Python 505/5 Linux and Windows; Node 54; module results mirrored for 2.3"
       ]
     },
     {
