@@ -403,12 +403,20 @@ class SecureStore:
             raise SecureInvalidRecordId("record identifier is invalid")
         return self.records_dir / (record_id + ".secure")
 
+    @staticmethod
+    def _check_record_file(path: Path) -> None:
+        if path.is_symlink():
+            raise SecureStoreCorrupt("record cannot be a link")
+        if path.exists() and not path.is_file():
+            raise SecureStoreCorrupt("record is not a regular file")
+
     def _ensure_active_key(self) -> None:
         if self._pointer["active_key_id"] != self.provider.key_id:
             raise SecureKeyMismatch("provider does not match the active store key")
 
     def inspect(self, record_id: str) -> dict[str, Any]:
         path = self._record_path(record_id)
+        self._check_record_file(path)
         try:
             raw = path.read_bytes()
         except FileNotFoundError:
@@ -440,6 +448,7 @@ class SecureStore:
             raise SecureInputError("plaintext is too large")
         with _Lock(self._lock_path()):
             self._ensure_active_key()
+            self._check_record_file(path)
             previous_revision = 0
             if path.exists():
                 try:
@@ -483,6 +492,7 @@ class SecureStore:
         expected_revision: int | None = None,
     ) -> bytes:
         path = self._record_path(record_id)
+        self._check_record_file(path)
         try:
             raw = path.read_bytes()
         except FileNotFoundError:
