@@ -94,5 +94,10 @@ for label, call in (
     try:
         value = call()
         print(label, "ok", str(value)[:120])
+        if label == "snapshot":
+            print("snapshot_sddl", clean(str(value[1])))
+        if label == "harden":
+            after = keys._windows_acl_snapshot(target)
+            print("after_sddl", clean(str(after[1])))
     except Exception as exc:
         print(label, "error", type(exc).__name__, getattr(exc, "detail", ""))
