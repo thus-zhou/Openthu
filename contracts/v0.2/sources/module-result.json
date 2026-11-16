@@ -24,8 +24,8 @@
     "source_tests": "5 passed",
     "dev_check": "ok: 367 files, 0 privacy findings, 29 MCP tools",
     "dev_test_shared_tree": "481 Python passed, 5 skipped, 0 failed; 54 Node passed; shared tree also contains the committed 2.1/2.2 modules, so this is not a 2.3-only count",
-    "ci_ubuntu": "success for 3b848d3, 173922e and a273d0e",
-    "ci_windows": "failure for 3b848d3 and a273d0e; a273d0e: 461 passed / 3 skipped / 5 failed / 6 errors, all in 2.2 secure_store; 2.3 tests pass; 173922e fixed the 2.1 root-path test",
+    "ci_ubuntu": "success for 3b848d3, 173922e, a273d0e and d4a2f03",
+    "ci_windows": "failure for 3b848d3, a273d0e and d4a2f03; d4a2f03: 480 passed / 3 skipped / 3 failed; failures are 2.1 configuration parent-directory and configured-node-path, plus 2.2 secure_store bridge; 2.3 tests pass",
     "live_campus_calls": 0,
     "model_calls": 0,
     "business_submissions": 0
@@ -52,7 +52,7 @@
       "status": "BLOCKED_SOURCE_EVIDENCE"
     }
   ],
-  "next_action": "2.3 is accepted. 2.1 is accepted at 690cbab; the 2.2 secure-store Windows key permission/ACL failure still blocks batch 2. After 2.2 is fixed, reconnect all three modules and pass the full offline suite and both-platform CI before batch 3 unlocks.",
+  "next_action": "2.3 is accepted. 2.1 is accepted at 690cbab and 2.2 at 713e527; Windows CI on d4a2f03 still fails 2.1 configuration/dev-diagnostics tests and the 2.2 secure-store bridge, so batch 2 remains blocked. After those owners fix their tests and the three modules pass both-platform CI, reconnect them and unlock batch 3.",
   "privacy": {
     "raw_payload_included": false,
     "personal_records_included": false,
