@@ -273,7 +273,7 @@
         "GitHub Actions ubuntu-24.04 and windows-2025 succeeded at final 3.2 audit-fix head 456e7a5 (run 43945010355); the earlier head 4281df0 also passed (run 43942584816).",
         "Audit remediation 734d41a (follow-up a579c2f) fixes P1-1..P1-4 and the P2 findings; remaining P3 limits are recorded in the module result.",
         "Result mirrored at plans/v0.2.0/交付/模块结果/3.2.json; no live campus, model or business calls.",
-        "All three batch-3 modules are module-accepted; batch 3 stays ready until the single integration commit records the joint suite and CI."
+        "All three batch-3 modules are module-accepted and were reconnected at the single integration commit 400adbe; the joint suite and push/PR CI are green on both platforms."
       ]
     },
     {

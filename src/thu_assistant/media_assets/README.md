@@ -60,8 +60,8 @@ data = assets.read_bytes(ref.media_id, account_scope=scope, task_id=task)
 
 ## 引用与授权
 
-引用绑定 `account_scope`（2.2 的账号伪名，必须是 `acct_...`；2.2 表示“未绑定账号”的
-`none` 会被拒绝，不得用它代替账号作用域）、`task_id`、`purpose` 和 `expires_at`
+引用绑定 `account_scope`（2.2 的账号伪名，必须是 `acct_...`；由 `SecureStore.account_scope()` 派生，
+2.2 表示“未绑定账号”的 `none` 会被拒绝，不得用它代替账号作用域）、`task_id`、`purpose` 和 `expires_at`
 （默认 900 秒）。账号、任务、用途或时限任一不符即拒绝；引用不是下载地址，也不自动
 授予另一次请求使用同一文件的权限——新请求必须重新登记。派生文件被替换或改写时，
 `read_bytes` 在返回前重新计算哈希并拒绝。

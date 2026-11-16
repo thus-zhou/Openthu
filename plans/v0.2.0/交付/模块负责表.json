@@ -272,7 +272,7 @@
         "cursor c1 bound to parameters/account/snapshot-v2 for learn, authenticated pages and account-bound services; cancelled continuation stays partial",
         "clean-tree full offline suite at 734d41a: Python 622 passed/5 skipped, Node 64 passed; check 402 files/0 findings; validators ok",
         "GitHub Actions ubuntu-24.04 and windows-2025 succeeded at final 3.2 audit-fix head 456e7a5 (run 43945010355); the earlier head 4281df0 also passed (run 43942584816)",
-        "no live campus, model or business calls; batch 3 remains ready for the single integration commit"
+        "no live campus, model or business calls; batch 3 was reconnected at the single integration commit 400adbe"
       ],
       "cross_module_handoffs": [
         "src/thu_assistant/gateway.js and mcp_stdio.py (owned by 6.1): the facade must use source_state.public_error and preserve the 29 legacy tools; pagination.js keeps both expectedPages and expected_pages for compatibility.",
