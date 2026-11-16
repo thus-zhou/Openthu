@@ -30,7 +30,6 @@ FILE_KEY_MAGIC = b"THU-KEY-1\0"
 DPAPI_KEY_MAGIC = b"THU-DPAPI-KEY-1\0"
 KEY_BYTES = 32
 MAX_KEY_FILE_BYTES = 4096
-_SID = re.compile(r"S-1-[0-9-]+")
 
 
 @dataclass(frozen=True)
@@ -139,7 +138,16 @@ def _read_key_bytes(path: Path) -> bytes:
 
 
 def _minimal_windows_env() -> dict[str, str]:
-    names = ("SystemRoot", "WINDIR", "PATH", "PATHEXT", "TEMP", "TMP", "COMSPEC")
+    names = (
+        "SystemRoot",
+        "WINDIR",
+        "PATH",
+        "PATHEXT",
+        "TEMP",
+        "TMP",
+        "COMSPEC",
+        "PSModulePath",
+    )
     env = {name: os.environ[name] for name in names if name in os.environ}
     root = env.setdefault("SystemRoot", r"C:\Windows")
     system32 = str(Path(root) / "System32")
@@ -150,9 +158,20 @@ def _minimal_windows_env() -> dict[str, str]:
 
 
 def _powershell() -> str:
-    root = os.environ.get("SystemRoot", r"C:\Windows")
-    candidate = Path(root) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
-    return str(candidate)
+    """Prefer PowerShell 7; fall back to Windows PowerShell on older hosts."""
+    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+    candidates = [
+        Path(program_files) / "PowerShell" / "7" / "pwsh.exe",
+        Path(os.environ.get("SystemRoot", r"C:\Windows"))
+        / "System32"
+        / "WindowsPowerShell"
+        / "v1.0"
+        / "powershell.exe",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return "powershell.exe"
 
 
 def _windows_acl_snapshot(path: Path) -> tuple[str, str]:
@@ -160,7 +179,7 @@ def _windows_acl_snapshot(path: Path) -> tuple[str, str]:
     script = (
         "[Console]::Out.Write("
         "([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value)"
-        " + \"`n\" + (Get-Acl -LiteralPath $env:OPENTHU_ACL_PATH).Sddl)"
+        " + \"`n\" + (Get-Acl -LiteralPath $env:OPENTHU_ACL_PATH -ErrorAction Stop).Sddl)"
     )
     env = _minimal_windows_env()
     env["OPENTHU_ACL_PATH"] = str(path)
@@ -174,12 +193,13 @@ def _windows_acl_snapshot(path: Path) -> tuple[str, str]:
             timeout=20,
             check=False,
             env=env,
+            stdin=subprocess.DEVNULL,
         )
     except (OSError, subprocess.SubprocessError):
-        raise SecureKeyPermissionError("cannot inspect key ACL") from None
+        raise SecureKeyPermissionError("acl-snapshot-process") from None
     lines = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
     if result.returncode != 0 or len(lines) < 2:
-        raise SecureKeyPermissionError("cannot inspect key ACL")
+        raise SecureKeyPermissionError("acl-snapshot-query")
     return lines[0], lines[1]
 
 
@@ -188,21 +208,34 @@ def _windows_acl_owner_only(path: Path) -> bool:
         current, sddl = _windows_acl_snapshot(path)
     except SecureKeyPermissionError:
         return False
-    owner = re.search(r"O:(S-1-[0-9-]+)", sddl)
-    if not owner or owner.group(1) != current:
+    owner = re.search(r"O:([^GDS]+)", sddl)
+    if not owner:
         return False
-    dacl = re.search(r"D:([^GS]*)", sddl)
-    if not dacl or "NO_ACCESS_CONTROL" in sddl:
+    owner_token = owner.group(1)
+    owner_ok = owner_token in {current, "OW"}
+    if owner_token == "LA" and current.endswith("-500"):
+        owner_ok = True
+    if not owner_ok:
         return False
-    allowed = {current, "S-1-5-18"}  # current user and the local SYSTEM account
+    if "NO_ACCESS_CONTROL" in sddl or "D:" not in sddl:
+        return False
     aces = re.findall(r"\((?:A|OA);([^)]*)\)", sddl)
     if not aces:
         return False
+    current_ace = False
     for body in aces:
-        sid = body.rsplit(";", 1)[-1].strip()
-        if not _SID.fullmatch(sid) or sid not in allowed:
+        token = body.rsplit(";", 1)[-1].strip()
+        if token == current or token == "OW":
+            current_ace = True
+        elif token == "LA" and current.endswith("-500"):
+            current_ace = True
+        elif token in {"SY", "BA"}:
+            # SYSTEM and local administrators are OS administrative
+            # principals; they are not ordinary interactive users.
+            continue
+        else:
             return False
-    return True
+    return current_ace
 
 
 def _harden_windows_acl(path: Path) -> None:
@@ -219,6 +252,7 @@ def _harden_windows_acl(path: Path) -> None:
             timeout=20,
             check=False,
             env=env,
+            stdin=subprocess.DEVNULL,
         )
         second = subprocess.run(
             ["icacls", str(path), "/grant:r", f"*{current}:F"],
@@ -227,11 +261,23 @@ def _harden_windows_acl(path: Path) -> None:
             timeout=20,
             check=False,
             env=env,
+            stdin=subprocess.DEVNULL,
+        )
+        third = subprocess.run(
+            ["icacls", str(path), "/setowner", f"*{current}"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+            env=env,
+            stdin=subprocess.DEVNULL,
         )
     except (OSError, subprocess.SubprocessError):
         raise SecureKeyPermissionError("cannot harden key ACL") from None
-    if first.returncode or second.returncode:
-        raise SecureKeyPermissionError("cannot harden key ACL")
+    if first.returncode or second.returncode or third.returncode:
+        raise SecureKeyPermissionError(
+            f"acl-harden-inheritance-{first.returncode}-grant-{second.returncode}-owner-{third.returncode}"
+        )
 
 
 def _write_all(fd: int, data: bytes) -> None:
