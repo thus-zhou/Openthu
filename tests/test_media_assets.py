@@ -1066,3 +1066,18 @@ def test_encrypted_state_survives_a_restart(tmp_path):
     ).split()
     assert int(restored) == 1
     assert int(size) > 0
+
+
+def test_pending_cleanup_lists_retention_without_paths(assets, sources, clock):
+    live = register_image(assets, png_file(sources, "live.png"), clock=clock)
+    expired = register_image(
+        assets, png_file(sources, "expired.png"), clock=clock, retention="EXPLICIT_DELETE"
+    )
+    clock.advance(seconds=901)
+    rows = {row["asset_id"]: row for row in assets.pending_cleanup()}
+    assert set(rows) == {live.media_id, expired.media_id}
+    assert rows[live.media_id]["retention"] == "SESSION"
+    assert rows[expired.media_id]["retention"] == "EXPLICIT_DELETE"
+    assert rows[expired.media_id]["expired"] is True
+    assert all(row["derived_present"] for row in rows.values())
+    assert str(assets.temp.root) not in json.dumps(rows)

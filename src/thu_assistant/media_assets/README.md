@@ -69,6 +69,8 @@ data = assets.read_bytes(ref.media_id, account_scope=scope, task_id=task)
 
 - `cancel_task(task_id)` 撤销该任务的全部引用并删除派生文件；之后的解析返回
   `MEDIA_REFERENCE_REVOKED`。
+- `pending_cleanup()` 给出仍持有派生文件的引用清单（asset_id、retention、expires_at、
+  derived_present、uses），不含路径，作为未完成清理的明确清单。
 - `cleanup()` 只删除本模块命名规则内、未被活动引用使用的文件；`PROJECT_CACHE`
   保留项和目录中的外来文件不动。
 - 保留期：`SESSION` 在进程退出时删除；`EXPLICIT_DELETE` 与 `PROJECT_CACHE`

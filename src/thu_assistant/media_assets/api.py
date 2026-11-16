@@ -483,6 +483,37 @@ class MediaAssets:
             self.save_state(references[0].account_scope)
         return {"task_id": task_id, "revoked": len(references), "removed": removed}
 
+    def pending_cleanup(self) -> list[dict[str, Any]]:
+        """Explicit list of references that still hold derived bytes.
+
+        No path is returned: the entry names the reference, its retention, its
+        expiry and whether the derived file is still present.
+        """
+        moment = self.clock()
+        rows: list[dict[str, Any]] = []
+        for reference in self.registry.snapshot():
+            rows.append(
+                {
+                    "asset_id": reference.media_id,
+                    "account_scope": reference.account_scope,
+                    "task_id": reference.task_id,
+                    "purpose": reference.purpose,
+                    "retention": reference.retention,
+                    "state": reference.state,
+                    "expires_at": (
+                        reference.expires_at.isoformat()
+                        if reference.expires_at is not None
+                        else None
+                    ),
+                    "expired": bool(
+                        reference.expires_at is not None and moment >= reference.expires_at
+                    ),
+                    "derived_present": reference.path.is_file(),
+                    "uses": reference.uses,
+                }
+            )
+        return rows
+
     def cleanup(self, *, min_age_seconds: float | None = None) -> CleanupReport:
         grace = (
             self.limits.cleanup_grace_seconds

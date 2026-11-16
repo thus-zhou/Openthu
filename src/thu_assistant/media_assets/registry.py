@@ -306,6 +306,10 @@ class ReferenceRegistry:
                 item.path for item in self._items.values() if item.state == "ACTIVE"
             }
 
+    def snapshot(self) -> list[MediaReference]:
+        with self._lock:
+            return list(self._items.values())
+
     def entries(self, *, account_scope: str | None = None) -> list[dict[str, Any]]:
         with self._lock:
             items = list(self._items.values())
