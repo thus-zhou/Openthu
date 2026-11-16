@@ -143,7 +143,7 @@
         "29 source rows, 10 domain models, 8 source tasks, 14 adapter-readiness rows, 7 synthetic fixtures",
         "contracts/v0.2/sources/validate.py: ok=true; 9 schema samples, 21 rejection samples",
         "tests/test_source_contracts.py: 3 passed",
-        "shared-tree check: 335 files, 0 findings; test: 470 Python passed/5 skipped, 54 Node passed; warning in a 2.1 diagnostics thread test"
+        "shared-tree check: 367 files, 0 findings; test: 470 Python passed/5 skipped, 54 Node passed; warning in a 2.1 diagnostics thread test"
       ]
     },
     {
