@@ -122,8 +122,9 @@
       },
       "note": "3.3's own code is unchanged in behaviour between d897ccc and 1d681d0 apart from the pending_cleanup listing; the batch integrator must re-run CI on the final integration tree.",
       "1c54b0c": {
-        "ubuntu_24_04": "pending at handoff",
-        "windows_2025": "pending at handoff"
+        "ubuntu_24_04": "success",
+        "windows_2025": "success",
+        "note": "both platforms completed with no failing job at the final code commit; local joint-tree run: Python 610 passed / 5 skipped, Node 64 passed, check 402 files / 0 findings"
       }
     },
     "module_tests_windows": {
