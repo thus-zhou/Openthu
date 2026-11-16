@@ -7,6 +7,7 @@
   "baseline_commit": "4d60e8b",
   "integration_parent_commit": "4d60e8b",
   "delivery_commit": "ec2f617",
+  "audit_fix_commit": "734d41a",
   "record_commit": "338dd0b",
   "batch_state": "all three modules accepted; batch 3 ready pending the single integration commit",
   "branch": "hermes/1-install-diagnostics",
@@ -30,14 +31,14 @@
   "outputs": [
     "source-state-v1: completeness triad, source evidence builder, error classification",
     "domain-models-v1: stable identities, time precision, role/status mapping, duplicate relations, standard record",
-    "cache-v1: LIVE_ONLY availability, SHORT_CACHE directory, explicit HISTORY_FALLBACK_ALLOWED",
+    "cache-v2: LIVE_ONLY availability, SHORT_CACHE directory, explicit HISTORY_FALLBACK_ALLOWED, checked_at-bound cache records",
     "query-v1 envelope: query_time, read_scope, upstream_total, snapshot_complete, partial_reasons, source_state",
-    "cursor c1 bound to parameters/account scope/snapshot-v2; distinct expiry, mismatch and stale-version errors",
+    "cursor c1 bound to parameters/account scope/snapshot-v2 for account-bound services, learn queries and authenticated pages; distinct expiry, mismatch and stale-version errors",
     "pagination.js collector cancellation: first segment retained, complete=false"
   ],
   "checks": {
     "module_tests_linux": {
-      "passed": 28,
+      "passed": 40,
       "failed": 0,
       "command": "python -m pytest -o addopts='' -q tests/test_query_contracts.py"
     },
@@ -67,19 +68,19 @@
     },
     "privacy_check": {
       "ok": true,
-      "files_checked": 379,
+      "files_checked": 402,
       "findings": 0,
       "mcp_tools": 29,
       "command": "python scripts/dev.py check"
     },
     "full_offline_suite_linux": {
-      "python_passed": 533,
+      "python_passed": 622,
       "python_skipped": 5,
       "python_failed": 0,
-      "node_passed": 54,
+      "node_passed": 64,
       "node_failed": 0,
       "command": "python scripts/dev.py test",
-      "worktree": "isolated tree at 4d60e8b with only the 3.2 commit applied; the shared tree contains in-flight 3.1/3.3 work"
+      "worktree": "clean detached tree at 734d41a containing the 3.2 delivery plus audit remediation"
     },
     "github_actions": {
       "ubuntu-24.04": "success",
@@ -108,10 +109,10 @@
     "the same title with different source record ids keeps both records and reports POSSIBLE_DUPLICATE_TITLE / SAME_TITLE_DIFFERENT_IDENTITY",
     "a date-only value keeps date precision and is neither padded to midnight nor sorted as a timed value",
     "a cursor continuation keeps the original query_time, checked_at and read window across midnight",
-    "availability cache is always rejected as live evidence; directory cache is bounded; history fallback requires allow_stale=true and stays HISTORICAL/incomplete",
-    "parameter, account, page-size or snapshot-version changes after a cursor produce CURSOR_QUERY_MISMATCH or STALE_SNAPSHOT_TAKE_NEW_SNAPSHOT; expiry/eviction produces CURSOR_EXPIRED",
+    "availability cache is always rejected as live evidence; directory cache is bounded; history fallback requires allow_stale=true and stays HISTORICAL/incomplete; changing only checked_at invalidates the cache binding",
+    "parameter, account, page-size or snapshot-version changes after a cursor produce CURSOR_QUERY_MISMATCH or STALE_SNAPSHOT_TAKE_NEW_SNAPSHOT for account-bound services, learn queries and authenticated pages; expiry/eviction produces CURSOR_EXPIRED",
     "cancelling an upstream second page keeps the first segment but marks the collection partial (complete=false, snapshot_complete=false)",
-    "unfamiliar school statuses keep UNKNOWN plus a non-reversible digest; exception text, URLs, hosts and private paths never enter public error fields",
+    "unfamiliar school statuses keep UNKNOWN plus a non-reversible digest; exception text, URLs, hosts, private paths and sensitive URL parameters never enter public error or evidence fields; integer platform statuses map without losing known states",
     "result envelopes and source evidence validate against the frozen JSON Schemas; the embedded error-code mirror matches error-classification-v1"
   ],
   "limits": [
@@ -121,7 +122,24 @@
     "The MCP exception boundary still emits the legacy error shape; query envelopes already carry the classified error object and 6.1 should enrich the boundary.",
     "Offline synthetic evidence only: no real campus login, read, booking, payment or submission was performed."
   ],
-  "rollback": "Restore the nine listed code/test paths to 4d60e8b and delete tests/fixtures/query/. New fields are optional and old clients ignore them; the added directory cache fields are additive. Existing c1 cursors become invalid explicitly and are never re-fetched into a new snapshot.",
+  "rollback": "Restore the nine listed code/test paths plus the tests/test_queries.py identity fixture to 4d60e8b and delete tests/fixtures/query/. New fields are optional and old clients ignore them; the added directory cache fields are additive. Existing c1 cursors become invalid explicitly and are never re-fetched into a new snapshot.",
+  "audit_remediation": {
+    "report": ".local/audits/3.2-audit-20261117.md",
+    "fixed": [
+      "P1-1 account scope on learn queries, authenticated pages and read_page",
+      "P1-2 checked_at included in cache-v2 binding",
+      "P1-3 normalize_course fails closed on invalid observed_at/evidence id",
+      "P1-4 source-evidence URL sanitization",
+      "P2 integer statuses, read scope window, title fallback, role digest, semester consistency, multi-record conflicts, malformed missing pages, query_time normalization, corrupt directory cache, filtered-empty semantics, builder validation"
+    ],
+    "remaining": [
+      "fresh history cache semantics are explicit only for stale fallback",
+      "LOCAL_CATALOG_READ and library semantic statuses stay outside the result-envelope enum for legacy compatibility",
+      "MCP exception boundary still emits the legacy error shape",
+      "result snapshots above max_bytes still raise the legacy explicit size error",
+      "plain local JSON cache can still be re-signed by a local editor; encryption/authentication belongs to the storage layer"
+    ]
+  },
   "next": "3.1 and 3.3 are also module-accepted. The integration owner records the single batch-3 integration commit, runs the joint offline suite and both-platform CI, and only then marks batch 3 accepted. This module does not create a new PR.",
   "cross_module_requests": [
     "4.1/4.2/4.3/4.5/5.1/5.3/5.4: use domain_models for stable identities, time precision and duplicate relations instead of re-deriving them per adapter.",

@@ -258,12 +258,13 @@
       "status": "accepted",
       "accepted_at": "2026-11-17",
       "delivery_commit": "ec2f617",
+      "audit_fix": "3.2-audit-20261117 P1/P2 via 734d41a",
       "evidence": [
-        "source-state-v1 completeness triad, source-evidence builder and error-classification mirror; 28 module tests passed",
-        "domain-models-v1 stable identities, time precision and same-title/different-id relations; cache-v1 live/directory/history policies",
-        "cursor c1 bound to parameters/account/snapshot-v2 with distinct mismatch, stale and expired errors; cancelled continuation stays partial",
-        "isolated-tree full offline suite: Python 533 passed/5 skipped, Node 54 passed; check 379 files/0 findings; validators ok",
-        "no live campus, model or business calls; batch 3 remains ready until 3.1 and 3.3 are accepted and reconnected"
+        "source-state-v1 completeness triad, source-evidence builder and error-classification mirror; 40 module tests passed",
+        "domain-models-v1 stable identities, time precision, integer status mapping and same-title/different-id relations; cache-v2 live/directory/history policies",
+        "cursor c1 bound to parameters/account/snapshot-v2 for learn, authenticated pages and account-bound services; cancelled continuation stays partial",
+        "clean-tree full offline suite at 734d41a: Python 622 passed/5 skipped, Node 64 passed; check 402 files/0 findings; validators ok",
+        "no live campus, model or business calls; batch 3 remains ready for the single integration commit"
       ]
     },
     {
