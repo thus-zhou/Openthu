@@ -65,6 +65,18 @@ test('timeout and cancellation kill the child without replaying the request', as
   assert.equal((await fresh._request('health', {})).ok, true);
 });
 
+test('configuration discovers the shared default key file', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'thu-default-key-'));
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  const key = path.join(dir, '.config', 'openthu', 'keys', 'master.key');
+  fs.mkdirSync(path.dirname(key), {recursive: true});
+  fs.writeFileSync(key, 'synthetic');
+  const config = resolveCryptoConfig({HOME: dir}, '/state');
+  assert.equal(config.enabled, true);
+  assert.equal(config.keyFile, key);
+});
+
+
 test('configuration distinguishes a missing key from an explicit one', () => {
   assert.equal(resolveCryptoConfig({}, '/state').enabled, false);
   const explicit = resolveCryptoConfig({OPENTHU_SECURE_KEY_FILE: '/keys/master.key', OPENTHU_SECURE_DATA_DIR: '/data'}, '/state');

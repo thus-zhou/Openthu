@@ -8,6 +8,8 @@
 // child instead of replaying the request.
 const {spawn} = require('node:child_process');
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const MAGIC = Buffer.from('THU-SECURE-1\0', 'ascii');
 const ACTIONS = new Set(['seal', 'unseal', 'inspect', 'health']);
@@ -27,8 +29,22 @@ const ENV_ALLOW = [
 
 const failure = (code, detail) => Object.assign(new Error(code), {code, detail});
 
+function defaultKeyFile(env) {
+  const home = env.HOME || env.USERPROFILE || '';
+  if (!home) return '';
+  if (process.platform === 'win32') {
+    const base = env.APPDATA || env.LOCALAPPDATA;
+    return base ? path.join(base, 'Openthu', 'keys', 'master.key') : '';
+  }
+  return path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'openthu', 'keys', 'master.key');
+}
+
 function resolveCryptoConfig(env = process.env, stateDir = '') {
-  const keyFile = env.THU_SECURE_KEY_FILE || env.OPENTHU_SECURE_KEY_FILE || '';
+  let keyFile = env.THU_SECURE_KEY_FILE || env.OPENTHU_SECURE_KEY_FILE || '';
+  if (!keyFile) {
+    const candidate = defaultKeyFile(env);
+    if (candidate && fs.existsSync(candidate)) keyFile = candidate;
+  }
   const dataDir = env.THU_SECURE_DATA_DIR || env.OPENTHU_SECURE_DATA_DIR || stateDir;
   const timeoutMs = Math.min(60000, Math.max(1000, Number(env.THU_SECURE_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS));
   return {
