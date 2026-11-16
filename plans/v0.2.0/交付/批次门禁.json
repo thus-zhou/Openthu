@@ -71,7 +71,7 @@
         "2.3"
       ],
       "module_status": {
-        "2.1": "pending",
+        "2.1": "accepted",
         "2.2": "accepted",
         "2.3": "accepted"
       },
@@ -88,6 +88,11 @@
           "accepted_at": "2026-11-16",
           "delivery_commit": "the commit containing this record",
           "evidence": "29 sources; 10 models; 8 tasks; 14 readiness rows; 7 fixtures; validator ok=true; no live campus calls"
+        },
+        "2.1": {
+          "accepted_at": "2026-11-16",
+          "delivery_commit": "690cbab",
+          "evidence": "31 module tests; check 367/0; Python 479/5, Node 54; plan/contract ok; Windows 2.1 test files no failures; 2.2 secure_store still blocks batch"
         }
       },
       "entry_condition": "all batch 1 modules accepted and integrated",

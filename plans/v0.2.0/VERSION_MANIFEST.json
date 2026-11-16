@@ -97,8 +97,8 @@
   },
   "modules": {
     "total": 24,
-    "accepted": 3,
-    "pending": 21,
+    "accepted": 4,
+    "pending": 20,
     "ownership_file": "交付/模块负责表.json",
     "acceptance_file": "交付/验收映射.json"
   },
@@ -120,7 +120,7 @@
     "total": 9,
     "current": 2,
     "current_status": "ready",
-    "module_status_note": "2.1 implemented; 2.2 and 2.3 accepted",
+    "module_status_note": "2.1, 2.2 and 2.3 accepted; batch reconnect and 2.2 Windows secure_store remain",
     "next": 3,
     "gate_file": "交付/批次门禁.json"
   },

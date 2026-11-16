@@ -94,7 +94,13 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "统一配置与路径解析；诊断命令接入统一配置；首装依赖与平台提示",
-      "evidence": []
+      "evidence": [
+        "tests/test_configuration.py + tests/test_dev_diagnostics.py: 31 passed on 690cbab",
+        "dev.py check: 367 files, 0 findings; dev.py test: Python 479 passed/5 skipped, Node 54 passed",
+        "plan validator ok (24 modules/9 batches); contract validator ok (9/35/8 samples)",
+        "audit report P1/P2/P3 2.1 items fixed; cross-module legacy path items recorded for 4.2/6.3",
+        "Windows CI a273d0e: 2.1 test files 0 failures; 2.2 secure_store remains the batch blocker"
+      ]
     },
     {
       "id": "2.2",

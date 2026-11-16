@@ -1,0 +1,114 @@
+{
+  "module": "2.1",
+  "title": "收编安装诊断与统一配置路径",
+  "batch": 2,
+  "owner": "Hermes",
+  "status": "accepted",
+  "baseline_commit": "970cb0d",
+  "integration_parent_commit": "8b2ecb9",
+  "delivery_commit": "690cbab",
+  "code_commits": [
+    "8b2ecb9",
+    "578691e",
+    "1dff3a5",
+    "173922e",
+    "690cbab"
+  ],
+  "branch": "hermes/1-install-diagnostics",
+  "version_pr": 2,
+  "paths": [
+    "scripts/dev_diagnostics.py",
+    "scripts/dev.py",
+    "src/thu_assistant/configuration.py",
+    "src/thu_assistant/paths.py",
+    "tests/test_configuration.py",
+    "tests/test_dev_diagnostics.py",
+    "configs/openthu.example.json",
+    "README.md",
+    "docs/INSTALL.md",
+    "CHANGELOG.md"
+  ],
+  "contracts": [
+    "result-envelope-v1",
+    "business-facade-v1"
+  ],
+  "checks": {
+    "module_tests_linux": {
+      "passed": 31,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_configuration.py tests/test_dev_diagnostics.py"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 479,
+      "python_skipped": 5,
+      "python_failed": 0,
+      "node_passed": 54,
+      "node_failed": 0,
+      "check_files": 367,
+      "check_findings": 0,
+      "commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "worktree": "clean checkout of delivery commit 690cbab with synthetic node_modules link"
+    },
+    "contracts": {
+      "plan_validator": "ok",
+      "contract_validator": "ok",
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8
+    },
+    "windows": {
+      "module_failures": 0,
+      "note": "Latest CI run 43887681034 at a273d0e had no failures in tests/test_configuration.py or tests/test_dev_diagnostics.py; the overall job remained failed in 2.2 tests/test_secure_store.py."
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0
+  },
+  "audit_fixes": {
+    "report": "2.1-audit-20261116",
+    "fixed": [
+      "P1-1 lockfile version is sanitized with _lock_version; path/int values fail with a stable reason and no raw echo",
+      "P1-2 runtime.node/python/timeout/output limit now feed doctor/check/smoke/test through config-aware dev commands and probes",
+      "P2-1 malformed URL is converted to CONFIG_INVALID_URL",
+      "P2-2 nearest existing parent must be writable/executable",
+      "P2-3 required package resources are checked and block doctor",
+      "P2-4 timeout, non-zero exit, oversize and format failures are distinct diagnostic reasons",
+      "P2-5 OPENTHU_* environment is removed from the isolated test environment",
+      "P2-6 lower-layer path semantics are validated before merge",
+      "P3-1 wheel documentation now says node_modules rather than lockfile",
+      "P3-2 resource availability checks file/dir type",
+      "P3-3 duplicate-key errors retain the full relative item path",
+      "P3-5 Node version parsing uses the shared safe parser"
+    ],
+    "cross_requests": [
+      "src/learn_assistant/core.py still has legacy OPENTHU_DOWNLOAD_DIR/OPENTHU_DATA_DIR defaults; migrate under 4.2/6.3 with compatibility tests",
+      "scripts/configure_mcp.py still emits legacy THU_* environment; replace or bridge during 6.3"
+    ]
+  },
+  "accepted_cases": [
+    "normal source checkout passes doctor without campus requests",
+    "missing Python packages, Node and npm report actionable fixes",
+    "Windows .cmd path uses fixed argv and never shell=True",
+    "private command output is bounded and never enters the public report",
+    "lockfile path/int versions are rejected without echo or traceback",
+    "unknown, duplicate, invalid and unreadable configuration returns stable codes",
+    "state/download/temp/log paths reject repository, key directories, relative paths and non-writable parents",
+    "source and package resources use the same logical ids and declared file types",
+    "required package resources missing from a checkout block doctor",
+    "configured runtime node path is actually probed",
+    "timeout is reported separately from a version-format problem",
+    "old doctor/check/setup-node command entry points retain their exit semantics"
+  ],
+  "blocked": [],
+  "limits": [
+    "Windows CI at a273d0e is overall failed in 2.2 secure_store tests; 2.1 test files have no failures.",
+    "The cloud host is Linux; DPAPI/ACL behavior remains a Windows-only verification.",
+    "No live campus login, booking, payment, submission or model call was performed.",
+    "Legacy learn_assistant/configure_mcp path construction remains a cross-module follow-up."
+  ],
+  "rollback": "Revert the 2.1 code/test commits and keep the new configuration sample disabled. Do not delete user state directories or reuse credentials across machines. Re-run dev.py check and the full offline suite after rollback.",
+  "next": "Keep batch 2 ready until 2.2 Windows secure_store is green and 2.1/2.2/2.3 are reconnected to one integration commit; then run batch-level check/tests and unlock batch 3."
+}

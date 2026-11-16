@@ -71,7 +71,16 @@
         "统一配置与路径解析；诊断命令接入统一配置；首装依赖与平台提示"
       ],
       "integration_order": 2,
-      "status": "pending"
+      "status": "accepted",
+      "accepted_at": "2026-11-16",
+      "delivery_commit": "690cbab",
+      "audit_fix": "2.1-audit-20261116 P1/P2/P3",
+      "evidence": [
+        "31 module tests passed on delivery commit 690cbab",
+        "clean-tree full offline suite: Python 479 passed/5 skipped, Node 54 passed; check 367 files/0 findings",
+        "plan and contract validators ok; no live campus/model calls",
+        "Windows CI a273d0e: 2.1 test files have no failures; overall job blocked by 2.2 test_secure_store.py"
+      ]
     },
     {
       "id": "2.2",
