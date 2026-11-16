@@ -166,13 +166,20 @@ def test_browser_state_is_sealed_and_roundtrips_without_plaintext_on_stdout(tmp_
 
 def test_gateway_environment_uses_frozen_paths_and_rejects_a_relative_key(tmp_path):
     base = {"HOME": str(tmp_path), "PATH": os.environ.get("PATH", "")}
+    if os.name == "nt":
+        base.update({"APPDATA": str(tmp_path / "AppData/Roaming"),
+                     "LOCALAPPDATA": str(tmp_path / "AppData/Local")})
+        config_base = tmp_path / "AppData/Roaming"
+    else:
+        config_base = tmp_path / ".config"
+        base["XDG_CONFIG_HOME"] = str(config_base)
     env = gateway_environment(base)
     assert Path(env["THU_ASSISTANT_STATE_DIR"]).is_absolute()
     assert "THU_SECURE_KEY_FILE" not in env
-    default_key = tmp_path / ".config/openthu/keys/master.key"
+    default_key = config_base / ("Openthu" if os.name == "nt" else "openthu") / "keys/master.key"
     default_key.parent.mkdir(parents=True, mode=0o700)
     create_key_file(default_key)
-    env = gateway_environment({**base, "XDG_CONFIG_HOME": str(tmp_path / ".config")})
+    env = gateway_environment(base)
     assert env["THU_SECURE_KEY_FILE"] == str(default_key)
     with pytest.raises(CampusError, match="SECURE_KEY_LOCATION"):
         gateway_environment({**base, "OPENTHU_SECURE_KEY_FILE": "relative.key"})
