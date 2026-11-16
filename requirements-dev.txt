@@ -3,3 +3,4 @@ requests==2.33.0
 playwright==1.57.0
 build==1.2.2.post1
 jsonschema==4.26.0
+cryptography==50.0.2
