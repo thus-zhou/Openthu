@@ -12,12 +12,12 @@ from pathlib import Path
 from thu_assistant.secure_store import keys
 
 
-def clean(value: str) -> str:
+def clean(value: str, limit: int = 2000) -> str:
     text = value or ""
     for marker in (str(root), os.environ.get("USERPROFILE", ""), os.environ.get("TEMP", "")):
         if marker:
             text = text.replace(marker, "<local>")
-    return text.replace("\r", "\\r")[:300]
+    return text.replace("\r", "\\r")[:limit]
 
 
 def run(label: str, argv, *, timeout: int = 8):
