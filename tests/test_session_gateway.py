@@ -252,6 +252,17 @@ def test_learn_session_and_action_journal_use_the_secure_store_and_fail_closed(t
         assert _dpapi_protect(b"synthetic-action") is None
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows DPAPI key creation")
+def test_windows_key_creation_does_not_reenter_the_session_wrapper(tmp_path, monkeypatch):
+    key = tmp_path / "keys" / "master.key"
+    monkeypatch.setenv("THU_SECURE_KEY_FILE", str(key))
+    import learn_assistant.auth as auth
+
+    auth._SECURE_PROVIDERS.clear()
+    create_key_file(key, "windows-dpapi")
+    assert key.is_file()
+
+
 @pytest.mark.parametrize("values,expected", [(("a=1", "b=2"), "saved"), (("a=1", "a=2"), "STATE_CONFLICT")])
 def test_two_secure_processes_merge_or_reject_stale_cookies(tmp_path, values, expected):
     key = make_key(tmp_path)
