@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -344,3 +346,39 @@ def test_platform_defaults_keep_windows_state_name_and_use_no_fixed_home():
     assert defaults.download_dir == defaults.state_dir / "downloads"
     assert defaults.config_file.name == "config.json"
     assert "synthetic" in str(defaults.state_dir)
+
+
+def test_dev_cli_reports_an_unusable_configured_python(tmp_path):
+    """A bad runtime.python must fail with a stable message, not a traceback."""
+    config = write_config(
+        tmp_path / "config.json",
+        {"runtime": {"python": str(tmp_path / "missing-python")}},
+    )
+    # dev.py itself injects THU_PYTHON for child commands and configuration
+    # treats it as a legacy alias above the file layer; strip it so this test
+    # exercises the file value only.
+    child_env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"THU_PYTHON", "OPENTHU_PYTHON"}
+    }
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "dev.py"),
+            "test",
+            "--config",
+            str(config),
+            "--python-only",
+        ],
+        cwd=ROOT,
+        env=child_env,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        timeout=60,
+    )
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert "runtime.python" in result.stderr

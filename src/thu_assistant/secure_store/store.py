@@ -143,23 +143,45 @@ def _atomic_write(path: Path, data: bytes) -> None:
 
 
 def _read_record_bytes(path: Path) -> bytes:
-    """Read one bounded record without leaking absolute paths in errors."""
+    """Read one bounded record without leaking absolute paths in errors.
+
+    The record is opened once with ``O_NOFOLLOW`` where the platform supports
+    it and sized from ``fstat``; that closes the check-then-read window of a
+    separate ``exists``/``stat``/``read_bytes`` sequence.
+    """
     if path.is_symlink():
         raise SecureStoreCorrupt("record cannot be a link")
-    if path.exists() and not path.is_file():
-        raise SecureStoreCorrupt("record is not a regular file")
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_BINARY", 0)
+    )
     try:
-        size = path.stat().st_size
+        fd = os.open(path, flags)
     except FileNotFoundError:
         raise SecureRecordNotFound("record is missing") from None
     except OSError:
         raise SecureStoreCorrupt("record cannot be read") from None
-    if size > MAX_ENVELOPE_BYTES:
-        raise SecureStoreCorrupt("record is too large")
     try:
-        return path.read_bytes()
-    except OSError:
-        raise SecureStoreCorrupt("record cannot be read") from None
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise SecureStoreCorrupt("record is not a regular file")
+        if info.st_size > MAX_ENVELOPE_BYTES:
+            raise SecureStoreCorrupt("record is too large")
+        buffer = bytearray()
+        while len(buffer) <= MAX_ENVELOPE_BYTES:
+            try:
+                chunk = os.read(fd, 65536)
+            except OSError:
+                raise SecureStoreCorrupt("record cannot be read") from None
+            if not chunk:
+                break
+            buffer += chunk
+        if len(buffer) > MAX_ENVELOPE_BYTES:
+            raise SecureStoreCorrupt("record is too large")
+        return bytes(buffer)
+    finally:
+        os.close(fd)
 
 
 def _empty_directory(path: Path) -> bool:
@@ -167,6 +189,21 @@ def _empty_directory(path: Path) -> bool:
         return path.is_dir() and not path.is_symlink() and next(path.iterdir(), None) is None
     except OSError:
         return False
+
+
+def _discard_created_directory(directory: Path) -> None:
+    """Remove a directory this call created and never published.
+
+    Only regular files directly inside the directory are removed; the call is
+    best-effort so it never masks the rotation error that triggered it.
+    """
+    try:
+        for child in directory.iterdir():
+            if child.is_file() and not child.is_symlink():
+                child.unlink()
+        directory.rmdir()
+    except OSError:
+        pass
 
 
 class _Lock:
@@ -502,7 +539,6 @@ class SecureStore:
 
     def inspect(self, record_id: str) -> dict[str, Any]:
         path = self._record_path(record_id)
-        self._check_record_file(path)
         raw = _read_record_bytes(path)
         result = inspect_envelope(raw)
         result["record_id"] = record_id
@@ -576,7 +612,6 @@ class SecureStore:
         expected_revision: int | None = None,
     ) -> bytes:
         path = self._record_path(record_id)
-        self._check_record_file(path)
         raw = _read_record_bytes(path)
         envelope = parse_envelope(raw)
         provider = self._providers.get(envelope.header.get("key_id"))
@@ -758,10 +793,12 @@ class SecureStore:
                     pointer["record_binding"] = current["record_binding"]
                 self._write_pointer(pointer)
             except SecureStoreError as exc:
+                _discard_created_directory(target_dir)
                 raise SecureRotationIncomplete(
                     migrated, total, cause_code=exc.code
                 ) from None
             except Exception as exc:
+                _discard_created_directory(target_dir)
                 raise SecureRotationIncomplete(
                     migrated, total, cause_code=type(exc).__name__
                 ) from None

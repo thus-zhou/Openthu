@@ -232,33 +232,77 @@ def _windows_acl_snapshot(path: Path) -> tuple[str, str]:
     return lines[0], lines[1]
 
 
+_SDDL_SECTIONS = re.compile(r"O:(.*?)(?:G:|D:|S:|$)")
+_SDDL_ACE = re.compile(r"\((?:A|OA);([^)]*)\)")
+# SDDL uses two-letter aliases for well-known principals.  A host may emit
+# either the alias or the full SID, so comparisons normalise both forms.
+_WELL_KNOWN_SIDS = {
+    "SY": "S-1-5-18",
+    "BA": "S-1-5-32-544",
+    "BU": "S-1-5-32-545",
+    "WD": "S-1-1-0",
+    "CO": "S-1-3-0",
+    "CG": "S-1-3-1",
+    "OW": "S-1-3-4",
+}
+
+
+def _sddl_owner_token(sddl: str) -> str | None:
+    """Return the owner token (full SID or alias) from one SDDL string.
+
+    The owner section runs from ``O:`` to the next section marker.  Parsing it
+    as a section, rather than by excluding letters, keeps standard SID forms
+    such as ``O:S-1-5-21-...`` working.
+    """
+    match = _SDDL_SECTIONS.search(sddl or "")
+    token = match.group(1).strip() if match else ""
+    return token or None
+
+
+def _sddl_ace_trustees(sddl: str) -> list[str]:
+    """Return the trustee token of every allow ACE in one SDDL string."""
+    trustees = []
+    for body in _SDDL_ACE.findall(sddl or ""):
+        token = body.rsplit(";", 1)[-1].strip()
+        if token:
+            trustees.append(token)
+    return trustees
+
+
+def _same_principal(token: str, current: str) -> bool:
+    """Compare an SDDL alias or SID with the current process SID."""
+    if not token or not current:
+        return False
+    if token == current:
+        return True
+    if token == "LA":
+        return current.endswith("-500")
+    mapped = _WELL_KNOWN_SIDS.get(token)
+    return mapped is not None and mapped == current
+
+
 def _windows_acl_owner_only(path: Path) -> bool:
     try:
         current, sddl = _windows_acl_snapshot(path)
     except SecureKeyPermissionError:
         return False
-    owner = re.search(r"O:([^GDS]+)", sddl)
-    if not owner:
+    owner_token = _sddl_owner_token(sddl)
+    if owner_token is None:
         return False
-    owner_token = owner.group(1)
-    owner_ok = owner_token in {current, "OW"}
-    if owner_token == "LA" and current.endswith("-500"):
-        owner_ok = True
-    if not owner_ok:
+    if not (_same_principal(owner_token, current) or owner_token == "OW"):
         return False
     if "NO_ACCESS_CONTROL" in sddl or "D:" not in sddl:
         return False
-    aces = re.findall(r"\((?:A|OA);([^)]*)\)", sddl)
-    if not aces:
+    trustees = _sddl_ace_trustees(sddl)
+    if not trustees:
         return False
     current_ace = False
-    for body in aces:
-        token = body.rsplit(";", 1)[-1].strip()
-        if token == current or token == "OW":
+    for token in trustees:
+        if _same_principal(token, current) or token == "OW":
             current_ace = True
-        elif token == "LA" and current.endswith("-500"):
-            current_ace = True
-        elif token in {"SY", "BA"}:
+        elif _same_principal(token, "S-1-5-18") or _same_principal(
+            token, "S-1-5-32-544"
+        ):
             # SYSTEM and local administrators are OS administrative
             # principals; they are not ordinary interactive users.
             continue

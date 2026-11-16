@@ -317,7 +317,7 @@ def _config_layer(data: dict, source: str, *, home=None) -> dict[str, object]:
         if group not in _GROUP_NAMES:
             raise ConfigurationError("CONFIG_UNKNOWN_KEY", group_item)
         if not isinstance(mapping, dict):
-            raise ConfigurationError("CONFIG_INVALID_TYPE", group)
+            raise ConfigurationError("CONFIG_INVALID_TYPE", group_item)
         for key, value in mapping.items():
             item = f"{group}.{key}"
             if _secret_like(str(key)):

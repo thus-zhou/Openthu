@@ -115,8 +115,8 @@ def renewal_semantic_errors(record) -> list[str]:
     loan_uid = record.get("loan_uid")
     renewal_uid = record.get("renewal_uid")
     if isinstance(loan_uid, str) and isinstance(renewal_uid, str):
-        if not renewal_uid.endswith(":" + loan_uid):
-            errors.append("renewal_uid must end with ':<loan_uid>'")
+        if not renewal_uid.endswith(":RENEWAL:" + loan_uid):
+            errors.append("renewal_uid must end with ':RENEWAL:<loan_uid>'")
     state = record.get("execution_state")
     if state in {"FAILED", "REJECTED", "NOT_ATTEMPTED"}:
         before = record.get("due_date_before")

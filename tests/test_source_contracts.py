@@ -123,3 +123,23 @@ def test_semantic_guards_cover_cross_field_states() -> None:
     assert module.submission_semantic_errors(submission)
     image = {"capability_state": "AVAILABLE", "evidence_level": "OFFLINE_CONTRACT"}
     assert module.model_image_semantic_errors(image)
+
+
+def test_renewal_identity_requires_the_renewal_segment() -> None:
+    validate = load_validator_module()
+    loan_uid = "library.loans:ORDER:SYNTHETIC-LOAN-1"
+    base = {
+        "loan_uid": loan_uid,
+        "execution_state": "FAILED",
+        "verified": False,
+        "due_date_before": "2026-12-01T00:00:00+08:00",
+        "due_date_after": None,
+    }
+    missing_segment = dict(
+        base, renewal_uid="library.renewal:" + loan_uid
+    )
+    assert any(
+        "RENEWAL" in error for error in validate.renewal_semantic_errors(missing_segment)
+    )
+    correct = dict(base, renewal_uid="library.renewal:RENEWAL:" + loan_uid)
+    assert validate.renewal_semantic_errors(correct) == []

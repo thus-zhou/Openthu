@@ -20,6 +20,7 @@ import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
 import thu_assistant.secure_store.bridge as bridge_module
+import thu_assistant.secure_store.keys as keys_module
 import thu_assistant.secure_store.store as store_module
 from thu_assistant.secure_store import (
     SecureAccountMismatch,
@@ -351,6 +352,11 @@ def test_rotation_half_failure_keeps_old_pointer_and_key(tmp_path, monkeypatch):
     assert exc.value.migrated == 1
     assert exc.value.total == 2
     assert store._pointer["active_key_id"] == old_provider.key_id
+    # The unpublished target directory from the failed attempt is discarded;
+    # only the active records directory remains.
+    assert sorted(path.name for path in (tmp_path / "data").glob("records-*")) == [
+        store._pointer["records_dir"]
+    ]
     assert read_session(store, "r1") == b"one"
     assert read_session(store, "r2") == b"two"
 
@@ -607,6 +613,55 @@ def test_windows_broad_key_acl_is_rejected(tmp_path):
         load_provider(key, "windows-dpapi")
 
 
+SYNTHETIC_SID = "S-1-5-21-1111111111-2222222222-3333333333-1001"
+
+
+def _synthetic_sddl(owner=SYNTHETIC_SID, trustees=None, *, dacl="D:PAI", group="G:"):
+    trustees = (
+        [SYNTHETIC_SID, "SY", "BA"] if trustees is None else list(trustees)
+    )
+    aces = "".join(f"(A;OICI;FA;;;{token})" for token in trustees)
+    return f"O:{owner}{group}{dacl}{aces}"
+
+
+def _owner_only(monkeypatch, sddl, current=SYNTHETIC_SID):
+    monkeypatch.setattr(
+        keys_module, "_windows_acl_snapshot", lambda path: (current, sddl)
+    )
+    return keys_module._windows_acl_owner_only(Path("synthetic"))
+
+
+def test_sddl_owner_parser_accepts_a_standard_user_sid(monkeypatch):
+    # A normal Windows host emits the concrete SID in the owner section; the
+    # parser must not depend on alias-only SDDL.
+    assert _owner_only(monkeypatch, _synthetic_sddl()) is True
+
+
+def test_sddl_owner_parser_normalises_well_known_aliases_and_sids(monkeypatch):
+    system = "S-1-5-18"
+    alias_form = _synthetic_sddl(owner="SY", trustees=["SY", "BA"])
+    assert _owner_only(monkeypatch, alias_form, current=system) is True
+    sid_form = _synthetic_sddl(
+        owner=system, trustees=[system, "S-1-5-32-544"]
+    )
+    assert _owner_only(monkeypatch, sid_form, current=system) is True
+
+
+def test_sddl_owner_parser_rejects_other_trustees(monkeypatch):
+    everyone = _synthetic_sddl(trustees=[SYNTHETIC_SID, "WD"])
+    assert _owner_only(monkeypatch, everyone) is False
+    foreign_owner = _synthetic_sddl(
+        owner="S-1-5-21-9999999999-9999999999-9999999999-1002"
+    )
+    assert _owner_only(monkeypatch, foreign_owner) is False
+
+
+def test_sddl_owner_parser_requires_a_dacl_and_an_owner(monkeypatch):
+    assert _owner_only(monkeypatch, _synthetic_sddl(dacl="")) is False
+    assert _owner_only(monkeypatch, "D:PAI(A;;FA;;;" + SYNTHETIC_SID + ")") is False
+    assert _owner_only(monkeypatch, "O:G:D:PAI") is False
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows DPAPI only")
 def test_windows_legacy_record_is_readable_without_rewrite(tmp_path):
     from learn_assistant.auth import _dpapi_protect
@@ -804,6 +859,24 @@ def test_record_reads_are_bounded(secure, monkeypatch):
             service_domain=SERVICE_DOMAIN,
             account=ACCOUNT,
         )
+
+
+def test_record_paths_reject_links_and_non_files(secure):
+    _, _, store, _ = secure
+    write_session(store, "session-1")
+    target = store.records_dir / "session-1.secure"
+    outside = target.parents[1] / "outside.secure"
+    outside.write_bytes(target.read_bytes())
+    target.unlink()
+    try:
+        target.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("symbolic links are not permitted in this environment")
+    with pytest.raises(SecureStoreCorrupt):
+        read_session(store)
+    (store.records_dir / "folder.secure").mkdir()
+    with pytest.raises(SecureStoreCorrupt):
+        store.inspect("folder")
 
 
 def test_busy_error_is_retryable():
