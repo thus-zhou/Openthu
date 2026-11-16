@@ -122,3 +122,20 @@ try:
     print("load_key_ok", material.backend, len(material.secret))
 except Exception as exc:
     print("key_error", type(exc).__name__, getattr(exc, "detail", ""))
+
+manual_secret = os.urandom(32)
+manual_protected = keys._dpapi("protect", manual_secret)
+print("manual_protected", len(manual_protected or b""))
+manual_path = root / "keys" / "manual.key"
+manual_path.write_bytes(keys.DPAPI_KEY_MAGIC + (manual_protected or b""))
+manual_raw = manual_path.read_bytes()
+manual_payload = manual_raw[len(keys.DPAPI_KEY_MAGIC) :]
+print("manual_sizes", len(manual_raw), len(manual_payload))
+print("manual_same", manual_payload == manual_protected)
+manual_restored = keys._dpapi("unprotect", manual_payload)
+print("manual_unprotect", manual_restored == manual_secret)
+try:
+    manual_material = keys.load_key_file(manual_path, "windows-dpapi")
+    print("manual_load_ok", len(manual_material.secret))
+except Exception as exc:
+    print("manual_load_error", type(exc).__name__, getattr(exc, "detail", ""))
