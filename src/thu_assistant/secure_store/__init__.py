@@ -6,7 +6,6 @@ codec or plaintext when it is missing.
 """
 from __future__ import annotations
 
-from .bridge import handle_request, subprocess_environment
 from .envelope import (
     ACCOUNT_DOMAINS,
     BACKENDS,
@@ -140,3 +139,17 @@ __all__ = [
     "subprocess_environment",
     "validate_key_separation",
 ]
+
+
+def __getattr__(name: str):
+    """Load the private subprocess bridge only when a caller asks for it.
+
+    Eagerly importing ``bridge`` here makes ``python -m
+    thu_assistant.secure_store.bridge`` import the module before runpy executes
+    it, which produces a warning and can run the entry point twice on Windows.
+    """
+    if name in {"handle_request", "subprocess_environment"}:
+        from . import bridge
+
+        return getattr(bridge, name)
+    raise AttributeError(name)
