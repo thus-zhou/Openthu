@@ -593,8 +593,8 @@ def source_evidence(*, source_id, service, operation, adapter_version, checked_a
         raise ValueError('INVALID_SOURCE_ID')
     if not isinstance(scope, dict):
         raise ValueError('INVALID_READ_SCOPE')
-    operation = str(operation).strip()
-    adapter_version = str(adapter_version).strip()
+    operation = operation.strip() if isinstance(operation, str) else ''
+    adapter_version = adapter_version.strip() if isinstance(adapter_version, str) else ''
     if not operation or len(operation) > 120:
         raise ValueError('INVALID_OPERATION')
     if not adapter_version or len(adapter_version) > 80:
