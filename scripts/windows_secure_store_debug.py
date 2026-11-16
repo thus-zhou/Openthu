@@ -89,6 +89,7 @@ if sid:
 for label, call in (
     ("snapshot", lambda: keys._windows_acl_snapshot(target)),
     ("harden", lambda: keys._harden_windows_acl(target)),
+    ("owner_only", lambda: keys._windows_acl_owner_only(target)),
 ):
     try:
         value = call()

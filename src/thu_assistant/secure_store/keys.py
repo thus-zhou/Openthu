@@ -251,11 +251,20 @@ def _harden_windows_acl(path: Path) -> None:
             env=env,
             stdin=subprocess.DEVNULL,
         )
+        third = subprocess.run(
+            ["icacls", str(path), "/setowner", f"*{current}"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+            env=env,
+            stdin=subprocess.DEVNULL,
+        )
     except (OSError, subprocess.SubprocessError):
         raise SecureKeyPermissionError("cannot harden key ACL") from None
-    if first.returncode or second.returncode:
+    if first.returncode or second.returncode or third.returncode:
         raise SecureKeyPermissionError(
-            f"acl-harden-inheritance-{first.returncode}-grant-{second.returncode}"
+            f"acl-harden-inheritance-{first.returncode}-grant-{second.returncode}-owner-{third.returncode}"
         )
 
 
