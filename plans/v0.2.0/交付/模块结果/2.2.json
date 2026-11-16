@@ -6,7 +6,11 @@
   "status": "accepted",
   "baseline_commit": "970cb0d",
   "integration_parent_commit": "8b2ecb9",
-  "delivery_commit": "b910498",
+  "delivery_commit": "713e527",
+  "code_commits": [
+    "b910498",
+    "713e527"
+  ],
   "branch": "hermes/1-install-diagnostics",
   "version_pr": 2,
   "paths": [
@@ -47,18 +51,18 @@
       "command": "python -m pytest -o addopts='' -q tests/test_secure_store.py"
     },
     "full_offline_suite_linux": {
-      "python_passed": 465,
+      "python_passed": 467,
       "python_skipped": 5,
       "python_failed": 0,
       "node_passed": 54,
       "node_failed": 0,
-      "check_files": 333,
+      "check_files": 335,
       "check_findings": 0,
       "commands": [
         "python scripts/dev.py check",
         "python scripts/dev.py test"
       ],
-      "worktree": "clean checkout of delivery commit b910498"
+      "worktree": "clean checkout of delivery commit 713e527"
     },
     "contracts": {
       "plan_validator": "ok",
