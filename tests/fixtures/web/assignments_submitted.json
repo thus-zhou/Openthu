@@ -1,0 +1,17 @@
+{
+  "result": "success",
+  "object": {
+    "aaData": [
+      {
+        "xszyid": "student-hw-2",
+        "zyid": "base-hw-2",
+        "wlkcid": "course-real-1",
+        "bt": "已提交作业",
+        "jzsj": "2026-09-10T23:59:00+08:00",
+        "zywcfs": 1,
+        "zytjfs": 0,
+        "scsj": "2026-09-09T20:00:00+08:00"
+      }
+    ]
+  }
+}

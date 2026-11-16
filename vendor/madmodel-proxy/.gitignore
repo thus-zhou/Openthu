@@ -1,0 +1,33 @@
+# 运行时产物(诊断/状态,不入库;正常都写在状态目录里,这里逐项兜底)
+last-failed-request.json
+network-choice.json
+tunnel-revive
+*.tmp
+*.stale.*
+*.log
+
+# 凭据与密钥(正常位于 %USERPROFILE%\.madmodel-proxy\,此为防御性兜底)
+api-key
+api-keys
+service.env
+token.json
+creds.json
+watch.lock
+auth.lock
+
+# 状态目录兜底(路径错误的极端情况下整目录拒绝入库;旧目录名为 ≤1.6.0 历史,
+# 迁移后仍可能残留,一并兜底)
+.madmodel-proxy/
+.dsh-madmodel/
+
+# 系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node
+node_modules/
+npm-debug.log*
+
+# PID 锁竞争记录
+*.lock.holders/

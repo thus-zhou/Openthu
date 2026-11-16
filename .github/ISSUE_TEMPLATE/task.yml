@@ -1,0 +1,22 @@
+name: 开发任务或人工接力
+description: 提交功能、维护任务或需要接手的问题
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标和验收标准
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现、预期与实际
+      description: 仅使用合成或检查过的脱敏资料；不要包含任何个人或主机信息。
+  - type: textarea
+    id: attempts
+    attributes:
+      label: 已尝试的方法与测试结果
+  - type: input
+    id: owner
+    attributes:
+      label: 当前负责者 / 下一位负责者

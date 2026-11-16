@@ -1,0 +1,12 @@
+{
+  "result": "success",
+  "object": {
+    "rows": [
+      {
+        "kjflid": "category-1",
+        "bt": "课件",
+        "czsj": "2026-09-01T08:00:00+08:00"
+      }
+    ]
+  }
+}

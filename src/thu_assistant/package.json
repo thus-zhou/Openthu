@@ -1,0 +1,7 @@
+{
+  "name": "tsinghua-assistant-local-gateway",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pinned cookie runtime for the local campus gateway",
+  "dependencies": {"tough-cookie": "6.0.0"}
+}

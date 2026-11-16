@@ -1,0 +1,48 @@
+// Read-only source excerpts; not an executable upstream bundle.
+
+// src/types.ts:100-134
+
+export type RemoteFile = IRemoteFile;
+
+export interface INotification {
+  id: string;
+  title: string;
+  content: string;
+  hasRead: boolean;
+  url: string;
+  markedImportant: boolean;
+  publishTime: Date;
+  publisher: string;
+  expireTime?: Date;
+  isFavorite: boolean;
+  comment?: string;
+}
+
+export interface INotificationDetail {
+  attachment?: RemoteFile;
+}
+
+export type Notification = INotification & INotificationDetail;
+
+interface IFileCategory {
+  id: string;
+  title: string;
+  creationTime: Date;
+}
+
+export type FileCategory = IFileCategory;
+
+interface IFile {
+  /** previously `id2` */
+  id: string;
+  /** previously `id` */
+
+// src/types.ts:416-423
+export interface CalendarEvent {
+  location: string;
+  status: string;
+  startTime: string;
+  endTime: string;
+  date: string;
+  courseName: string;
+}

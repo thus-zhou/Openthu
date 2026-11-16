@@ -1,0 +1,89 @@
+{
+  "repository": "https://github.com/Harry-Chen/thu-learn-lib",
+  "tag": "v4.2.6",
+  "version": "4.2.6",
+  "commit": "3e8b5ba1382c2c87e9bdba431705dca82d6d07ee",
+  "license": "MIT",
+  "license_sha256": "d630a3f2bcfb63b214acc936756a7bb62a3910d6341ac23fc89246fd5d8187a5",
+  "files": [
+    {
+      "source": "src/index.ts",
+      "source_sha256": "f4aaf45941f758eaeba89651e1dd26bcd11fcf74baada16899aa14a7fb1db0cb",
+      "ranges": [
+        [
+          248,
+          286
+        ],
+        [
+          387,
+          439
+        ],
+        [
+          520,
+          570
+        ],
+        [
+          925,
+          982
+        ],
+        [
+          1033,
+          1136
+        ]
+      ],
+      "excerpt": "index.read-excerpts.txt",
+      "excerpt_sha256": "d7a2805d5a0ab89c1dc4eceffab7d6114bf020f21ea41e2cbd6617515a5e2738"
+    },
+    {
+      "source": "src/types.ts",
+      "source_sha256": "41610dd5d78232634580cab72ff85a2b7bb0474395b2f3f6aaeb0725c882ab9a",
+      "ranges": [
+        [
+          100,
+          134
+        ],
+        [
+          416,
+          423
+        ]
+      ],
+      "excerpt": "types.read-excerpts.txt",
+      "excerpt_sha256": "4ba2e0d282c6ea8db84b0136d22c2e8c345f895e2ec78fce16a9e45e053b4db5"
+    },
+    {
+      "source": "src/urls.ts",
+      "source_sha256": "db2308bfa73a14b744aebbc2f36fff5eb603001d6524bca890eb092f72ebdb6d",
+      "ranges": [
+        [
+          40,
+          46
+        ],
+        [
+          54,
+          94
+        ],
+        [
+          133,
+          142
+        ],
+        [
+          249,
+          264
+        ]
+      ],
+      "excerpt": "urls.read-excerpts.txt",
+      "excerpt_sha256": "bb9836e314998c83fb628153f808fca1be73057734e2fa444fdfa1b922f87c4b"
+    }
+  ],
+  "implementation": [
+    "providers/learn_read_parsers.py",
+    "providers/learn_read.py"
+  ],
+  "changes": [
+    "Python read-only port using existing injectable HTTP and authentication layer",
+    "Strict success, shape and pagination verification; no missing grade becomes zero",
+    "Multiple attachment links and inert HTML; no scripts are executed",
+    "Bounded calendar slices, strict JSONP parsing without eval, missing event IDs stay explicit",
+    "No upstream password, login, write, upload or credential provider code enabled"
+  ]
+}

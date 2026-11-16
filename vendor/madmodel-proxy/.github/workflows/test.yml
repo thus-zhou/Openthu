@@ -1,0 +1,75 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 覆盖 engines 声明的最低版本(18.14)与当前推荐线(20/24):
+        # 声明与验证必须一致,18.x 失败则要么修代码要么收紧 engines(需单独决策)
+        node: ['18.14', 20, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+      # 语法门:覆盖所有 .js(含不被入口加载的 dashboard.js / smoke-real.js)。
+      # 用 node --check 而非 eslint,保持"零 npm 依赖,clone 即用"。
+      # smoke-real.js 有意不进 CI:它访问真实校方服务并消耗配额
+      - name: Syntax check
+        run: |
+          node -e "const fs=require('fs'),path=require('path');const files=[];const walk=d=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){if(e.isDirectory()){if(e.name!=='node_modules')walk(path.join(d,e.name))}else if(e.name.endsWith('.js'))files.push(path.join(d,e.name))}};walk('.');for(const f of files)require('child_process').execFileSync(process.execPath,['--check',f],{stdio:'inherit'})"
+
+      # 纯函数层(payload/aggregator/stream-parser/errors/tokenizer/update-check)
+      # 与 mock 上游集成测试(upstream-integration),零真实 I/O;
+      # 协议行为(未知帧型/网关形态)不在此处——那是 smoke-real.js 的职责,
+      # 有意不进 CI(访问真实校方服务并消耗配额)
+      # Node 18 规避:--test 的父进程 TAP 解析器对非 ASCII 测试名崩溃
+      # (ERR_TAP_LEXER_ERROR,实测 18.14.2;20/24 正常)。18.14 逐文件直跑,
+      # 无父进程解析,运行时行为同样完整验证;产品代码不含 node:test,
+      # 不受此 bug 影响
+      - name: Tests (per-file, Node 18 TAP bug workaround)
+        if: matrix.node == '18.14'
+        run: |
+          for f in test/*.test.js; do node "$f"; done
+      - name: Tests
+        if: matrix.node != '18.14'
+        run: node --test
+
+  platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      # macOS runner 的登录钥匙串在无 GUI 会话下是锁定的,add-generic-password
+      # 会报 "user interaction is not allowed"。建一个解锁的专用钥匙串设为默认,
+      # 等价于真机上"用户已登录、钥匙串可用"的环境。仅 CI 环境准备,产品代码
+      # 对真机行为不做任何让步
+      - name: Prepare keychain (macOS only)
+        if: runner.os == 'macOS'
+        run: |
+          security create-keychain -p ci "$HOME/Library/Keychains/ci.keychain-db"
+          security list-keychains -d user -s "$HOME/Library/Keychains/ci.keychain-db"
+          security default-keychain -s "$HOME/Library/Keychains/ci.keychain-db"
+          security unlock-keychain -p ci "$HOME/Library/Keychains/ci.keychain-db"
+          security set-keychain-settings -lut 21600 "$HOME/Library/Keychains/ci.keychain-db"
+      # 跨平台"启动+存储"冒烟(临时状态目录,不访问学校服务、不消耗配额):
+      # 验证各平台凭据存储原语(Windows DPAPI / macOS 钥匙串 / Linux 机器绑定
+      # 加密)的写入-读回往返、proxy 无 token 启动探活、watch 守护调度循环
+      - name: Platform smoke
+        run: node scripts/platform-smoke.js

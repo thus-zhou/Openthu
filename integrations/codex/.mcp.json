@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "tsinghua-assistant": {
+      "command": "python",
+      "args": [
+        "-m",
+        "thu_assistant.mcp_stdio"
+      ],
+      "env": {
+        "PYTHONUTF8": "1",
+        "PYTHONPATH": "<absolute-repository-path>/src",
+        "THU_NODE": "node",
+        "THU_MADMODEL_DIR": "<absolute-repository-path>/vendor/madmodel-proxy",
+        "THU_ACCESS_HELPER": "<absolute-repository-path>/runtime/windows/access.js",
+        "THU_LEARN_PROVIDER": "<absolute-repository-path>/src"
+      }
+    }
+  }
+}

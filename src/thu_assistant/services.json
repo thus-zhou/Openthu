@@ -1,0 +1,19 @@
+[
+  {"id":"info","name":"信息门户","entry_url":"https://info.tsinghua.edu.cn/f/info/gxfw_fg/common/index","via_webvpn":true,"category":"综合服务","source":"https://student.tsinghua.edu.cn/navigate"},
+  {"id":"learn","name":"网络学堂","entry_url":"https://learn.tsinghua.edu.cn/f/wlxt/index/course/student/","category":"教学","source":"https://student.tsinghua.edu.cn/navigate","capability":"COURSES_ASSIGNMENTS_FILES"},
+  {"id":"madmodel","name":"清华 DeepSeek / madmodel","entry_url":"https://madmodel.cs.tsinghua.edu.cn/","category":"人工智能","source":"https://madmodel.cs.tsinghua.edu.cn/","capability":"MODEL_CHAT"},
+  {"id":"library","name":"图书馆","entry_url":"https://lib.tsinghua.edu.cn/","category":"图书馆","source":"https://lib.tsinghua.edu.cn/"},
+  {"id":"library-catalog","name":"我的图书馆 / 水木搜索","entry_url":"https://discover.lib.tsinghua.edu.cn/ulink/hs/redirect/zh","authentication":"campus_saml","category":"图书馆","source":"https://lib.tsinghua.edu.cn/"},
+  {"id":"library-search","name":"水木搜索 / 公开馆藏","entry_url":"https://discover.lib.tsinghua.edu.cn/","authentication":"public_guest","category":"图书馆","source":"https://lib.tsinghua.edu.cn/"},
+  {"id":"library-seat","name":"图书馆座位预约","entry_url":"https://seat.lib.tsinghua.edu.cn/","category":"预约","source":"https://lib.tsinghua.edu.cn/"},
+  {"id":"library-rooms","name":"图书馆研读间 / 研讨间预约","entry_url":"https://cab.lib.tsinghua.edu.cn/","category":"预约","source":"https://lib.tsinghua.edu.cn/"},
+  {"id":"library-databases","name":"图书馆数据库导航","entry_url":"https://ecollection.lib.tsinghua.edu.cn/databasenav/","authentication":"public_guide","category":"图书馆","source":"https://lib.tsinghua.edu.cn/"},
+  {"id":"library-offcampus","name":"图书馆校外访问说明","entry_url":"https://lib.tsinghua.edu.cn/tjfw/xwfw.htm","category":"图书馆","source":"https://lib.tsinghua.edu.cn/"},
+  {"id":"thos","name":"在线服务系统 / 亲友来访与人员车辆报备","entry_url":"https://thos.tsinghua.edu.cn/","category":"办事与入校","source":"https://peace.tsinghua.edu.cn/info/1004/1365.htm"},
+  {"id":"visitors","name":"亲友来访人员报备","entry_url":"https://thos.tsinghua.edu.cn/fp/visitService?service_id=27277790547968","roaming_id":"29D037F2FD63BA8209FA410A8FBDD799","category":"办事与入校","source":"https://info.tsinghua.edu.cn/f/info/portal_fg/student/yyfwxxindex"},
+  {"id":"sports","name":"体育场馆预约","entry_url":"https://www.sports.tsinghua.edu.cn/venue/login.html?typeCode=16384","roaming_id":"5539ECF8CD815C7D3F5A8EE0A2D72441","category":"预约","source":"https://info.tsinghua.edu.cn/f/info/portal_fg/student/yyfwxxindex"},
+  {"id":"campusvisit","name":"校园参观预约（与校内亲友报备分别处理）","entry_url":"https://campusvisit.tsinghua.edu.cn/","category":"办事与入校","source":"https://www.tsinghua.edu.cn/zjqh/syxx/xycg.htm"},
+  {"id":"student","name":"学生清华 / 场地与学生服务导航","entry_url":"https://student.tsinghua.edu.cn/navigate","category":"学生服务","source":"https://student.tsinghua.edu.cn/navigate"},
+  {"id":"cloud","name":"清华云盘","entry_url":"https://cloud.tsinghua.edu.cn/","category":"信息服务","source":"https://student.tsinghua.edu.cn/navigate"},
+  {"id":"webvpn","name":"WebVPN 校外访问","entry_url":"https://webvpn.tsinghua.edu.cn/","category":"信息服务","source":"https://webvpn.tsinghua.edu.cn/"}
+]

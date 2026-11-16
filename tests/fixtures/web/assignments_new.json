@@ -1,0 +1,18 @@
+{
+  "result": "success",
+  "object": {
+    "aaData": [
+      {
+        "xszyid": "student-hw-1",
+        "zyid": "base-hw-1",
+        "wlkcid": "course-real-1",
+        "bt": "边坡稳定性分析",
+        "jzsj": "2026-09-20T23:59:00+08:00",
+        "bjjzsj": "2026-09-22T23:59:00+08:00",
+        "zywcfs": 1,
+        "zytjfs": 2,
+        "scsj": null
+      }
+    ]
+  }
+}

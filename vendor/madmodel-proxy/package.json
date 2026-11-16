@@ -1,0 +1,27 @@
+{
+  "name": "madmodel-proxy",
+  "version": "1.10.8",
+  "private": true,
+  "license": "MIT",
+  "description": "madmodel 本地 OpenAI 兼容代理 + 清华统一认证 token 自动续期(GitHub 源码分发,不发布到 npm)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/noroadback/madmodel-proxy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/noroadback/madmodel-proxy/issues"
+  },
+  "engines": {
+    "node": ">=18.14"
+  },
+  "scripts": {
+    "start": "node dashboard.js",
+    "login": "node refresh-token.js login",
+    "once": "node refresh-token.js once",
+    "watch": "node refresh-token.js watch",
+    "status": "node refresh-token.js status",
+    "smoke": "node smoke-real.js",
+    "test": "node --test",
+    "check:release": "node scripts/release-check.js"
+  }
+}

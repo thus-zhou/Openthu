@@ -1,0 +1,19 @@
+{
+  "name": "openthu",
+  "version": "0.1.0",
+  "description": "Openthu 开放校园服务助手",
+  "author": {
+    "name": "Openthu contributors"
+  },
+  "license": "MIT",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Openthu 清华助手",
+    "shortDescription": "校园服务与网络学堂助手",
+    "defaultPrompt": [
+      "使用 $openthu 查询校园服务。",
+      "使用 $tsinghua-assistant 查询课程和图书馆。"
+    ]
+  }
+}

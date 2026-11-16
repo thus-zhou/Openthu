@@ -1,0 +1,12 @@
+include README.md LICENSE THIRD_PARTY.md CHANGELOG.md AGENTS.md
+include ACTION-FRAMEWORK.md LEARN-READ.md requirements-dev.txt provenance.json
+recursive-include src *.py *.js *.json *.txt LICENSE
+recursive-include runtime *.py *.js
+recursive-include vendor *.js *.json *.md *.txt LICENSE
+recursive-include scripts *.py
+recursive-include docs *.md
+recursive-include configs *.json
+recursive-include integrations *.md *.yaml *.json
+recursive-include tests *.py *.js *.json *.html *.pdf
+recursive-exclude * node_modules/* __pycache__/* *.pyc
+prune src/thu_assistant/node_modules

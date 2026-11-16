@@ -1,0 +1,16 @@
+{
+  "result": "success",
+  "object": [
+    {
+      "wjid": "remote-file-1",
+      "kjxxid": "file-row-1",
+      "kjflid": "category-1",
+      "bt": "工程地质绪论.pdf",
+      "ms": "第一讲",
+      "wjdx": 19,
+      "fileSize": "19B",
+      "wjlx": "pdf",
+      "scsj": "2026-09-01T09:00:00+08:00"
+    }
+  ]
+}

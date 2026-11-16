@@ -1,0 +1,25 @@
+# 安装与配置
+
+## 云端开发
+
+按 README 创建虚拟环境并安装依赖。`python scripts/dev.py setup-node` 从锁文件恢复 tough-cookie 运行依赖；`python -m playwright install --with-deps chromium` 在 Linux 安装合成浏览器测试所需组件。`python scripts/dev.py test` 设置隔离的临时状态目录并运行 Python/Node 离线测试，不连接校园账户。
+
+Node 依赖默认从官方 npm registry 安装，版本和完整性哈希由锁文件固定。网络环境确有需要时，可显式设置 `OPENTHU_NPM_REGISTRY` 使用自行选定的镜像；不要把个人 npm 认证配置提交到仓库。
+
+`python scripts/dev.py smoke` 验证 MCP 初始化、29 个工具和静态目录。它不验证登录、权限或真实业务。云端 Hermes 在此目录工作即可，不需要读取任何人的私有配置。
+
+## Windows 真实运行
+
+1. 同样安装 Python/Node 依赖和 Chromium。保持所有认证文件在版本库之外的用户状态目录。
+2. 先阅读 `vendor/madmodel-proxy/README.md`，按该公开上游项目的官方流程在本机建立自己的认证。可使用单独安装的同版本上游，并通过 `THU_MADMODEL_DIR` 指定其代码目录。不要把密码或 Cookie 贴到 AI 聊天中。
+3. 使用 `python scripts/configure_mcp.py --output .local/mcp.json` 生成当前机器专用 MCP 配置；该输出被 Git 忽略。客户端导入生成的配置，或使用 `openthu-mcp` 命令。
+4. 第一次业务读取按官方登录/MFA 流程完成。模型调用使用使用者自己的学校额度。当前 Linux 实时认证会明确返回 Windows 加密依赖错误。
+5. 先查状态和只读结果，再进行有明确具体授权的业务。预约和取消的真实验收状态见能力矩阵。
+
+生成器默认使用当前 Python、可找到的 Node 与仓库中的辅助程序；不读取旧安装配置或复制凭据。正式运行与离线测试使用不同的状态目录。更换代码、回退版本时保留未决加密事务及能读取它们的运行环境。
+
+## 下载与构建
+
+GitHub Releases 提供完整源码包、校验文件及构建包。完整源码归档包含认证依赖、Windows 辅助代码和测试；单独 Python wheel 不包含仓库级认证依赖，实时功能请使用完整源码包。
+
+`python -m build` 构建 Python 包；`python scripts/package_release.py` 在 `dist/` 生成源码归档与 SHA256。预发布不能视为所有校园系统都已可用。

@@ -1,0 +1,316 @@
+// Read-only source excerpts; not an executable upstream bundle.
+
+// src/index.ts:248-286
+  public async getCalendar(startDate: string, endDate: string, graduate = false): Promise<CalendarEvent[]> {
+    const ticketResponse = await this.#fetchWithToken(URLS.REGISTRAR_TICKET, {
+      method: 'POST',
+      body: URLS.REGISTRAR_TICKET_FORM_DATA(),
+    });
+
+    let ticket = (await ticketResponse.text()) as string;
+    ticket = ticket.substring(1, ticket.length - 1);
+
+    await this.#fetch(URLS.REGISTRAR_AUTH(ticket));
+
+    const response = await this.#fetchWithToken(
+      URLS.REGISTRAR_CALENDAR(startDate, endDate, graduate, JSONP_EXTRACTOR_NAME),
+    );
+
+    if (!response.ok) {
+      throw new ApiError(FailReason.INVALID_RESPONSE);
+    }
+
+    const result = extractJSONPResult(await response.text()) as any[];
+
+    return result.map<CalendarEvent>((i) => ({
+      location: i.dd,
+      status: i.fl,
+      startTime: i.kssj,
+      endTime: i.jssj,
+      date: i.nq,
+      courseName: i.nr,
+    }));
+  }
+
+  public async getSemesterIdList(): Promise<string[]> {
+    const json = await (await this.#fetchWithToken(URLS.LEARN_SEMESTER_LIST)).json();
+    if (!Array.isArray(json)) {
+      throw new ApiError(FailReason.INVALID_RESPONSE, json);
+    }
+    const semesters = json as string[];
+    // sometimes web learning returns null, so confusing...
+    return semesters.filter((s) => s != null);
+
+// src/index.ts:387-439
+  /** Get all notifications （课程公告） of the specified course. */
+  public async getNotificationList(
+    courseID: string,
+    courseType: CourseType = CourseType.STUDENT,
+  ): Promise<Notification[]> {
+    return Promise.all([
+      this.getNotificationListKind(courseID, courseType, false),
+      this.getNotificationListKind(courseID, courseType, true),
+    ]).then((r) => r.flat());
+  }
+
+  private async getNotificationListKind(
+    courseID: string,
+    courseType: CourseType,
+    expired: boolean,
+  ): Promise<Notification[]> {
+    const json = await (
+      await this.#fetchWithToken(URLS.LEARN_NOTIFICATION_LIST(courseType, expired), {
+        method: 'POST',
+        body: URLS.LEARN_PAGE_LIST_FORM_DATA(courseID),
+      })
+    ).json();
+    if (json.result !== 'success') {
+      throw new ApiError(FailReason.INVALID_RESPONSE, json);
+    }
+
+    const result = (json.object?.aaData ?? json.object?.resultsList ?? []) as any[];
+
+    return Promise.all(
+      result.map(async (n) => {
+        const notification: INotification = {
+          id: n.ggid,
+          content: decodeHTML(Base64.decode(n.ggnr ?? '')),
+          title: decodeHTML(n.bt),
+          url: URLS.LEARN_NOTIFICATION_DETAIL(courseID, n.ggid, courseType),
+          publisher: n.fbrxm,
+          hasRead: n.sfyd === YES,
+          markedImportant: Number(n.sfqd) === 1, // n.sfqd could be string '1' (teacher mode) or number 1 (student mode)
+          publishTime: new Date(n.fbsj && typeof n.fbsj === 'string' ? n.fbsj : n.fbsjStr),
+          expireTime: n.jzsj ? new Date(n.jzsj) : undefined,
+          isFavorite: n.sfsc === YES,
+          comment: n.bznr ?? undefined,
+        };
+        let detail: INotificationDetail = {};
+        const attachmentName = courseType === CourseType.STUDENT ? n.fjmc : n.fjbt;
+        if (attachmentName) {
+          detail = await this.parseNotificationDetail(courseID, notification.id, courseType, attachmentName);
+        }
+        return { ...notification, ...detail } satisfies Notification;
+      }),
+    );
+  }
+
+
+// src/index.ts:520-570
+    categoryId: string,
+    courseType: CourseType = CourseType.STUDENT,
+  ): Promise<File[]> {
+    if (courseType === CourseType.STUDENT) {
+      const json = await (
+        await this.#fetchWithToken(URLS.LEARN_FILE_LIST_BY_CATEGORY_STUDENT(courseID, categoryId))
+      ).json();
+      if (json.result !== 'success') {
+        throw new ApiError(FailReason.INVALID_RESPONSE, json);
+      }
+
+      const result = (json.object ?? []) as any[];
+
+      return result.map((f) => {
+        const fileId = f[7];
+        const title = decodeHTML(f[1]);
+        const rawSize = f[9];
+        const size = formatFileSize(rawSize);
+        const downloadUrl = URLS.LEARN_FILE_DOWNLOAD(fileId, courseType);
+        const previewUrl = URLS.LEARN_FILE_PREVIEW(ContentType.FILE, fileId, courseType, this.previewFirstPage);
+        return {
+          id: f[0],
+          fileId,
+          title,
+          description: decodeHTML(f[5]),
+          rawSize,
+          size,
+          uploadTime: new Date(f[6]),
+          publishTime: new Date(f[10]),
+          downloadUrl,
+          previewUrl,
+          isNew: f[8] === 1,
+          markedImportant: f[2] === 1,
+          visitCount: 0,
+          downloadCount: 0,
+          fileType: f[13],
+          remoteFile: {
+            id: fileId,
+            name: title,
+            downloadUrl,
+            previewUrl,
+            size,
+          },
+          isFavorite: f[11],
+          comment: f[14] ?? undefined,
+        } satisfies File;
+      });
+    } else {
+      const json = await (
+        await this.#fetchWithToken(URLS.LEARN_FILE_LIST_BY_CATEGORY_TEACHER, {
+          method: 'POST',
+
+// src/index.ts:925-982
+    const json = await (
+      await this.#fetchWithToken(url, {
+        method: 'POST',
+        body: URLS.LEARN_PAGE_LIST_FORM_DATA(courseID),
+      })
+    ).json();
+    if (json.result !== 'success') {
+      throw new ApiError(FailReason.INVALID_RESPONSE, json);
+    }
+
+    const result = (json.object?.aaData ?? []) as any[];
+
+    let excellentHomeworkListByHomework: { [id: string]: ExcellentHomework[] } = {};
+    try {
+      excellentHomeworkListByHomework = await this.getExcellentHomeworkListByHomework(courseID);
+    } catch (e) {
+      // Don't block the whole process if excellent homework list cannot be fetched
+    }
+
+    return Promise.all(
+      result
+        .map(
+          (h) =>
+            ({
+              id: h.xszyid,
+              studentHomeworkId: h.xszyid,
+              baseId: h.zyid,
+              title: decodeHTML(h.bt),
+              url: URLS.LEARN_HOMEWORK_PAGE(h.wlkcid, h.xszyid),
+              deadline: new Date(h.jzsj),
+              lateSubmissionDeadline: h.bjjzsj ? new Date(h.bjjzsj) : undefined,
+              isLateSubmission: h.sfbj === YES,
+              completionType: h.zywcfs,
+              submissionType: h.zytjfs,
+              submitUrl: URLS.LEARN_HOMEWORK_SUBMIT_PAGE(h.wlkcid, h.xszyid),
+              submitTime: h.scsj === null ? undefined : new Date(h.scsj),
+              grade: h.cj === null ? undefined : h.cj,
+              gradeLevel: GRADE_LEVEL_MAP.get(h.cj),
+              graderName: trimAndDecode(h.jsm),
+              gradeContent: trimAndDecode(h.pynr),
+              gradeTime: h.pysj === null ? undefined : new Date(h.pysj),
+              isFavorite: h.sfsc === YES,
+              favoriteTime: h.scsj === null || h.sfsc !== YES ? undefined : new Date(h.scsj),
+              comment: h.bznr ?? undefined,
+              excellentHomeworkList: excellentHomeworkListByHomework[h.zyid],
+              ...status,
+            }) satisfies IHomework,
+        )
+        .map(
+          async (h) =>
+            ({
+              ...h,
+              ...(await this.parseHomeworkAtUrl(h.url)),
+              ...(await this.getHomeworkDetail(h.baseId)),
+            }) satisfies Homework,
+        ),
+    );
+  }
+
+// src/index.ts:1033-1136
+  private async parseNotificationDetail(
+    courseID: string,
+    id: string,
+    courseType: CourseType,
+    attachmentName: string,
+  ): Promise<INotificationDetail> {
+    /// from JSON (backup, currently not used)
+    // const postParams = new FormData();
+    // postParams.append('id', id);
+    // postParams.append('wlkcid', courseID);
+    // const metadata = await (await this.#myFetchWithToken(URL.LEARN_NOTIFICATION_EDIT(courseType), {
+    //   'method': 'POST',
+    //   'body': postParams,
+    // })).json();
+    // const attachmentId = metadata.ggfjid as string;
+    /// parsed from HTML
+    const response = await this.#fetchWithToken(URLS.LEARN_NOTIFICATION_DETAIL(courseID, id, courseType));
+    const result = $(await response.text());
+    let path = '';
+    if (courseType === CourseType.STUDENT) {
+      path = result('.ml-10').attr('href')!;
+    } else {
+      path = result('#wjid').attr('href')!;
+    }
+    const size = trimAndDecode(result('div#attachment > div.fl > span[class^="color"]').first().text())!;
+    const params = new URLSearchParams(path.split('?').slice(-1)[0]);
+    const attachmentId = params.get('wjid')!;
+    if (!path.startsWith(URLS.LEARN_PREFIX)) {
+      path = URLS.LEARN_PREFIX + path;
+    }
+    return {
+      attachment: {
+        name: attachmentName,
+        id: attachmentId,
+        downloadUrl: path,
+        previewUrl: URLS.LEARN_FILE_PREVIEW(ContentType.NOTIFICATION, attachmentId, courseType, this.previewFirstPage),
+        size,
+      },
+    };
+  }
+
+  private async parseHomeworkAtUrl(url: string): Promise<IHomeworkDetail> {
+    const response = await this.#fetchWithToken(url);
+    const result = $(await response.text());
+
+    const fileDivs = result('div.list.fujian.clearfix');
+
+    return {
+      description: trimAndDefine(result('div.list.calendar.clearfix > div.fl.right > div.c55').slice(0, 1).html()),
+      answerContent: trimAndDefine(result('div.list.calendar.clearfix > div.fl.right > div.c55').slice(1, 2).html()),
+      submittedContent: trimAndDefine($(result('div.boxbox').slice(1, 2).toArray())('div.right').slice(2, 3).html()),
+      attachment: this.parseHomeworkFile(fileDivs[0]),
+      answerAttachment: this.parseHomeworkFile(fileDivs[1]),
+      submittedAttachment: this.parseHomeworkFile(fileDivs[2]),
+      gradeAttachment: this.parseHomeworkFile(fileDivs[3]),
+    };
+  }
+
+  private async getHomeworkDetail(baseId: string): Promise<IHomeworkDetail> {
+    const json = await (
+      await this.#fetchWithToken(URLS.LEARN_HOMEWORK_DETAIL, {
+        method: 'POST',
+        body: URLS.LEARN_HOMEWORK_DETAIL_FORM_DATA(baseId),
+      })
+    ).json();
+    if (json.result !== 'success') {
+      throw new ApiError(FailReason.INVALID_RESPONSE, json);
+    }
+    return {
+      description: trimAndDecode(json.msg),
+    };
+  }
+
+  private parseHomeworkFile(fileDiv: DOM.Element): RemoteFile | undefined {
+    const fileNode = ($(fileDiv)('.ftitle').children('a')[0] ?? $(fileDiv)('.fl').children('a')[0]) as DOM.Element;
+    if (fileNode !== undefined) {
+      const size = trimAndDecode($(fileDiv)('.fl > span[class^="color"]').first().text())!;
+      const params = new URLSearchParams(fileNode.attribs.href.split('?').slice(-1)[0]);
+      const attachmentId = params.get('fileId')!;
+      // so dirty here...
+      let downloadUrl = URLS.LEARN_PREFIX + fileNode.attribs.href;
+      if (params.has('downloadUrl')) {
+        downloadUrl = URLS.LEARN_PREFIX + params.get('downloadUrl')!;
+      }
+      return {
+        id: attachmentId,
+        name: (fileNode.children[0] as DOM.Text).data!,
+        downloadUrl,
+        previewUrl: URLS.LEARN_FILE_PREVIEW(
+          ContentType.HOMEWORK,
+          attachmentId,
+          CourseType.STUDENT,
+          this.previewFirstPage,
+        ),
+        size,
+      };
+    } else {
+      return undefined;
+    }
+  }
+
+  private parseDiscussionBase(d: any): IDiscussionBase {
+    return {
+      id: d.id,
