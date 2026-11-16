@@ -20,6 +20,7 @@ python -m pip install -r requirements-dev.txt
 python -m pip install -e .
 python scripts/dev.py setup-node
 python -m playwright install chromium
+python scripts/dev.py doctor
 python scripts/dev.py check
 python scripts/dev.py test
 ```
@@ -27,6 +28,22 @@ python scripts/dev.py test
 离线演示：`openthu services`。该命令只读随程序提供的静态服务目录，不证明登录或校园业务可用。
 
 **真实使用：** 阅读[安装与配置](docs/INSTALL.md)。不要向聊天、Issue 或仓库提交学校密码、Cookie、模型凭据或个人业务记录。默认安装不会搬迁任何人的认证状态。
+
+## 首次安装诊断
+
+安装依赖后先运行 `python scripts/dev.py doctor`。它逐项检查 Python 版本与虚拟环境、Python 开发包、Node.js/npm、`src/thu_assistant/package-lock.json` 固定的运行依赖、Playwright Chromium、Windows 生产认证条件和源码包完整性；缺失项会给出可直接执行的修复命令。
+
+诊断默认输出只包含仓库相对名称、版本、状态和修复命令，不含绝对路径、主机名、账号或凭据，可直接贴到公开 Issue。`python scripts/dev.py doctor --json` 提供机器可读结果。`python scripts/dev.py check` 会先运行同一诊断，再执行隐私扫描、源码编译和 MCP 冒烟检查。
+
+## 获取方式与能力边界
+
+| 获取方式 | 包含内容 | 适用场景 |
+|---|---|---|
+| 完整源码包（`git clone` 或 GitHub Release 源码归档） | Python/Node 源码、`vendor/madmodel-proxy`、`runtime/windows`、合成测试 | 云端离线开发、Windows 真实运行、贡献代码 |
+| Python wheel（`python -m build` 生成的 `.whl`） | Python 包、静态服务目录、兼容命令 | 静态目录与库调用；不含 Node 锁文件、认证依赖和 Windows 辅助，不能完成真实校园认证 |
+| 云端离线开发检出 | 完整源码、Python 3.12、Node.js 24、Playwright Chromium | `doctor` / `check` / `test` / `smoke`；不访问校园账户，不保存 Windows 凭据 |
+
+真实校园认证目前依赖 Windows DPAPI。云端开发机只做开发与离线验证，不应导入或改用明文凭据。
 
 ## 项目资料
 
