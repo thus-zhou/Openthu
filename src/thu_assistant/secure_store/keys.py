@@ -209,21 +209,34 @@ def _windows_acl_owner_only(path: Path) -> bool:
         current, sddl = _windows_acl_snapshot(path)
     except SecureKeyPermissionError:
         return False
-    owner = re.search(r"O:(S-1-[0-9-]+)", sddl)
-    if not owner or owner.group(1) != current:
+    owner = re.search(r"O:([^GDS]+)", sddl)
+    if not owner:
         return False
-    dacl = re.search(r"D:([^GS]*)", sddl)
-    if not dacl or "NO_ACCESS_CONTROL" in sddl:
+    owner_token = owner.group(1)
+    owner_ok = owner_token in {current, "OW"}
+    if owner_token == "LA" and current.endswith("-500"):
+        owner_ok = True
+    if not owner_ok:
         return False
-    allowed = {current, "S-1-5-18"}  # current user and the local SYSTEM account
+    if "NO_ACCESS_CONTROL" in sddl or "D:" not in sddl:
+        return False
     aces = re.findall(r"\((?:A|OA);([^)]*)\)", sddl)
     if not aces:
         return False
+    current_ace = False
     for body in aces:
-        sid = body.rsplit(";", 1)[-1].strip()
-        if not _SID.fullmatch(sid) or sid not in allowed:
+        token = body.rsplit(";", 1)[-1].strip()
+        if token == current or token == "OW":
+            current_ace = True
+        elif token == "LA" and current.endswith("-500"):
+            current_ace = True
+        elif token in {"SY", "BA"}:
+            # SYSTEM and local administrators are OS administrative
+            # principals; they are not ordinary interactive users.
+            continue
+        else:
             return False
-    return True
+    return current_ace
 
 
 def _harden_windows_acl(path: Path) -> None:
