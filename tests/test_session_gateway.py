@@ -26,9 +26,9 @@ ACCOUNT_HASH = hashlib.sha256(ACCOUNT.encode()).hexdigest()
 
 
 def make_key(tmp_path: Path) -> Path:
-    directory = tmp_path / "keys"
-    directory.mkdir(mode=0o700)
-    key = directory / "master.key"
+    key = tmp_path / "keys" / "master.key"
+    # Let create_key_file create and harden the parent; pre-creating an
+    # inherited Windows ACL makes the owner-only check fail.
     create_key_file(key)
     return key
 
@@ -177,7 +177,6 @@ def test_gateway_environment_uses_frozen_paths_and_rejects_a_relative_key(tmp_pa
     assert Path(env["THU_ASSISTANT_STATE_DIR"]).is_absolute()
     assert "THU_SECURE_KEY_FILE" not in env
     default_key = config_base / ("Openthu" if os.name == "nt" else "openthu") / "keys/master.key"
-    default_key.parent.mkdir(parents=True, mode=0o700)
     create_key_file(default_key)
     env = gateway_environment(base)
     assert env["THU_SECURE_KEY_FILE"] == str(default_key)

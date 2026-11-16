@@ -132,7 +132,9 @@ class SessionStore {
     const temporary=file+'.'+crypto.randomUUID()+'.tmp';
     try{
       fs.writeFileSync(temporary,data,{mode:0o600});
-      const fd=fs.openSync(temporary,'r');
+      // Windows FlushFileBuffers needs a writable handle; 'r+' also works on
+      // POSIX and keeps the same fsync guarantee.
+      const fd=fs.openSync(temporary,'r+');
       try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
       fs.renameSync(temporary,file);
     }catch(error){
