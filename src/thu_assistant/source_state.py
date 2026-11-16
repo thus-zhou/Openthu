@@ -357,8 +357,13 @@ def unknown_digest(value):
 
 def canonical_enum(value, mapping, *, default='UNKNOWN'):
     """Map a known value; otherwise return the default plus a safe digest."""
-    if isinstance(value, str) and value in mapping:
-        return mapping[value], None
+    if isinstance(value, (str, int)) and not isinstance(value, bool):
+        if value in mapping:
+            return mapping[value], None
+        if isinstance(value, str) and value.isdigit() and int(value) in mapping:
+            return mapping[int(value)], None
+        if isinstance(value, int) and str(value) in mapping:
+            return mapping[str(value)], None
     return default, unknown_digest(value)
 
 

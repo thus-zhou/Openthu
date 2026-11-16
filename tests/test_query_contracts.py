@@ -95,6 +95,8 @@ def test_unknown_enums_stay_unknown_and_only_publish_a_digest():
     assert value == 'UNKNOWN' and digest.startswith('UNKNOWN:')
     assert '奇怪的学籍状态' not in digest
     assert digest == source_state.unknown_digest('奇怪的学籍状态')
+    assert source_state.canonical_enum(128, {128: 'COMPLETED'})[0] == 'COMPLETED'
+    assert source_state.canonical_enum('128', {128: 'COMPLETED'})[0] == 'COMPLETED'
 
     role, digest = domain_models.normalize_role('admin')
     assert role == 'UNKNOWN' and digest and len(digest) == 12
