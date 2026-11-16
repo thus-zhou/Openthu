@@ -11,15 +11,16 @@ function parseCount(value){
 }
 async function collectPages(total,load,{limit=30,pageSize=50,cancel=null,binding=null}={}){
  const items=[],pages=[],warnings=[],missing_pages=[],page_errors=[],seen=new Set();let expectedPages=Math.ceil(total/pageSize),cancelled=false;
- const stopped=(code)=>{warnings.push(code);cancelled=true;};
+ const stopped=(code,page)=>{warnings.push(code);cancelled=true;
+  for(let p=page;p<=Math.min(expectedPages,limit);p++)missing_pages.push(p);};
  for(let page=1;page<=Math.min(limit,expectedPages);page++){
-  if(cancel&&cancel()){stopped('READ_CANCELLED');break;}
+  if(cancel&&cancel()){stopped('READ_CANCELLED',page);break;}
   let rows;
   try{rows=await load(page);if(!Array.isArray(rows))throw Object.assign(new Error(),{code:'PAGE_SCHEMA_CHANGED'});}
   catch(error){
    if(error.code==='CANCELLED'){
     if(!items.length)throw error; // nothing was read; the caller keeps the explicit cancel
-    stopped('READ_CANCELLED');break;
+    stopped('READ_CANCELLED',page);break;
    }
    if(['GATEWAY_EXITED','CAMPUS_GATEWAY_TIMEOUT'].includes(error.code))throw error;
    warnings.push('UPSTREAM_PAGE_FAILED');page_errors.push({page,code:/^[A-Z_]+$/.test(error.code||'')?error.code:'UPSTREAM_PAGE_FAILED'});missing_pages.push(...Array.from({length:Math.min(expectedPages,limit)-page+1},(_,i)=>page+i));break;

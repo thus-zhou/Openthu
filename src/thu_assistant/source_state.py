@@ -414,7 +414,12 @@ def completeness(status, source_complete=False, snapshot_complete=True,
         reasons.append('SOURCE_ERRORS_PRESENT')
     if not snapshot:
         reasons.append('SNAPSHOT_INCOMPLETE')
-    flags = set(warnings or ())
+    flags = set()
+    for warning in warnings or ():
+        if isinstance(warning, str) and 0 < len(warning) <= 200:
+            flags.add(warning)
+        elif warning not in (None, ''):
+            flags.add('UNVERIFIED_WARNING_REDACTED')
     flags.update(reasons)
     return {'source_complete': source, 'snapshot_complete': snapshot,
             'complete': complete, 'warnings': sorted(flags),
