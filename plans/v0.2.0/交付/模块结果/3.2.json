@@ -7,6 +7,8 @@
   "baseline_commit": "4d60e8b",
   "integration_parent_commit": "4d60e8b",
   "delivery_commit": "ec2f617",
+  "record_commit": "338dd0b",
+  "batch_state": "all three modules accepted; batch 3 ready pending the single integration commit",
   "branch": "hermes/1-install-diagnostics",
   "version_pr": 2,
   "paths": [
@@ -79,6 +81,13 @@
       "command": "python scripts/dev.py test",
       "worktree": "isolated tree at 4d60e8b with only the 3.2 commit applied; the shared tree contains in-flight 3.1/3.3 work"
     },
+    "github_actions": {
+      "ubuntu-24.04": "success",
+      "windows-2025": "success",
+      "head_sha": "d897ccc",
+      "runs": [43933004147, 43932991662],
+      "note": "Head d897ccc contains the 3.2 delivery and record commits plus the 3.3 delivery commit."
+    },
     "live_campus_calls": 0,
     "model_calls": 0,
     "business_submissions": 0
@@ -102,7 +111,7 @@
     "Offline synthetic evidence only: no real campus login, read, booking, payment or submission was performed."
   ],
   "rollback": "Restore the nine listed code/test paths to 4d60e8b and delete tests/fixtures/query/. New fields are optional and old clients ignore them; the added directory cache fields are additive. Existing c1 cursors become invalid explicitly and are never re-fetched into a new snapshot.",
-  "next": "Wait for 3.1 and 3.3 to be accepted and reconnected; the batch integration commit then runs the full offline regression. Module acceptance does not mark batch 3 accepted and does not create a new PR.",
+  "next": "3.1 and 3.3 are also module-accepted. The integration owner records the single batch-3 integration commit, runs the joint offline suite and both-platform CI, and only then marks batch 3 accepted. This module does not create a new PR.",
   "cross_module_requests": [
     "4.1/4.2/4.3/4.5/5.1/5.3/5.4: use domain_models for stable identities, time precision and duplicate relations instead of re-deriving them per adapter.",
     "4.3/5.1/5.2/5.4/6.2: use cache_policy for any history fallback and keep cached results non-live and non-booking.",
