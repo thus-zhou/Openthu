@@ -147,6 +147,11 @@ def _minimal_windows_env() -> dict[str, str]:
         "TMP",
         "COMSPEC",
         "PSModulePath",
+        "USERPROFILE",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "APPDATA",
+        "LOCALAPPDATA",
     )
     env = {name: os.environ[name] for name in names if name in os.environ}
     root = env.setdefault("SystemRoot", r"C:\Windows")
