@@ -341,14 +341,20 @@ def test_learn_session_store_requires_account_when_key_is_configured(tmp_path, m
 
 def test_learn_session_store_discovers_default_key(tmp_path, monkeypatch):
     home = tmp_path / "home"
-    config = home / ".config"
-    key = config / "openthu" / "keys" / "master.key"
+    if os.name == "nt":
+        appdata = tmp_path / "appdata"
+        monkeypatch.setenv("APPDATA", str(appdata))
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+        key = appdata / "Openthu" / "keys" / "master.key"
+    else:
+        config = home / ".config"
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(config))
+        key = config / "openthu" / "keys" / "master.key"
     create_key_file(key)
     learn = tmp_path / "learn"
     for name in ("THU_SECURE_KEY_FILE", "OPENTHU_SECURE_KEY_FILE", "THU_SECURE_BACKEND", "OPENTHU_SECURE_BACKEND"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(config))
     monkeypatch.setenv("XDG_STATE_HOME", str(home / "state"))
     monkeypatch.setenv("OPENTHU_LEARN_SESSION_DIR", str(learn))
     monkeypatch.setenv("THU_LEARN_ACCOUNT", "synthetic-account")
