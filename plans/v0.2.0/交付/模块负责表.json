@@ -264,6 +264,7 @@
         "domain-models-v1 stable identities, time precision, integer status mapping and same-title/different-id relations; cache-v2 live/directory/history policies",
         "cursor c1 bound to parameters/account/snapshot-v2 for learn, authenticated pages and account-bound services; cancelled continuation stays partial",
         "clean-tree full offline suite at 734d41a: Python 622 passed/5 skipped, Node 64 passed; check 402 files/0 findings; validators ok",
+        "GitHub Actions ubuntu-24.04 and windows-2025 succeeded at final 3.2 audit-fix head 4281df0 (run 43942584816)",
         "no live campus, model or business calls; batch 3 remains ready for the single integration commit"
       ]
     },

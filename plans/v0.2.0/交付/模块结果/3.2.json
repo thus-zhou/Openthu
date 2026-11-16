@@ -8,7 +8,7 @@
   "integration_parent_commit": "4d60e8b",
   "delivery_commit": "ec2f617",
   "audit_fix_commit": "734d41a",
-  "audit_fix_followup": "a579c2f",
+  "audit_fix_followup": "a579c2f, 4281df0",
   "record_commit": "338dd0b",
   "batch_state": "all three modules accepted; batch 3 ready pending the single integration commit",
   "branch": "hermes/1-install-diagnostics",
@@ -86,9 +86,9 @@
     "github_actions": {
       "ubuntu-24.04": "success",
       "windows-2025": "success",
-      "head_sha": "d897ccc",
-      "runs": [43933004147, 43932991662],
-      "note": "Head d897ccc contains the 3.2 delivery and record commits plus the 3.3 delivery commit."
+      "head_sha": "4281df0",
+      "runs": [43942584816],
+      "note": "Final 3.2 audit-fix head; both jobs in one offline-checks run succeeded."
     },
     "joint_batch_tree": {
       "head_sha": "dc5edea",
