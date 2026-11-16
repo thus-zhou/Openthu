@@ -126,12 +126,40 @@
         "3.2": "accepted",
         "3.3": "accepted"
       },
-      "status": "ready",
-      "integration_commit": null,
-      "accepted_at": null,
+      "status": "accepted",
+      "integration_commit": "400adbe468a469256e598f8852194eee07e2a3f2",
+      "accepted_at": "2026-11-17",
       "entry_condition": "all batch 2 modules accepted and integrated",
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
-      "gate_note": "3.1 accepted at b0ecc64 (code 24ecdb7 + audit fixes 6930dde through b0ecc64); 3.2 accepted at ec2f617; 3.3 accepted at 1d681d0. All three modules are accepted, but the batch remains ready until the batch integration commit records the joint check and full offline suite. Ubuntu/Windows CI at b0ecc64: 43956001264 success."
+      "gate_note": "3.1 accepted at b0ecc64 (code 24ecdb7 + audit fixes 6930dde through b0ecc64); 3.2 accepted at ec2f617 (audit fixes through 456e7a5); 3.3 accepted at 036a00d. The single batch integration commit 400adbe records the joint check and full offline suite; push and PR CI at that SHA are green on both platforms. Batch 4 is ready.",
+      "acceptance_record": "the commit containing this accepted record",
+      "module_acceptance": {
+        "3.1": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "b0ecc64c803b144a6050816764cc6eb5232224ee",
+          "evidence": "14 Python module tests (2 Linux platform skips; 16 pass on Windows) + 7 Node v3 + 5 Node crypto; audit fixes 6930dde..b0ecc64; CI 43956001264 green at b0ecc64; joint batch tree Linux 648/7, Windows 644/11, Node 66."
+        },
+        "3.2": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "ec2f61723a332777cf21c7d2d73e335ca566ee5c",
+          "evidence": "40 module tests; audit fixes 734d41a..456e7a5; CI 43945010355 green at 456e7a5; joint batch tree Linux 648/7, Windows 644/11."
+        },
+        "3.3": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "036a00dc0f49d0efdd0633b72b47e8a51818a304",
+          "evidence": "84 module tests at 036a00d; audit fixes 036a00d; encrypted state through the 2.2 store; joint batch tree Linux 648/7, Windows 644/11."
+        }
+      },
+      "checks": [
+        "plan validator ok: 24 modules, 9 batches",
+        "contract validator ok: 8 contracts + 1 compatibility baseline; 9/35/8 samples; 154 registered error codes",
+        "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures",
+        "scripts/dev.py check: 403 files, 0 findings, 29 MCP tools",
+        "Linux: Python 648 passed/7 skipped/0 failed; Node 66 passed/0 failed",
+        "Windows: Python 644 passed/11 skipped/0 failed; Node 66 passed/0 failed",
+        "GitHub Actions at 400adbe: push run 43979256228 and pull_request run 43979263187; ubuntu-24.04 and windows-2025 both success",
+        "live campus/model/business calls: 0/0/0"
+      ]
     },
     {
       "batch": 4,
@@ -150,7 +178,7 @@
         "4.4": "pending",
         "4.5": "pending"
       },
-      "status": "locked",
+      "status": "ready",
       "integration_commit": null,
       "accepted_at": null,
       "entry_condition": "all batch 3 modules accepted and integrated",
@@ -246,5 +274,5 @@
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     }
   ],
-  "gate_note": "3.1 accepted at b0ecc64 (code 24ecdb7 + audit fixes 6930dde through b0ecc64); 3.2 accepted at ec2f617; 3.3 accepted at 1d681d0. All three modules are accepted, but the batch remains ready until the batch integration commit records the joint check and full offline suite. Ubuntu/Windows CI at b0ecc64: 43956001264 success."
+  "gate_note": "Batches 1-3 accepted and reconnected. Batch 3 integration commit 400adbe: 403 files/0 findings, 29 MCP tools, Linux Python 648/7 and Windows 644/11, Node 66/0, push and PR CI green at 400adbe. Batch 4 is ready."
 }
