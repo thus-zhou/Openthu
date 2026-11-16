@@ -71,8 +71,8 @@ data = assets.read_bytes(ref.media_id, account_scope=scope, task_id=task)
   `MEDIA_REFERENCE_REVOKED`。
 - `pending_cleanup()` 给出仍持有派生文件的引用清单（asset_id、retention、expires_at、
   derived_present、uses），不含路径，作为未完成清理的明确清单。
-- `cleanup()` 只删除本模块命名规则内、未被活动引用使用的文件；`PROJECT_CACHE`
-  保留项和目录中的外来文件不动。
+- `cleanup()` 删除本模块命名规则内、未被“活动且未过期”引用使用的文件；过期引用不再保护
+  其派生文件，`PROJECT_CACHE` 保留项和目录中的外来文件不动。
 - 保留期：`SESSION` 在进程退出时删除；`EXPLICIT_DELETE` 与 `PROJECT_CACHE`
   跨进程保留（后者还对常规 `cleanup()` 免疫），由显式清理、取消或调用者删除。
 - 进程退出时 `close()`/atexit 做同样的清理。清理是“关闭句柄 + 删除文件”，不宣称对

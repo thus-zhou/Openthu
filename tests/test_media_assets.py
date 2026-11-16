@@ -1081,3 +1081,14 @@ def test_pending_cleanup_lists_retention_without_paths(assets, sources, clock):
     assert rows[expired.media_id]["expired"] is True
     assert all(row["derived_present"] for row in rows.values())
     assert str(assets.temp.root) not in json.dumps(rows)
+
+
+def test_cleanup_removes_expired_reference_files(assets, sources, clock):
+    reference = register_image(
+        assets, png_file(sources), clock=clock, retention="EXPLICIT_DELETE"
+    )
+    clock.advance(seconds=901)
+    assert assets.pending_cleanup()[0]["expired"] is True
+    report = assets.cleanup()
+    assert report.removed == 1
+    assert not reference.path.exists()

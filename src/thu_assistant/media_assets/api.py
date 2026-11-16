@@ -103,7 +103,7 @@ class MediaAssets:
         self.clock = clock
         self.temp = TempArea(temp_root, write_hook=write_hook)
         self.registry = ReferenceRegistry()
-        self.temp.keep_provider = self.registry.retained_paths
+        self.temp.keep_provider = lambda: self.registry.close_keep_paths(self.clock())
         self.broker = ModelInputBroker(self.registry, self.limits, clock=clock)
         self.audit = MediaAudit()
         self.state_store = state_store
@@ -521,7 +521,7 @@ class MediaAssets:
             else min_age_seconds
         )
         return self.temp.sweep(
-            keep=self.registry.active_paths(), min_age_seconds=grace
+            keep=self.registry.keep_paths(self.clock()), min_age_seconds=grace
         )
 
     def close(self) -> CleanupReport:

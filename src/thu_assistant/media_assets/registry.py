@@ -291,6 +291,27 @@ class ReferenceRegistry:
         with self._lock:
             self._items.pop(media_id, None)
 
+    def keep_paths(self, now: datetime) -> set[Path]:
+        """Derived files a cleanup must keep: live, unexpired references."""
+        with self._lock:
+            return {
+                item.path
+                for item in self._items.values()
+                if item.state == "ACTIVE"
+                and (item.expires_at is None or now < item.expires_at)
+            }
+
+    def close_keep_paths(self, now: datetime) -> set[Path]:
+        """Files kept at process exit: live, unexpired and not SESSION."""
+        with self._lock:
+            return {
+                item.path
+                for item in self._items.values()
+                if item.state == "ACTIVE"
+                and item.retention != "SESSION"
+                and (item.expires_at is None or now < item.expires_at)
+            }
+
     def retained_paths(self) -> set[Path]:
         """Derived files whose retention survives this process."""
         with self._lock:
