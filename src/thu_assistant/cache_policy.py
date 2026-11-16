@@ -18,8 +18,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import re
 
-VERSION = 'cache-v1'
+VERSION = 'cache-v2'
 TZ = timezone(timedelta(hours=8))
 
 POLICIES = {
@@ -68,19 +69,29 @@ def policy(resource_kind):
     return {'kind': kind, **row} if row else None
 
 
-def binding(*, account, parameters, source, policy_version=VERSION):
-    """A deterministic binding digest for one cache record."""
+def binding(*, account, parameters, source, policy_version=VERSION, checked_at=None):
+    """A deterministic binding digest for one cache record.
+
+    ``checked_at`` is part of the binding: changing only the stored time must
+    invalidate the cache instead of turning an old record into a fresh one.
+    """
     payload = {'policy_version': policy_version, 'account_scope': str(account or ''),
                'parameters': parameters or {}, 'source': str(source or '')}
+    if checked_at is not None:
+        payload['checked_at'] = str(checked_at)
     return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False,
                                      separators=(',', ':')).encode()).hexdigest()
 
 
 def _parse_time(value):
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}'
+                        r'(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})', text):
         return None
     try:
-        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        parsed = datetime.fromisoformat(text.replace('Z', '+00:00'))
     except ValueError:
         return None
     if parsed.tzinfo is None:
@@ -89,11 +100,20 @@ def _parse_time(value):
 
 
 def record(*, policy_version=VERSION, account, parameters, source, checked_at, value):
-    """Build the metadata wrapper a cache backend stores next to its payload."""
+    """Build the metadata wrapper a cache backend stores next to its payload.
+
+    ``checked_at`` must be a timezone-aware date-time; a date-only value is
+    rejected so the cache never invents midnight.
+    """
+    checked = _parse_time(checked_at)
+    if checked is None:
+        raise ValueError('INVALID_CACHE_CHECKED_AT')
+    canonical = checked.isoformat(timespec='seconds')
     return {'policy_version': policy_version, 'account_scope': str(account or ''),
             'parameters_sha256': binding(account=account, parameters=parameters,
-                                         source=source, policy_version=policy_version),
-            'source': str(source or ''), 'checked_at': checked_at, 'value': value}
+                                         source=source, policy_version=policy_version,
+                                         checked_at=canonical),
+            'source': str(source or ''), 'checked_at': canonical, 'value': value}
 
 
 def _reject(kind, state, reason):
@@ -123,13 +143,14 @@ def evaluate(entry, *, resource_kind, account, parameters, source, now=None,
         return _reject(kind, 'MISSING', 'CACHE_MISSING')
     if entry.get('policy_version') != current_policy_version:
         return _reject(kind, 'POLICY_VERSION_MISMATCH', 'CACHE_POLICY_VERSION_MISMATCH')
-    expected = binding(account=account, parameters=parameters, source=source,
-                       policy_version=current_policy_version)
-    if entry.get('parameters_sha256') != expected:
-        return _reject(kind, 'BOUND_MISMATCH', 'CACHE_BINDING_MISMATCH')
     checked = _parse_time(entry.get('checked_at'))
     if checked is None:
         return _reject(kind, 'INVALID_CHECKED_AT', 'CACHE_CHECKED_AT_UNVERIFIED')
+    expected = binding(account=account, parameters=parameters, source=source,
+                       policy_version=current_policy_version,
+                       checked_at=checked.isoformat(timespec='seconds'))
+    if entry.get('parameters_sha256') != expected:
+        return _reject(kind, 'BOUND_MISMATCH', 'CACHE_BINDING_MISMATCH')
     current = now or datetime.now(TZ)
     if current.tzinfo is None:
         current = current.replace(tzinfo=TZ)

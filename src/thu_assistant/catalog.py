@@ -26,8 +26,11 @@ def directory_path():
 def load_services():
     static = json.loads(Path(__file__).with_name('services.json').read_text(encoding='utf-8'))
     try:
-        dynamic = json.loads(directory_path().read_text(encoding='utf-8')).get('services', [])
+        cached = json.loads(directory_path().read_text(encoding='utf-8'))
+        dynamic = cached.get('services', []) if isinstance(cached, dict) else []
     except (OSError, ValueError):
+        dynamic = []
+    if not isinstance(dynamic, list):
         dynamic = []
     by_roaming = {row.get('roaming_id'): row for row in static if row.get('roaming_id')}
     remaining = []
@@ -49,29 +52,51 @@ def _cache_record(path):
         return None
 
 
+def _cache_verdict(state, reason):
+    return {'allowed': False, 'cache_state': state, 'freshness': 'REJECTED',
+            'warnings': [reason], 'proves_authentication': False,
+            'reusable_for_booking': False, 'capability_evidence': False,
+            'complete': False, 'source_complete': False, 'checked_at': None,
+            'age_seconds': None, 'value': None}
+
+
 def cache_status(record=None, now=None):
     """Evaluate the directory cache against the v0.2 policy."""
+    invalid = False
     if record is None:
-        record = _cache_record(directory_path()) or {}
-    source = 'info.directory'
-    params = {}
-    verdict = cache_policy.evaluate(record, resource_kind='info.directory',
-                                    account='PUBLIC', parameters=params, source=source,
-                                    now=now)
+        cached = _cache_record(directory_path())
+        if cached is None:
+            record = {}
+        elif isinstance(cached, dict):
+            record = cached
+        else:
+            record = {}
+            invalid = True
+    elif not isinstance(record, dict):
+        record = {}
+        invalid = True
+    if invalid:
+        verdict = _cache_verdict('INVALID_FORMAT', 'CACHE_FORMAT_INVALID')
+    elif not record:
+        verdict = _cache_verdict('MISSING', 'CACHE_MISSING')
+    else:
+        verdict = cache_policy.evaluate(record, resource_kind='info.directory',
+                                        account='PUBLIC', parameters={}, source='info.directory',
+                                        now=now)
     state = verdict['cache_state']
     warnings = []
-    if not record:
+    if invalid:
+        warnings.append('DIRECTORY_CACHE_FORMAT_INVALID')
+    elif not record:
         warnings.append('LIVE_DIRECTORY_NOT_CHECKED')
     elif state == 'POLICY_VERSION_MISMATCH':
         warnings.append('CACHE_COMPLETENESS_NOT_REVALIDATED')
     elif state == 'STALE':
         warnings.append('DIRECTORY_CACHE_STALE')
     elif state == 'BOUND_MISMATCH':
-        warnings.append('DIRECTORY_CACHE_ACCOUNT_MISMATCH')
+        warnings.append('DIRECTORY_CACHE_BINDING_MISMATCH')
     elif state in ('INVALID_CHECKED_AT', 'CLOCK_SKEW'):
         warnings.append('DIRECTORY_CACHE_TIME_UNVERIFIED')
-    elif state == 'MISSING':
-        warnings.append('LIVE_DIRECTORY_NOT_CHECKED')
     if record and record.get('query_schema') != 1:
         warnings.append('CACHE_COMPLETENESS_NOT_REVALIDATED')
     return {'record': record, 'verdict': verdict, 'state': state,
@@ -96,8 +121,15 @@ def list_services(query: str | None = None, category: str | None = None):
                                     expected_pages=(len(pages) + len(missing)) if (pages or missing) else None,
                                     query_time=checked_at)
     warnings = status['warnings'] + list(verdict.get('warnings') or [])
-    if complete and record.get('complete') is not True:
-        complete = False
+    if state := status['state']:
+        if complete:
+            partial_reasons = []
+        elif state == 'FRESH':
+            partial_reasons = ['DIRECTORY_CACHE_INCOMPLETE']
+        else:
+            partial_reasons = ['DIRECTORY_CACHE_' + state]
+    else:
+        partial_reasons = ['DIRECTORY_CACHE_UNKNOWN']
     return {
         'services': rows, 'count': len(rows), 'status': 'LOCAL_CATALOG_READ',
         'source': {'kind': 'static_and_cached_directory',
@@ -112,8 +144,8 @@ def list_services(query: str | None = None, category: str | None = None):
         'snapshot_complete': True,
         'next_cursor': None,
         'warnings': sorted(set(warnings)),
-        'partial_reasons': [] if complete else ['DIRECTORY_CACHE_' + status['state']],
-        'verification_level': 'DIRECTORY_CACHE',
+        'partial_reasons': partial_reasons,
+        'verification_level': 'DIRECTORY_CACHE' if verdict.get('allowed') else 'NONE',
         'read_scope': scope,
         'upstream_total': record.get('expected') if type(record.get('expected')) is int else None,
         'account_scope': 'PUBLIC',
@@ -130,7 +162,8 @@ def refresh_directory():
               'cache_version': 1,
               'policy_version': cache_policy.VERSION,
               'account_scope': 'PUBLIC',
-              'parameters_sha256': cache_policy.binding(account='PUBLIC', parameters={}, source='info.directory'),
+              'parameters_sha256': cache_policy.binding(account='PUBLIC', parameters={},
+                                                         source='info.directory', checked_at=checked),
               'source_id': 'info.directory',
               'checked_at': checked,
               'checkedAt': result.get('checkedAt') or checked}

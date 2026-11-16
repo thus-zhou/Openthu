@@ -12,14 +12,12 @@ Legacy fields and legacy status strings remain unchanged for old clients.
 """
 from __future__ import annotations
 from copy import deepcopy
-from datetime import datetime, timezone
 import hashlib
 import json
 import os
 import re
 import secrets
 import time
-from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from .bridge import CampusError
 from . import catalog, cache_policy, source_state
 
@@ -165,12 +163,8 @@ def describe(service_id):
             'error_contract': 'error-classification-v1'}
 
 
-SECRET = re.compile(r'password|cookie|token|csrf|ticket|session|signature|nonce|saml|relaystate|authorization|(?:^|_)sign$', re.I)
-
-
 def safe_url(url):
-    p = urlsplit(url or '')
-    return urlunsplit((p.scheme, p.hostname or '', re.sub(r';[^/]*session[^/]*', '', p.path, flags=re.I), urlencode([(k, v) for k, v in parse_qsl(p.query) if not SECRET.search(k)]), ''))
+    return source_state.sanitize_url(url)
 
 
 def pointer(data, path):
@@ -330,12 +324,19 @@ def read_scope_for(service, operation, parameters, items, raw, query_time):
         return _scope('RECORD', offset=0, limit=1, pages_read=1, expected_pages=1,
                       query_time=query_time, parameters=parameters)
     if operation in WINDOW_OPS:
-        offset = raw.get('offset', parameters.get('offset', 0))
-        limit = raw.get('limit', parameters.get('limit') or parameters.get('page', 1) or max(1, count))
-        if operation in ('seat_availability',):
-            limit = max(1, count)
+        page = parameters.get('page')
+        page_size = raw.get('limit') if type(raw.get('limit')) is int else parameters.get('limit')
+        offset = raw.get('offset') if type(raw.get('offset')) is int else parameters.get('offset')
+        if offset is None and page_size is not None and type(page) is int and page >= 1:
+            offset = (page - 1) * page_size
+        if type(page_size) is not int or page_size < 1:
+            page_size = max(1, count)
+        if type(offset) is not int or offset < 0:
+            offset = 0
+        if operation == 'seat_availability':
+            offset, page_size = 0, max(1, count)
         expected = 1 if raw.get('upstream_total') is not None or operation in ('seat_availability', 'room_availability', 'availability') else None
-        return _scope('WINDOW', offset=int(offset or 0), limit=int(limit or 1),
+        return _scope('WINDOW', offset=offset, limit=page_size,
                       pages_read=1, expected_pages=expected, query_time=query_time, parameters=parameters)
     if service == 'learn':
         pages = raw.get('pages') or []
@@ -409,6 +410,24 @@ class QueryEngine:
         self.owner = owner
         self.snapshots = Snapshots()
 
+    def _account_scope(self):
+        """Best-effort account identity for snapshot binding.
+
+        A test double or a gateway without a selected account yields
+        ``UNAVAILABLE`` rather than silently omitting the account dimension.
+        """
+        try:
+            identity = self.owner.bridge('action_identity')
+            if isinstance(identity, dict):
+                account = identity.get('account_id')
+                if type(account) is int:
+                    return str(account)
+                if isinstance(account, str) and account:
+                    return account
+        except Exception:
+            pass
+        return 'UNAVAILABLE'
+
     def _finish(self, result, items, source_complete, scope, query_time,
                 missing_pages=(), source_errors=()):
         status = result.get('status', 'UNKNOWN')
@@ -423,8 +442,12 @@ class QueryEngine:
         if status in source_state.ERROR_OBJECT_STATUSES:
             result['error'] = source_state.public_error(status)
         if not items and result['source_complete'] and status == 'OK':
-            result['status'] = 'EMPTY'
-            result['source_state'] = 'EMPTY'
+            if result.get('total_scope') == 'filtered_result':
+                result['status'] = 'OK'
+                result['matched_items'] = 0
+            else:
+                result['status'] = 'EMPTY'
+                result['source_state'] = 'EMPTY'
         return result
 
     def query(self, service_id, operation, parameters, cursor=None, page_size=50):
@@ -434,12 +457,13 @@ class QueryEngine:
         validate(parameters, ops[operation]['parameters_schema'])
         validate(page_size, {'type': 'integer', 'minimum': 1, 'maximum': 200})
         query_time = source_state.now_iso()
-        key = binding(service_id, operation, parameters, page_size)
         account_bound = (service_id == 'library' and operation in ('loans', *SPACE_OPS)) or \
                         (service_id == 'sports' and operation in SPORTS_OPS)
-        if account_bound:
-            key = binding(service_id, operation, parameters, page_size,
-                          account_scope=self.owner.bridge('action_identity')['account_id'])
+        account_required = account_bound or service_id == 'learn' or operation in ('page', 'status')
+        if operation in ('page', 'status') and parameters.get('authenticate') is False:
+            account_required = False
+        account_scope = self._account_scope() if account_required else None
+        key = binding(service_id, operation, parameters, page_size, account_scope=account_scope)
         if cursor:
             return self.snapshots.resume(cursor, key)
         if operation in ('page', 'status'):
@@ -464,6 +488,8 @@ class QueryEngine:
             result.update(raw)
             scope = read_scope_for(service_id, operation, parameters, items, raw, query_time)
             result['upstream_total'] = raw.get('upstream_total') if type(raw.get('upstream_total')) is int else None
+            if service_id == 'sports' and operation == 'scenes' and parameters.get('query'):
+                result['total_scope'] = 'filtered_result'
             result = self._finish(result, items, raw.get('complete', False), scope, query_time,
                                   raw.get('missing_pages', ()), raw.get('source_errors', ()))
         elif operation == 'directory':
@@ -479,6 +505,8 @@ class QueryEngine:
             result.update(upstream_total=raw['expected'], upstream_received=raw['count'], upstream_row_count=raw.get('rowCount'),
                           deduplicated_entries=raw.get('duplicateCount', 0), upstream_total_unit='directory_rows_before_deduplication',
                           upstream_pages=raw.get('pages'), missing_pages=raw.get('missing_pages', []), page_errors=raw.get('page_errors', []))
+            result['total_scope'] = ('filtered_result' if parameters.get('query') or parameters.get('category')
+                                     else 'directory_all_matches')
             scope = read_scope_for(service_id, operation, parameters, items, raw, query_time)
             result = self._finish(result, items, raw['complete'], scope, query_time,
                                   raw.get('missing_pages', ()), (raw.get('page_errors') or ()))
@@ -516,7 +544,12 @@ class QueryEngine:
         page_size = args.pop('page_size', page_size)
         validate(page_size, {'type': 'integer', 'minimum': 1, 'maximum': 200})
         service = args.get('service_id', 'campus')
-        key = bound or binding(service, 'read_page', args, page_size)
+        if bound is not None:
+            key = bound
+        else:
+            authenticated = args.get('authenticate', True) is not False
+            key = binding(service, 'read_page', args, page_size,
+                          account_scope=self._account_scope() if authenticated else None)
         if cursor:
             return self.snapshots.resume(cursor, key)
         offset = args.pop('offset', 0)

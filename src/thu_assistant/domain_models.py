@@ -66,6 +66,14 @@ def _text(value):
     return CONTROL.sub('', text)
 
 
+def _first_text(*values):
+    for value in values:
+        text = _text(value)
+        if text:
+            return text
+    return ''
+
+
 def require_title(value, field='title'):
     text = _text(value)
     if not text:
@@ -163,6 +171,8 @@ def canonical_time(value, *, timezone_name=TIMEZONE_NAME):
         return result
     if isinstance(value, datetime):
         text = value.isoformat()
+    elif isinstance(value, date):
+        return {**result, 'value': value.isoformat(), 'date_precision': 'date', 'valid': True}
     elif isinstance(value, (int, float)) and not isinstance(value, bool):
         text = str(int(value))
     elif isinstance(value, str):
@@ -249,6 +259,10 @@ def mapped_status(value, mapping, *, unknown='UNKNOWN'):
 
 
 def _enum(value, mapping, *, unknown='UNKNOWN'):
+    if isinstance(value, bool):
+        return unknown, None
+    if isinstance(value, int) and value in mapping:
+        return mapping[value], None
     if isinstance(value, str):
         key = value.strip()
         if key in mapping:
@@ -256,6 +270,13 @@ def _enum(value, mapping, *, unknown='UNKNOWN'):
         lowered = key.casefold()
         if lowered in mapping:
             return mapping[lowered], None
+        if re.fullmatch(r'-?\d{1,12}', key):
+            try:
+                number = int(key)
+            except ValueError:
+                number = None
+            if number is not None and number in mapping:
+                return mapping[number], None
     return unknown, (hashlib.sha256(str(value).encode('utf-8', 'replace')).hexdigest()[:12]
                      if value not in (None, '') else None)
 
@@ -293,17 +314,16 @@ def normalize_course(row, *, source_id, semester_id, observed_at,
                      source_evidence_id, synthetic=True):
     """Normalise one course row to ``course-v1``.
 
-    Missing title fails closed with ``RecordError``.  The role is upper-cased
-    (the current adapter returns lowercase ``student``), and an unfamiliar
-    role becomes ``UNKNOWN`` with a digest warning, not ``STUDENT``.
+    Missing title, a date-only/invalid observation time, an empty evidence id
+    or an inconsistent identity fail closed with ``RecordError``.  The role is
+    upper-cased (the current adapter returns lowercase ``student``), and an
+    unfamiliar role becomes ``UNKNOWN`` with a digest warning, not ``STUDENT``.
     """
     if not isinstance(row, dict):
         raise RecordError('INVALID_RECORD', 'row')
-    title = require_title(row.get('course_name') if row.get('course_name') is not None else row.get('title'))
-    record_id = row.get('course_id') if row.get('course_id') is not None else row.get('id')
-    if record_id is None:
-        record_id = row.get('wlkcid')
-    semester = semester_id if semester_id is not None else row.get('semester')
+    title = require_title(_first_text(row.get('course_name'), row.get('title')))
+    record_id = _first_text(row.get('course_id'), row.get('id'), row.get('wlkcid'))[:240]
+    semester = _first_text(semester_id, row.get('semester'))[:80]
     ident = course_uid(source_id, semester, record_id)
     role, role_digest = normalize_role(row.get('role'))
     teachers = row.get('teacher_names')
@@ -315,23 +335,28 @@ def normalize_course(row, *, source_id, semester_id, observed_at,
         teachers = []
     teachers = [_text(value)[:200] for value in teachers if _text(value)][:40]
     observed = canonical_time(observed_at)
+    if not observed['valid'] or observed['date_precision'] == 'date':
+        raise RecordError('INVALID_OBSERVED_AT', 'observed_at')
+    evidence_id = _text(source_evidence_id)[:120]
+    if not evidence_id:
+        raise RecordError('MISSING_SOURCE_EVIDENCE_ID', 'source_evidence_id')
     warnings = []
     if ident['identity_state'] == 'MISSING_STABLE_ID':
         warnings.append('MISSING_STABLE_ID')
     if role_digest:
-        warnings.append('ROLE_UNKNOWN')
+        warnings.append('ROLE_UNKNOWN:' + role_digest)
     return {
         'source_id': source_id,
-        'source_record_id': _text(record_id)[:240] or None,
+        'source_record_id': record_id[:240] or None,
         'course_uid': ident['uid'],
-        'semester_id': _text(semester)[:80] or None,
+        'semester_id': semester[:80] or None,
         'title': title,
         'teacher_names': teachers,
         'role': role,
         'identity_state': ident['identity_state'],
         'dedupe_state': 'NOT_DEDUPED',
-        'observed_at': observed['value'] if observed['valid'] and observed['date_precision'] != 'date' else None,
-        'source_evidence_id': str(source_evidence_id)[:120],
+        'observed_at': observed['value'],
+        'source_evidence_id': evidence_id,
         'warnings': warnings,
         'synthetic': bool(synthetic),
     }
@@ -360,6 +385,7 @@ def deduplicate(records):
     """
     unique = {}
     groups = {}
+    conflicts = set()
     warnings = set()
     for original in records:
         if not isinstance(original, dict):
@@ -380,11 +406,20 @@ def deduplicate(records):
             unique[id(record)] = record
             warnings.add('MISSING_STABLE_ID')
             continue
+        if uid in conflicts:
+            record[key] = None
+            record['identity_state'] = 'CONFLICT'
+            record['dedupe_state'] = 'NOT_DEDUPED'
+            record['warnings'] = sorted(set(record.get('warnings', []) + ['SOURCE_RECORD_CONFLICT']))
+            unique[id(record)] = record
+            warnings.add('SOURCE_RECORD_CONFLICT')
+            continue
         if uid not in groups:
             groups[uid] = record
             continue
         existing = groups[uid]
         if _semantic(existing) != _semantic(record):
+            conflicts.add(uid)
             for item in (existing, record):
                 item[key] = None
                 item['identity_state'] = 'CONFLICT'

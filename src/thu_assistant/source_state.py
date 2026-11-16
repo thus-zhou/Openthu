@@ -20,6 +20,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import hashlib
 import re
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 VERSION = 'source-state-v1'
 TIMEZONE_NAME = 'Asia/Shanghai'
@@ -270,8 +271,17 @@ ERROR_CODES = {
 }
 
 CODE_PATTERN = re.compile(r'^[A-Za-z][A-Za-z0-9_]{2,80}$')
+VERIFICATION_LEVELS = {
+    'NONE', 'TRANSPORT_READ', 'PAGE_READ', 'AUTHENTICATED_PAGE', 'PUBLIC_PAGE',
+    'DIRECTORY_READ', 'DIRECTORY_CACHE', 'BUSINESS_READ', 'LIVE_BUSINESS_READ',
+    'LIVE_PARTIAL_DIRECTORY', 'REMOTE_RECORD_VERIFIED', 'LOCAL_EXECUTION_STATE',
+    'SEE_OPERATION_EVIDENCE',
+}
+SECRET_QUERY = re.compile(
+    r'password|cookie|token|csrf|ticket|session|signature|nonce|saml|relaystate|authorization|(?:^|_)sign$',
+    re.I)
 _UNSAFE_MESSAGE = re.compile(r'https?://|\b[A-Za-z]:\\|(?:^|\s)/(?:home|Users|root|tmp|var)\b|'
-                             r'(?:token|cookie|password|signature|ticket|session)[=:]', re.I)
+                             r'(?:token|cookie|password|signature|ticket|session)[=:]|[\x00-\x1f\x7f]', re.I)
 
 
 def now(clock=None):
@@ -310,6 +320,29 @@ def normalize_timestamp(value, fallback=None):
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=TZ)
     return parsed.astimezone(TZ).isoformat(timespec='seconds')
+
+
+def sanitize_url(url):
+    """Remove credentials, fragments and sensitive query parameters.
+
+    Returns ``None`` for an empty or non-HTTP(S) URL.  The result is safe to
+    publish in source evidence; the raw URL must not be used as a fallback.
+    """
+    if not isinstance(url, str) or not url.strip():
+        return None
+    try:
+        parsed = urlsplit(url.strip())
+        port = parsed.port
+    except ValueError:
+        return None
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+        return None
+    host = parsed.hostname
+    netloc = host if port in (None, 80, 443) else f'{host}:{port}'
+    path = re.sub(r';[^/]*session[^/]*', '', parsed.path, flags=re.I)
+    query = urlencode([(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+                       if not SECRET_QUERY.search(key)])
+    return urlunsplit((parsed.scheme, netloc, path, query, ''))
 
 
 def unknown_digest(value):
@@ -396,11 +429,20 @@ def completeness(status, source_complete=False, snapshot_complete=True,
     ``complete`` means the requested business scope is complete; it can never
     be true while either of the other two is false.
     """
-    missing = sorted({int(x) for x in (missing_pages or []) if type(x) is int and x >= 1})
+    missing = set()
+    invalid_missing = False
+    for item in (missing_pages or ()):
+        if type(item) is int and item >= 1:
+            missing.add(item)
+        elif isinstance(item, str) and re.fullmatch(r'[1-9][0-9]{0,9}', item.strip()):
+            missing.add(int(item.strip()))
+        else:
+            invalid_missing = True
+    missing = sorted(missing)
     errors = safe_errors(source_errors)
     status = canonical_status(status)
     source = bool(source_complete) and status not in FAILURE_STATUSES and status != 'PARTIAL'
-    source = source and not missing and not errors
+    source = source and not missing and not errors and not invalid_missing
     snapshot = bool(snapshot_complete)
     complete = bool(source and snapshot and status in COMPLETE_STATUSES)
     reasons = []
@@ -410,6 +452,8 @@ def completeness(status, source_complete=False, snapshot_complete=True,
         reasons.append('SOURCE_PARTIAL')
     if missing:
         reasons.append('MISSING_SOURCE_PAGES')
+    if invalid_missing:
+        reasons.append('INVALID_MISSING_PAGES')
     if errors:
         reasons.append('SOURCE_ERRORS_PRESENT')
     if not snapshot:
@@ -448,7 +492,7 @@ def read_scope(kind='PAGE', *, offset=0, limit=1, pages_read=0,
             raise ValueError('INVALID_READ_SCOPE_WINDOW')
     return {'kind': kind, 'offset': offset, 'limit': limit,
             'pages_read': pages_read, 'expected_pages': expected_pages,
-            'query_time': query_time or now_iso(), 'window': window}
+            'query_time': normalize_timestamp(query_time, now_iso()), 'window': window}
 
 
 def public_error(code, *, category=None, retry_after_ms=None, message=None):
@@ -519,9 +563,12 @@ def finalize(envelope, *, status, source_complete=False, snapshot_complete=True,
     result['missing_pages'] = flags['missing_pages']
     if flags['source_errors']:
         result['source_errors'] = flags['source_errors']
-    result['warnings'] = sorted(set(list(result.get('warnings') or ())) | set(flags['warnings']))
+    result['warnings'] = sorted({warning for warning in list(result.get('warnings') or ())
+                                 if isinstance(warning, str) and 0 < len(warning) <= 200} |
+                                set(flags['warnings']))
     result['partial_reasons'] = flags['partial_reasons']
-    result['query_time'] = query_time or result.get('query_time') or result.get('checked_at') or now_iso()
+    result['query_time'] = normalize_timestamp(
+        query_time or result.get('query_time') or result.get('checked_at'), now_iso())
     if scope is not None:
         result['read_scope'] = scope
     result['source_state'] = evidence_state(status)
@@ -544,25 +591,47 @@ def source_evidence(*, source_id, service, operation, adapter_version, checked_a
     """
     if not isinstance(source_id, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,120}', source_id):
         raise ValueError('INVALID_SOURCE_ID')
+    if not isinstance(scope, dict):
+        raise ValueError('INVALID_READ_SCOPE')
+    operation = str(operation).strip()
+    adapter_version = str(adapter_version).strip()
+    if not operation or len(operation) > 120:
+        raise ValueError('INVALID_OPERATION')
+    if not adapter_version or len(adapter_version) > 80:
+        raise ValueError('INVALID_ADAPTER_VERSION')
+    if verification_level not in VERIFICATION_LEVELS:
+        raise ValueError('INVALID_VERIFICATION_LEVEL')
+    if content_sha256 is not None and (not isinstance(content_sha256, str) or
+                                       not re.fullmatch(r'[a-f0-9]{64}', content_sha256)):
+        raise ValueError('INVALID_CONTENT_SHA256')
+    if rows is not None and not isinstance(rows, (list, tuple)):
+        raise ValueError('INVALID_ROWS')
+    safe_link = sanitize_url(url)
+    warning_list = list(warnings or ())
+    if url and safe_link is None:
+        warning_list.append('SOURCE_URL_UNVERIFIED')
+    if safe_link is not None and len(safe_link) > 2000:
+        safe_link = None
+        warning_list.append('SOURCE_URL_TOO_LONG')
     domain = service_domain(service)
     if auth_state in ('EXPIRED', 'FORBIDDEN') and state in ('OK', 'EMPTY'):
         # An authentication failure can never be a successful empty read.
         state = 'AUTH_REQUIRED' if auth_state == 'EXPIRED' else 'FORBIDDEN'
-    if 'UPSTREAM_TOTAL_UNKNOWN' in (warnings or ()):
+    if 'UPSTREAM_TOTAL_UNKNOWN' in warning_list:
         upstream_total = None
     scope = read_scope(scope.get('kind', 'PAGE'), offset=scope.get('offset', 0),
                        limit=scope.get('limit', 1), pages_read=scope.get('pages_read', 0),
                        expected_pages=scope.get('expected_pages'),
                        query_time=scope.get('query_time'), window=scope.get('window'))
-    flags = completeness(state, source_complete, True, missing_pages, (), warnings)
+    flags = completeness(state, source_complete, True, missing_pages, (), warning_list)
     checked = normalize_timestamp(checked_at, now_iso())
     payload = {
         'source_id': source_id,
         'service_domain': domain,
-        'operation': str(operation)[:120],
-        'adapter_version': str(adapter_version)[:80],
+        'operation': operation,
+        'adapter_version': adapter_version,
         'checked_at': checked,
-        'url': url,
+        'url': safe_link,
         'http_status': http_status if type(http_status) is int and 100 <= http_status <= 599 else None,
         'auth_state': auth_state if auth_state in ('AUTHENTICATED', 'PUBLIC', 'EXPIRED', 'FORBIDDEN', 'UNKNOWN') else 'UNKNOWN',
         'state': evidence_state(state),

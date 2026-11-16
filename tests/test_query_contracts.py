@@ -18,7 +18,7 @@ import pytest
 
 from thu_assistant import cache_policy, catalog, domain_models, source_state
 from thu_assistant.bridge import CampusError
-from thu_assistant.queries import QueryEngine, Snapshots, binding, describe, metadata, page_metadata
+from thu_assistant.queries import QueryEngine, Snapshots, binding, describe, metadata, page_metadata, read_scope_for
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACTS = ROOT / 'contracts' / 'v0.2'
@@ -38,11 +38,12 @@ def library_owner(account='one'):
 
 
 class LearningOwner:
-    def __init__(self, result):
+    def __init__(self, result, account='one'):
         self.result = result
+        self.account = account
 
     def bridge(self, *args, **kwargs):
-        return {'account_id': 'one'}
+        return {'account_id': self.account}
 
     def learning_call(self, name, args):
         return deepcopy(self.result)
@@ -189,6 +190,69 @@ def test_empty_title_is_rejected_not_replaced_or_merged():
     assert result['rejected_count'] == 1
     assert result['rejected'][0]['code'] == 'MISSING_TITLE'
     assert 'MISSING_TITLE' in result['warnings']
+
+
+def test_course_normalization_fails_closed_for_invalid_time_and_evidence():
+    row = {'course_id': 'SYN-A', 'course_name': '课程', 'role': 'student'}
+    with pytest.raises(domain_models.RecordError, match='INVALID_OBSERVED_AT'):
+        domain_models.normalize_course(row, source_id='learn.courses', semester_id='2026-2027-1',
+                                       observed_at='2026-11-16', source_evidence_id='learn.courses')
+    with pytest.raises(domain_models.RecordError, match='MISSING_SOURCE_EVIDENCE_ID'):
+        domain_models.normalize_course(row, source_id='learn.courses', semester_id='2026-2027-1',
+                                       observed_at='2026-11-16T12:00:00+08:00', source_evidence_id='')
+    with pytest.raises(domain_models.RecordError, match='MISSING_SOURCE_EVIDENCE_ID'):
+        domain_models.normalize_course(row, source_id='learn.courses', semester_id='2026-2027-1',
+                                       observed_at='2026-11-16T12:00:00+08:00', source_evidence_id=None)
+
+
+def test_course_normalization_uses_title_fallback_and_keeps_safe_role_digest():
+    record = domain_models.normalize_course(
+        {'course_id': 'SYN-A', 'course_name': '', 'title': '回退标题', 'role': 'admin'},
+        source_id='learn.courses', semester_id='2026-2027-1',
+        observed_at='2026-11-16T12:00:00+08:00', source_evidence_id='learn.courses')
+    assert record['title'] == '回退标题'
+    assert record['role'] == 'UNKNOWN'
+    assert any(warning.startswith('ROLE_UNKNOWN:') for warning in record['warnings'])
+    assert 'admin' not in record['warnings']
+
+
+def test_course_identity_uses_the_same_truncated_parts_as_the_fields():
+    semester = 'S' * 100
+    record = domain_models.normalize_course(
+        {'course_id': 'X' * 60, 'course_name': '课程', 'role': 'student'},
+        source_id='learn.courses', semester_id=semester,
+        observed_at='2026-11-16T12:00:00+08:00', source_evidence_id='learn.courses')
+    assert record['semester_id'] == 'S' * 80
+    assert record['semester_id'] in record['course_uid']
+    assert semester not in record['course_uid']
+
+    long_record = domain_models.normalize_course(
+        {'course_id': 'X' * 300, 'course_name': '课程', 'role': 'student'},
+        source_id='learn.courses', semester_id='2026-2027-1',
+        observed_at='2026-11-16T12:00:00+08:00', source_evidence_id='learn.courses')
+    assert len(long_record['source_record_id']) == 240
+    assert long_record['course_uid'] is None
+    assert long_record['identity_state'] == 'MISSING_STABLE_ID'
+
+
+def test_integer_platform_statuses_map_instead_of_becoming_unknown():
+    assert domain_models.mapped_status(128, {128: 'COMPLETED'})['status'] == 'COMPLETED'
+    assert domain_models.mapped_status(128, {128: 'COMPLETED'})['mapping_state'] == 'MAPPED'
+    assert domain_models.mapped_status('128', {128: 'COMPLETED'})['status'] == 'COMPLETED'
+    assert domain_models.mapped_status(True, {True: 'BAD'})['status'] == 'UNKNOWN'
+
+
+def test_three_records_with_the_same_uid_all_stay_in_conflict():
+    def record(title):
+        return domain_models.normalize_course(
+            {'course_id': 'SYN-C', 'course_name': title, 'role': 'student'},
+            source_id='learn.courses', semester_id='2026-2027-1',
+            observed_at='2026-11-16T12:00:00+08:00', source_evidence_id='learn.courses')
+
+    grouped = domain_models.deduplicate([record('A'), record('B'), record('C')])
+    assert len(grouped['records']) == 3
+    assert all(item['identity_state'] == 'CONFLICT' and item['course_uid'] is None
+               for item in grouped['records'])
 
 
 def test_standard_record_keeps_account_and_check_time_without_inventing_them():
@@ -399,6 +463,14 @@ def test_directory_cache_is_reported_as_cached_and_never_complete_when_stale(tmp
 
     record['checked_at'] = '2026-01-01T00:00:00+08:00'
     path.write_text(json.dumps(record), encoding='utf-8')
+    tampered = catalog.list_services()
+    assert tampered['complete'] is False and 'DIRECTORY_CACHE_BINDING_MISMATCH' in tampered['warnings']
+
+    stale_record = {**cache_policy.record(account='PUBLIC', parameters={}, source='info.directory',
+                                          checked_at='2026-01-01T00:00:00+08:00', value=[]),
+                    'query_schema': 1, 'complete': True, 'services': [], 'expected': 0,
+                    'pages': [], 'missing_pages': [], 'checkedAt': '2026-01-01T00:00:00+08:00'}
+    path.write_text(json.dumps(stale_record), encoding='utf-8')
     stale = catalog.list_services()
     assert stale['complete'] is False and 'DIRECTORY_CACHE_STALE' in stale['warnings']
     assert stale['partial_reasons'] == ['DIRECTORY_CACHE_STALE']
@@ -468,6 +540,118 @@ def test_synthetic_query_fixtures_drive_the_same_normalization_rules():
     assert domain_models.canonical_time(times['offset_aware'])['value'] == '2026-11-20T08:00:00+08:00'
     assert domain_models.canonical_time(times['epoch_milliseconds'])['date_precision'] == 'millisecond'
     assert domain_models.canonical_time(times['unknown'])['valid'] is False
+
+
+def test_learn_and_generic_page_cursors_are_bound_to_the_account():
+    raw = {'items': [{'id': 1}, {'id': 2}, {'id': 3}], 'complete': True,
+           'checked_at': '2026-11-16T12:00:00+08:00', 'warnings': [], 'pages': []}
+    owner = LearningOwner(raw, account='A')
+    engine = QueryEngine(owner)
+    first = engine.query('learn', 'assignments', {'course_id': 'X'}, page_size=1)
+    owner.account = 'B'
+    with pytest.raises(CampusError, match='CURSOR_QUERY_MISMATCH'):
+        engine.query('learn', 'assignments', {'course_id': 'X'},
+                     cursor=first['next_cursor'], page_size=1)
+
+    page = {'status': 'PAGE_READ_VERIFIED', 'httpStatus': 200,
+            'url': 'https://lib.tsinghua.edu.cn/article', 'text': 'abcdef', 'checked_at': 'fixed'}
+    account = {'id': 'A'}
+
+    def bridge(command, **kwargs):
+        if command == 'action_identity':
+            return {'account_id': account['id']}
+        return deepcopy(page)
+
+    page_engine = QueryEngine(SimpleNamespace(bridge=bridge, browsers=None))
+    args = {'url': 'https://lib.tsinghua.edu.cn/article'}
+    first_page = page_engine.read_page({**args, 'limit': 2})
+    account['id'] = 'B'
+    with pytest.raises(CampusError, match='CURSOR_QUERY_MISMATCH'):
+        page_engine.read_page({**args, 'limit': 2, 'cursor': first_page['next_cursor']})
+
+
+def test_cache_binding_rejects_a_changed_checked_at():
+    account, params, source = 'one', {}, 'info.directory'
+    entry = cache_policy.record(account=account, parameters=params, source=source,
+                                checked_at='2026-01-01T00:00:00+08:00', value=[])
+    entry['checked_at'] = '2026-11-16T12:00:00+08:00'
+    verdict = cache_policy.evaluate(entry, resource_kind='info.directory', account=account,
+                                    parameters=params, source=source,
+                                    now=datetime(2026, 11, 16, 12, 1, tzinfo=TZ))
+    assert verdict['allowed'] is False and verdict['cache_state'] == 'BOUND_MISMATCH'
+    with pytest.raises(ValueError, match='INVALID_CACHE_CHECKED_AT'):
+        cache_policy.record(account=account, parameters=params, source=source,
+                            checked_at='2026-01-01', value=[])
+
+
+def test_missing_page_encodings_cannot_be_silently_dropped():
+    numeric = source_state.completeness('OK', True, True, missing_pages=['2'])
+    assert numeric['complete'] is False and numeric['missing_pages'] == [2]
+    invalid = source_state.completeness('OK', True, True, missing_pages=[True])
+    assert invalid['complete'] is False
+    assert 'INVALID_MISSING_PAGES' in invalid['partial_reasons']
+    invalid_text = source_state.completeness('OK', True, True, missing_pages=['two'])
+    assert invalid_text['complete'] is False
+    assert 'INVALID_MISSING_PAGES' in invalid_text['partial_reasons']
+
+
+def test_read_scope_uses_the_real_window_for_page_based_operations():
+    scope = read_scope_for('library', 'reservations',
+                           {'system': 'seat', 'page': 2, 'limit': 10},
+                           [], {'complete': True}, '2026-11-16T12:00:00+08:00')
+    assert scope['offset'] == 10 and scope['limit'] == 10
+    scope = read_scope_for('library', 'reservations',
+                           {'system': 'seat', 'page': 2},
+                           [], {'complete': True, 'limit': 25}, '2026-11-16T12:00:00+08:00')
+    assert scope['offset'] == 25 and scope['limit'] == 25
+
+
+def test_source_evidence_sanitizes_url_and_validates_public_fields():
+    scope = {'kind': 'FULL_LIST', 'offset': 0, 'limit': 10, 'pages_read': 1,
+             'expected_pages': 1, 'query_time': 'fixed', 'window': None}
+    evidence = source_state.source_evidence(
+        source_id='learn.assignments', service='learn', operation='assignments',
+        adapter_version='v1', checked_at='2026-11-16T12:00:00+08:00',
+        state='OK', scope=scope, row_count=1, upstream_total=1,
+        source_complete=True, complete=True, verification_level='BUSINESS_READ',
+        url='https://user:pass@learn.tsinghua.edu.cn/page?ticket=SECRET&q=ok#frag')
+    assert 'SECRET' not in evidence['url'] and 'user' not in evidence['url']
+    assert evidence['url'].endswith('?q=ok')
+    assert evidence['read_scope']['query_time'] != 'fixed'
+    for field, value in [('operation', ''), ('adapter_version', ''),
+                         ('verification_level', 'BOGUS')]:
+        kwargs = dict(source_id='learn.assignments', service='learn', operation='assignments',
+                      adapter_version='v1', checked_at='2026-11-16T12:00:00+08:00',
+                      state='OK', scope=scope, source_complete=True, complete=True,
+                      verification_level='BUSINESS_READ')
+        kwargs[field] = value
+        with pytest.raises(ValueError):
+            source_state.source_evidence(**kwargs)
+
+
+def test_filtered_empty_directory_is_not_reported_as_an_empty_source():
+    raw = {'services': [{'id': 'other', 'name': '其他服务'}], 'complete': True,
+           'expected': 1, 'count': 1, 'rowCount': 1,
+           'pages': [{'page': 1, 'count': 1}], 'missing_pages': [], 'warnings': [],
+           'checkedAt': '2026-11-16T12:00:00+08:00'}
+    engine = QueryEngine(SimpleNamespace(bridge=lambda *a, **k: deepcopy(raw), browsers=None))
+    result = engine.query('info', 'directory', {'query': 'no-such-service'})
+    assert result['status'] == 'OK' and result['complete'] is True
+    assert result['items'] == [] and result['matched_items'] == 0
+    assert result['total_scope'] == 'filtered_result' and result['upstream_total'] == 1
+
+
+def test_corrupt_directory_cache_degrades_to_static_catalog(tmp_path, monkeypatch):
+    path = tmp_path / 'directory.json'
+    monkeypatch.setattr(catalog, 'directory_path', lambda: path)
+    path.write_text('[]', encoding='utf-8')
+    result = catalog.list_services()
+    assert result['count'] >= 0 and result['complete'] is False
+    assert 'DIRECTORY_CACHE_FORMAT_INVALID' in result['warnings']
+    path.unlink()
+    missing = catalog.list_services()
+    assert missing['complete'] is False
+    assert missing['partial_reasons'] == ['DIRECTORY_CACHE_MISSING']
 
 
 def test_describe_exposes_cursor_versions_and_the_cache_policy():

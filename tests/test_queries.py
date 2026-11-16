@@ -6,7 +6,9 @@ from thu_assistant.queries import Snapshots,describe,pointer,metadata,page_metad
 
 def assistant(raw):
     calls=[]
-    def bridge(command,**kwargs):calls.append((command,kwargs));return deepcopy(raw)
+    def bridge(command,**kwargs):
+        if command=='action_identity':return {'account_id':'synthetic-test-account'}
+        calls.append((command,kwargs));return deepcopy(raw)
     return CampusAssistant(learning_factory=lambda:None,bridge=bridge),calls
 
 def json_page(data):return {'status':'JSON_READ_VERIFIED','httpStatus':200,'url':'https://lib.tsinghua.edu.cn/api?token=synthetic','data':data,'checked_at':'fixed','authentication_state':'UNKNOWN'}

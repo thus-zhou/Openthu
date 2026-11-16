@@ -37,7 +37,7 @@ async function collectPages(total,load,{limit=30,pageSize=50,cancel=null,binding
  const uniqueWarnings=[...new Set(warnings)],uniqueMissing=[...new Set(missing_pages)];
  const snapshotComplete=pages.length>=expectedPages&&!cancelled;
  return {items,pages,warnings:uniqueWarnings,missing_pages:uniqueMissing,page_errors,expectedPages,
-   pages_read:pages.length,upstream_total:total,snapshot_complete:snapshotComplete,cancelled,
+   pages_read:pages.length,expected_pages:expectedPages,upstream_total:total,snapshot_complete:snapshotComplete,cancelled,
    collector_version:COLLECTOR_VERSION,binding:binding,
    complete:items.length===total&&uniqueWarnings.length===0&&!cancelled};
 }
