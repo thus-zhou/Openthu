@@ -5,10 +5,11 @@
   "owner": "Hermes",
   "status": "accepted",
   "baseline_commit": "4d60e8b",
-  "delivery_commit": "1d681d0",
+  "delivery_commit": "1c54b0c",
   "code_commits": [
     "d897ccc",
-    "1d681d0"
+    "1d681d0",
+    "1c54b0c"
   ],
   "branch": "hermes/1-install-diagnostics",
   "version_pr": 2,
@@ -83,7 +84,7 @@
   },
   "checks": {
     "module_tests_linux": {
-      "passed": 68,
+      "passed": 69,
       "skipped": 0,
       "failed": 0,
       "command": "python -m pytest -o addopts='' -q tests/test_media_assets.py"
@@ -119,18 +120,22 @@
         "ubuntu_24_04": "success",
         "windows_2025": "failure; the 8 Python failures are all in tests/test_session_gateway.py and tests/test_secure_store.py (SecureKeyPermissionError, bridge timeout) plus 3 Node session-store failures; no test_media_assets failure appears in the log. 3.1 continued the fix in 4528b0a and dcfb159."
       },
-      "note": "3.3's own code is unchanged in behaviour between d897ccc and 1d681d0 apart from the pending_cleanup listing; the batch integrator must re-run CI on the final integration tree."
+      "note": "3.3's own code is unchanged in behaviour between d897ccc and 1d681d0 apart from the pending_cleanup listing; the batch integrator must re-run CI on the final integration tree.",
+      "1c54b0c": {
+        "ubuntu_24_04": "pending at handoff",
+        "windows_2025": "pending at handoff"
+      }
     },
     "module_tests_windows": {
-      "passed": 63,
+      "passed": 64,
       "skipped": 5,
       "failed": 0,
       "evidence": "derived from the windows-2025 totals minus the non-media tests; the module file was not run alone on Windows",
       "skipped_reason": "five POSIX-only cases: FIFO, mode bits, /proc descriptor accounting, world-readable temp root, private derived file"
     },
     "joint_batch_tree": {
-      "worktree": "detached checkout of 1d681d0 (3.1, 3.2 and 3.3 committed) with node_modules linked",
-      "python_passed": 609,
+      "worktree": "detached checkout of 1c54b0c (3.1, 3.2 and 3.3 committed) with node_modules linked",
+      "python_passed": 610,
       "python_skipped": 5,
       "python_failed": 0,
       "node_passed": 64,
