@@ -194,7 +194,12 @@
         "src/thu_assistant/session-store.js",
         "src/thu_assistant/session-policy.js",
         "src/thu_assistant/browser.py",
-        "src/learn_assistant/auth.py"
+        "src/thu_assistant/crypto-bridge.js",
+        "src/thu_assistant/crypto_service.py",
+        "src/learn_assistant/auth.py",
+        "runtime/windows/access.js",
+        "runtime/windows/import-session.py",
+        "runtime/windows/session-store.py"
       ],
       "contracts": [
         "secure-storage-header-v1",
@@ -202,12 +207,14 @@
         "result-envelope-v1"
       ],
       "tests": [
-        "tests/test_session_store.py",
-        "tests/test_gateway_contracts.py"
+        "tests/test_session_gateway.py",
+        "tests/campus-session-v3.test.js",
+        "tests/campus-crypto-bridge.test.js",
+        "tests/test_campus.py",
+        "tests/test_gateway_bridge.py"
       ],
       "docs": [
-        "docs/HANDOVER.md",
-        "docs/INSTALL.md"
+        "plans/v0.2.0/交付/模块结果/3.1.md"
       ],
       "install_assets": [
         "runtime/windows/"
@@ -217,7 +224,13 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "跨平台认证会话、网关迁移、Windows 兼容包装和会话边界",
-      "evidence": []
+      "evidence": [
+        "crypto bridge/service: fixed actions, request ids, 2 MiB request and 2 MiB + 64 KiB response bounds, timeout/cancel, no client-selected program or path.",
+        "Session migration: legacy campus-v2.dpapi retained and copied to .before-v3 before a verified campus-v3.secure write.",
+        "Linux missing key: protected session operations fail with SECURE_KEY_NOT_CONFIGURED; public read and static catalog still work.",
+        "Browser state sealed through the gateway; gateway stdout contains no cookie plaintext.",
+        "8 Python + 6 Node v3 + 4 Node crypto module tests; shared tree Python 608/5, Node 64/0, check 392/0 on Linux."
+      ]
     },
     {
       "id": "3.2",
@@ -287,7 +300,17 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "图片/附件本地检查、临时目录、哈希和媒体引用",
-      "evidence": []
+      "evidence": [
+        "Content-signature typing with extension and declared-MIME agreement; disguised HTML/SVG/executable content rejected.",
+        "File boundary: regular file, no symlink/reparse point, POSIX readable bit, one open with fstat identity check, bounded streaming.",
+        "Image limits 8 MiB / 4 per request / 16 MiB total / 16 Mpx / 20000 side; a small PNG declaring 20000x20000 fails before decode.",
+        "Orientation applied and EXIF/GPS/XMP/ICC/comment removed by re-encoding; derived hash differs from source hash and is re-verified on read.",
+        "References bound to account scope, task, purpose and expiry; cross-account, cross-task and expired resolution rejected.",
+        "Model bundle preview plus request-bound single-use grant; capability probe reads no bytes; no network client imported.",
+        "Temporary area 0700/0600 with .part atomic rename; disk-full, cancel and timeout leave nothing; cleanup keeps active and foreign files.",
+        "Encrypted reference state via 2.2 secure store restores across processes and rejects a different account.",
+        "tests/test_media_assets.py: 67 passed on Linux; isolated tree at d897ccc: Python 600/5, Node 54, check 392 files 0 findings."
+      ]
     },
     {
       "id": "4.1",

@@ -122,16 +122,16 @@
         "3.3"
       ],
       "module_status": {
-        "3.1": "pending",
+        "3.1": "accepted",
         "3.2": "accepted",
-        "3.3": "pending"
+        "3.3": "accepted"
       },
       "status": "ready",
       "integration_commit": null,
       "accepted_at": null,
       "entry_condition": "all batch 2 modules accepted and integrated",
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
-      "gate_note": "3.2 accepted at ec2f617; 3.1 and 3.3 remain pending, so batch 3 stays ready and is not integrated."
+      "gate_note": "3.1 accepted at 24ecdb7; 3.2 accepted at ec2f617; 3.3 accepted at d897ccc. All three modules are accepted, but the batch remains ready until the batch integration commit records the joint check and full offline suite."
     },
     {
       "batch": 4,

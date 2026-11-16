@@ -111,6 +111,7 @@ def test_secure_session_migrates_legacy_and_retains_old_ciphertext(tmp_path):
     assert state["migration"]["legacyRetained"] is True
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows preserves the legacy DPAPI path when no new key is configured")
 def test_linux_missing_key_blocks_protected_session_but_not_catalog_or_public_read(tmp_path, monkeypatch):
     env = gateway_env(tmp_path)
     client = GatewayClient([NODE, str(GATEWAY), "--stdio"], env)
@@ -182,6 +183,7 @@ def test_crypto_service_echoes_ids_and_rejects_path_selectors(tmp_path):
     data = tmp_path / "state"
     data.mkdir(mode=0o700)
     env = {
+        **os.environ,
         "PATH": os.environ.get("PATH", ""),
         "PYTHONPATH": str(ROOT / "src"),
         "THU_SECURE_KEY_FILE": str(key),

@@ -180,8 +180,13 @@
         "src/thu_assistant/session-store.js",
         "src/thu_assistant/session-policy.js",
         "src/thu_assistant/browser.py",
+        "src/thu_assistant/crypto-bridge.js",
+        "src/thu_assistant/crypto_service.py",
         "src/learn_assistant/auth.py",
-        "runtime/windows/"
+        "runtime/windows/",
+        "tests/test_session_gateway.py",
+        "tests/campus-session-v3.test.js",
+        "tests/campus-crypto-bridge.test.js"
       ],
       "input_contracts": [
         "secure-storage-header-v1",
@@ -202,7 +207,18 @@
         "跨平台认证会话、网关迁移、Windows 兼容包装和会话边界"
       ],
       "integration_order": 5,
-      "status": "pending"
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "24ecdb73a3abf4897ba6389a175735e269300c18",
+      "evidence": [
+        "crypto-bridge.js and crypto_service.py: fixed four actions, request ids, 2 MiB request / 2 MiB + 64 KiB response limits, timeout and cancellation, minimal child environment; no request-selected program or path.",
+        "SessionStore reads legacy campus-v2.dpapi, copies it to .before-v3, writes a verified campus-v3.secure envelope and retains the old ciphertext.",
+        "Linux without a key fails protected session operations with SECURE_KEY_NOT_CONFIGURED; public reads and the static catalog remain available.",
+        "Browser state is sealed through the owned gateway; gateway stdout contains ciphertext only, never a cookie value.",
+        "learn_assistant/auth.py writes session.secure with scope learn-session; captured _dpapi_protect/_dpapi_unprotect references in action_store and todos reach the new provider.",
+        "Module tests: 8 Python + 6 Node v3 + 4 Node crypto; shared-tree check 392 files/0 findings; Python 608/5, Node 64/0 on Linux.",
+        "Ubuntu/Windows CI status is recorded after the branch push; the cloud host cannot run DPAPI locally."
+      ]
     },
     {
       "id": "3.2",
@@ -278,7 +294,7 @@
         "图片/附件本地检查、临时目录、哈希和媒体引用"
       ],
       "integration_order": 7,
-      "status": "pending"
+      "status": "accepted"
     },
     {
       "id": "4.1",
