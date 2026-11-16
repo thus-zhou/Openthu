@@ -231,3 +231,12 @@ bridge_result = subprocess.run(
 print("bridge_rc", bridge_result.returncode)
 print("bridge_out", clean(bridge_result.stdout.decode("utf-8", "replace")))
 print("bridge_err", clean(bridge_result.stderr.decode("utf-8", "replace")))
+
+import traceback
+
+try:
+    bridge_module._provider_and_paths(bridge_env)
+    print("bridge_inproc ok")
+except Exception:
+    print("bridge_inproc error")
+    print(clean(traceback.format_exc()))
