@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- 2.1 审计修复：锁文件版本严格脱敏，避免公开诊断泄露路径或崩溃；`runtime.python`/`runtime.node`/超时/输出上限接入 `doctor`、`check`、`smoke`、`test`；非法 URL、不可写父目录、缺失包资源和命令探测失败改为稳定诊断；清理测试环境中的 `OPENTHU_*` 用户配置。
+- 2.1 交付补齐：新增模块结果 JSON/MD，更新验收映射、模块负责表和版本总清单；2.1 仍待与 2.2/2.3 在同一提交回接后形成批次验收。
 - 新增统一配置层 `thu_assistant.configuration`：命令行、`OPENTHU_*` 环境变量、本机 JSON 和默认值按固定优先级合并；未知/重复键、非法类型、不可读文件和秘密字段返回稳定错误，公开摘要不含路径或秘密。
 - 新增统一路径解析 `thu_assistant.paths`：资源、状态、下载、临时和日志使用同一套描述；源码与包安装共享逻辑资源标识，缺少资源直接报告而不搜索旧安装；状态目录默认在代码库之外，拒绝覆盖程序资源、相对路径和密钥目录。
 - `doctor` 改为 `development`、`readonly`、`browser`、`production-auth`、`packaging`、`config` 分类，状态为通过/警告/失败/不适用；缺少 Chromium 只影响浏览器能力，Linux 生产认证为不适用，Python 最低版本读取项目声明。

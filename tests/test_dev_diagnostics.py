@@ -43,6 +43,8 @@ def complete_checkout(tmp_path, *, installed="6.0.0", with_node_modules=True, wi
         "packages": {"node_modules/tough-cookie": {"version": "6.0.0"}},
     }
     (package / "package-lock.json").write_text(json.dumps(lock), encoding="utf-8")
+    for name in ("gateway.js", "security.js", "cookies.js", "models.js"):
+        (package / name).write_text("// synthetic resource\n", encoding="utf-8")
     (package / "services.json").write_text(
         json.dumps([{"id": "synthetic-service", "name": "Synthetic"}]), encoding="utf-8"
     )
@@ -146,7 +148,8 @@ def test_missing_dependencies_block_with_actionable_fixes(tmp_path):
         assert rows[check_id].get("fix")
     assert rows["playwright-browser"]["status"] == "warning"
     assert rows["playwright-browser"]["blocking"] is False
-    assert rows["source-package"]["status"] == "warning"
+    assert rows["source-package"]["status"] == "fail"
+    assert rows["source-package"]["blocking"] is True
     assert report["summary"]["blocking"] >= 6
 
 
@@ -214,6 +217,95 @@ def test_invalid_configuration_is_reported_by_relative_item_only(tmp_path):
     assert "CONFIG_INVALID_TYPE" in rows["configuration"]["reason"]
     assert rows["storage-paths"]["status"] == "not_applicable"
     assert report["ok"] is False
+
+
+def test_lockfile_version_is_sanitized_and_never_crashes(tmp_path):
+    module = load_diagnostics()
+    for index, value in enumerate(("/home/synthetic-private/secret", 123)):
+        package = tmp_path / f"lock-{index}"
+        package.mkdir()
+        (package / "package-lock.json").write_text(
+            json.dumps(
+                {"packages": {"node_modules/tough-cookie": {"version": value}}}
+            ),
+            encoding="utf-8",
+        )
+        row = module._node_runtime(package)
+        assert row["status"] == "fail"
+        assert row["available_version"] is None
+        text = json.dumps(row, ensure_ascii=False)
+        assert "synthetic-private" not in text
+        assert "123" not in text
+
+
+def test_timeout_is_reported_distinctly_from_a_version_problem(tmp_path):
+    module = load_diagnostics()
+    root = complete_checkout(tmp_path)
+    kwargs = healthy_kwargs(root)
+    kwargs["command_probe"] = lambda path: {"status": "timeout", "version": None}
+    report = module.collect(**kwargs)
+    rows = {row["id"]: row for row in report["checks"]}
+    assert rows["node"]["status"] == "fail"
+    assert "超时" in rows["node"]["reason"]
+    assert rows["npm"]["status"] == "warning"
+    assert "超时" in rows["npm"]["reason"]
+    assert report["ok"] is False
+
+
+def test_configured_node_path_is_used_by_diagnostics(tmp_path):
+    module = load_diagnostics()
+    root = complete_checkout(tmp_path)
+    package = root / "src" / "thu_assistant"
+    config = synthetic_config(package)
+    config.runtime = SimpleNamespace(
+        node="/configured/node", command_timeout_seconds=2, max_output_bytes=2048
+    )
+    seen = []
+
+    def probe(path):
+        seen.append(path)
+        if path.endswith("node"):
+            return {"status": "pass", "version": "24.18.0"}
+        return {"status": "pass", "version": "11.16.0"}
+
+    kwargs = healthy_kwargs(root)
+    kwargs.update(
+        config=config,
+        command_probe=probe,
+        which=lambda name: "/synthetic/" + name,
+    )
+    report = module.collect(**kwargs)
+    rows = {row["id"]: row for row in report["checks"]}
+    assert rows["node"]["status"] == "pass"
+    assert "/configured/node" in seen
+
+
+def test_missing_required_package_resources_block_doctor(tmp_path):
+    module = load_diagnostics()
+    root = complete_checkout(tmp_path)
+    package = root / "src" / "thu_assistant"
+    (package / "security.js").unlink()
+    (package / "cookies.js").unlink()
+    report = module.collect(**healthy_kwargs(root))
+    rows = {row["id"]: row for row in report["checks"]}
+    assert rows["source-package"]["status"] == "fail"
+    assert rows["source-package"]["blocking"] is True
+    assert "security.js" in rows["source-package"]["reason"]
+    assert report["ok"] is False
+
+
+def test_dev_environment_clears_user_openthu_configuration(monkeypatch, tmp_path):
+    spec = importlib.util.spec_from_file_location(
+        "audit_dev", ROOT / "scripts" / "dev.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setenv("OPENTHU_STATE_DIR", "/private/state")
+    monkeypatch.setenv("OPENTHU_CONFIG_FILE", "/private/config.json")
+    env = module.environment(tmp_path)
+    assert "OPENTHU_STATE_DIR" not in env
+    assert "OPENTHU_CONFIG_FILE" not in env
+    assert env["OPENTHU_DOWNLOAD_DIR"] == str(tmp_path / "downloads")
 
 
 def test_doctor_json_exposes_categories_and_stable_exit():

@@ -52,7 +52,7 @@ python scripts/dev.py test
 | 获取方式 | 包含内容 | 适用场景 |
 |---|---|---|
 | 完整源码包（`git clone` 或 GitHub Release 源码归档） | Python/Node 源码、`vendor/madmodel-proxy`、`runtime/windows`、合成测试 | 云端离线开发、Windows 真实运行、贡献代码 |
-| Python wheel（`python -m build` 生成的 `.whl`） | Python 包、静态服务目录、兼容命令 | 静态目录与库调用；不含 Node 锁文件、认证依赖和 Windows 辅助，不能完成真实校园认证 |
+| Python wheel（`python -m build` 生成的 `.whl`） | Python 包、静态服务目录、兼容命令 | 静态目录与库调用；不含 Node 运行依赖（`node_modules`）、认证依赖和 Windows 辅助，不能完成真实校园认证 |
 | 云端离线开发检出 | 完整源码、Python 3.12、Node.js 24、Playwright Chromium | `doctor` / `check` / `test` / `smoke`；不访问校园账户，不保存 Windows 凭据 |
 
 真实校园认证目前依赖 Windows DPAPI。云端开发机只做开发与离线验证，不应导入或改用明文凭据。

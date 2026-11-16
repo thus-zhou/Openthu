@@ -90,6 +90,7 @@ def test_unknown_duplicate_invalid_and_unreadable_config_are_stable_errors(tmp_p
     with pytest.raises(configuration.ConfigurationError) as caught:
         configuration.load_config(env=env, config_file=duplicate, platform_name="posix")
     assert caught.value.code == "CONFIG_DUPLICATE_KEY"
+    assert caught.value.item == "config.ui.page_size"
 
     with pytest.raises(configuration.ConfigurationError) as caught:
         configuration.load_config(env=env, config_file=tmp_path, platform_name="posix")
@@ -177,11 +178,75 @@ def test_network_values_reject_credentials_and_non_loopback_binding(tmp_path):
 
     with pytest.raises(configuration.ConfigurationError) as caught:
         configuration.load_config(
+            cli={"network.npm_registry": "http://[::1"},
+            env=env,
+            platform_name="posix",
+        )
+    assert caught.value.code == "CONFIG_INVALID_URL"
+
+    with pytest.raises(configuration.ConfigurationError) as caught:
+        configuration.load_config(
             cli={"network.listen_host": "0.0.0.0"},
             env=env,
             platform_name="posix",
         )
     assert caught.value.code == "CONFIG_NOT_LOOPBACK"
+
+
+def test_parent_directory_permission_is_checked(tmp_path):
+    env = isolated_env(tmp_path)
+    parent = tmp_path / "readonly-parent"
+    parent.mkdir()
+    parent.chmod(0o500)
+    try:
+        with pytest.raises(configuration.ConfigurationError) as caught:
+            configuration.load_config(
+                cli={"storage.state_dir": str(parent / "state")},
+                env=env,
+                platform_name="posix",
+            )
+        assert caught.value.code == "PATH_NOT_ACCESSIBLE"
+    finally:
+        parent.chmod(0o700)
+
+
+def test_lower_layer_repository_path_is_not_hidden_by_cli(tmp_path):
+    env = isolated_env(tmp_path)
+    config_file = write_config(
+        tmp_path / "lower.json",
+        {"storage": {"state_dir": str(ROOT / "lower-state")}},
+    )
+    with pytest.raises(configuration.ConfigurationError) as caught:
+        configuration.load_config(
+            cli={"storage.state_dir": str(tmp_path / "cli-state")},
+            env=env,
+            config_file=config_file,
+            platform_name="posix",
+        )
+    assert caught.value.code == "PATH_PROTECTED"
+
+
+def test_resource_manifest_requires_the_declared_file_type(tmp_path):
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "gateway.js").mkdir()  # a directory must not satisfy a file resource
+    (package / "services.json").write_text("[]", encoding="utf-8")
+    resolved = paths.resolve_resource("package.gateway", package_root_value=package)
+    assert resolved.available is False
+
+
+def test_resource_root_requires_all_required_package_files(tmp_path):
+    env = isolated_env(tmp_path)
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "gateway.js").write_text("", encoding="utf-8")
+    (package / "services.json").write_text("[]", encoding="utf-8")
+    config_file = write_config(
+        tmp_path / "root.json", {"resources": {"root": str(package)}}
+    )
+    with pytest.raises(configuration.ConfigurationError) as caught:
+        configuration.load_config(env=env, config_file=config_file, platform_name="posix")
+    assert caught.value.code == "CONFIG_RESOURCE_ROOT_INVALID"
 
 
 def test_resource_manifest_has_identical_ids_for_source_and_package(tmp_path):

@@ -77,6 +77,11 @@ def _version_tuple(text):
     return tuple(int(part) for part in safe.split("."))
 
 
+def _lock_version(value):
+    """Accept only a plain ``X.Y.Z`` lock version; never echo a raw value."""
+    return _safe_version(value) if isinstance(value, str) else None
+
+
 def executable_argv(path, args, *, platform_name=None):
     """Build a fixed argv for a resolved executable, including Windows .cmd.
 
@@ -93,15 +98,8 @@ def executable_argv(path, args, *, platform_name=None):
     return [str(path), *args]
 
 
-def _command_version(path):
-    """Run one executable with a fixed argument and bounded output.
-
-    The caller supplies a resolved executable path; no fix string, shell or
-    user-provided argument is executed.  A reader stops after the output cap
-    and the process is killed on timeout, so a noisy or hostile executable
-    cannot flood this process.  Raw output never reaches the report: only a
-    validated version string survives.
-    """
+def _probe_version(path, *, timeout=15, max_output=MAX_DIAGNOSTIC_OUTPUT):
+    """Probe one executable and return a structured, sanitized result."""
     try:
         process = subprocess.Popen(
             executable_argv(path, ["--version"]),
@@ -110,12 +108,12 @@ def _command_version(path):
             text=False,
         )
     except (OSError, ValueError):
-        return None
+        return {"status": "spawn_error", "version": None}
     captured = bytearray()
 
     def read_output():
         assert process.stdout is not None
-        while len(captured) <= MAX_DIAGNOSTIC_OUTPUT:
+        while len(captured) <= max_output:
             try:
                 chunk = process.stdout.read(1024)
             except (OSError, ValueError):
@@ -128,7 +126,7 @@ def _command_version(path):
     reader.start()
     timed_out = False
     try:
-        process.wait(timeout=15)
+        process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         timed_out = True
         try:
@@ -144,11 +142,22 @@ def _command_version(path):
             except OSError:
                 pass
     if timed_out:
-        return None
-    if process.returncode != 0 or len(captured) > MAX_DIAGNOSTIC_OUTPUT:
-        return None
+        return {"status": "timeout", "version": None}
+    if process.returncode != 0:
+        return {"status": "nonzero", "version": None}
+    if len(captured) > max_output:
+        return {"status": "oversize", "version": None}
     output = captured.decode("utf-8", errors="replace").strip()
-    return _safe_version(output)
+    version = _safe_version(output)
+    if version is None:
+        return {"status": "format", "version": None}
+    return {"status": "pass", "version": version}
+
+
+def _command_version(path, *, timeout=15, max_output=MAX_DIAGNOSTIC_OUTPUT):
+    """Compatibility wrapper returning only a validated version string."""
+    result = _probe_version(path, timeout=timeout, max_output=max_output)
+    return result["version"] if result["status"] == "pass" else None
 
 
 def _distribution_version(name):
@@ -183,6 +192,28 @@ def _declared_python(root: Path):
         return MIN_PYTHON
     match = re.search(r'requires-python\s*=\s*["\']\s*>=\s*(\d+)\.(\d+)', text)
     return (int(match.group(1)), int(match.group(2))) if match else MIN_PYTHON
+
+
+def _configured_node(config, which):
+    if config is None:
+        return which("node")
+    command = getattr(getattr(config, "runtime", None), "node", "node")
+    if not command:
+        return None
+    path = Path(str(command))
+    if path.is_absolute() or path.exists():
+        return str(path)
+    return which(str(command))
+
+
+def _probe_reason(label, status):
+    return {
+        "timeout": label + " 版本探测超时",
+        "nonzero": label + " --version 退出非零",
+        "oversize": label + " --version 输出超过限制",
+        "format": label + " 版本格式无法识别",
+        "spawn_error": label + " 无法启动",
+    }.get(status, label + " 版本探测失败")
 
 
 def _row(
@@ -222,20 +253,31 @@ def _node_runtime(package_dir: Path):
         )
     packages = lock.get("packages") if isinstance(lock.get("packages"), dict) else {}
     entry = packages.get("node_modules/" + PINNED_NODE_PACKAGE)
-    pinned = entry.get("version") if isinstance(entry, dict) else None
-    if not pinned:
+    pinned_raw = entry.get("version") if isinstance(entry, dict) else None
+    if not pinned_raw:
         dependencies = (
             lock.get("dependencies") if isinstance(lock.get("dependencies"), dict) else {}
         )
         entry = dependencies.get(PINNED_NODE_PACKAGE)
-        pinned = entry.get("version") if isinstance(entry, dict) else None
-    if not pinned:
+        pinned_raw = entry.get("version") if isinstance(entry, dict) else None
+    if not pinned_raw:
         return _row(
             "node-runtime",
             "锁文件运行依赖",
             "development",
             "fail",
             "锁文件没有固定 " + PINNED_NODE_PACKAGE + " 版本",
+            fix=FIX_SOURCE,
+            blocking=True,
+        )
+    pinned = _lock_version(pinned_raw)
+    if pinned is None:
+        return _row(
+            "node-runtime",
+            "锁文件运行依赖",
+            "development",
+            "fail",
+            "锁文件中的 " + PINNED_NODE_PACKAGE + " 版本格式无效",
             fix=FIX_SOURCE,
             blocking=True,
         )
@@ -305,11 +347,26 @@ def _source_package(package_dir: Path, source):
     manifest = path_resolver.resource_manifest(
         package_root_value=package_dir, source_root_value=source
     )
-    missing = [
+    package_missing = [
+        row["relative_path"]
+        for row in manifest
+        if row["required"] and not row["available"] and row["scope"] == "package"
+    ]
+    source_missing = [
         row["relative_path"]
         for row in manifest
         if row["required"] and not row["available"] and row["scope"] == "source"
     ]
+    if package_missing:
+        return _row(
+            "source-package",
+            "源码包完整性",
+            "packaging",
+            "fail",
+            "包资源缺失：" + "、".join(str(item) for item in package_missing),
+            fix=FIX_SOURCE,
+            blocking=True,
+        )
     if source is None:
         return _row(
             "source-package",
@@ -319,13 +376,13 @@ def _source_package(package_dir: Path, source):
             "当前是包安装布局；不含源码认证辅助与离线测试，不代表安装损坏",
             fix=FIX_SOURCE,
         )
-    if missing:
+    if source_missing:
         return _row(
             "source-package",
             "源码包完整性",
             "packaging",
             "warning",
-            "当前源码检出缺少：" + "、".join(str(item) for item in missing),
+            "当前源码检出缺少：" + "、".join(str(item) for item in source_missing),
             fix=FIX_SOURCE,
         )
     return _row(
@@ -435,6 +492,7 @@ def collect(
     python_version=None,
     python_environment=None,
     command_version=None,
+    command_probe=None,
     config=None,
     config_error=None,
     config_file=None,
@@ -453,8 +511,6 @@ def collect(
     which = which or shutil.which
     distribution_version = distribution_version or _distribution_version
     browser_available = browser_available or _browser_available
-    command_version = command_version or _command_version
-
     if config is None and config_error is None:
         try:
             config = configuration_module.load_config(
@@ -462,6 +518,38 @@ def collect(
             )
         except configuration_module.ConfigurationError as error:
             config_error = error
+
+    if command_probe is None:
+        if command_version is not None:
+            def command_probe(path):
+                value = command_version(path)
+                version = _safe_version(value)
+                return {
+                    "status": "pass" if version else "format",
+                    "version": version,
+                }
+        else:
+            probe_timeout = 15
+            probe_limit = MAX_DIAGNOSTIC_OUTPUT
+            if config is not None:
+                runtime = getattr(config, "runtime", None)
+                if runtime is not None:
+                    probe_timeout = min(
+                        max(1, int(getattr(runtime, "command_timeout_seconds", 15))),
+                        15,
+                    )
+                    probe_limit = max(
+                        1024,
+                        min(
+                            int(getattr(runtime, "max_output_bytes", MAX_DIAGNOSTIC_OUTPUT)),
+                            1024 * 1024,
+                        ),
+                    )
+
+            def command_probe(path):
+                return _probe_version(
+                    path, timeout=probe_timeout, max_output=probe_limit
+                )
 
     package_dir = (
         Path(config.resources.root)
@@ -565,7 +653,7 @@ def collect(
             )
         )
 
-    node_path = which("node")
+    node_path = _configured_node(config, which)
     if not node_path:
         checks.append(
             _row(
@@ -579,33 +667,51 @@ def collect(
             )
         )
         node_text = None
+        node_ok = False
     else:
-        node_text = _safe_version(command_version(node_path))
-        node_version = _version_tuple(node_text) if node_text else ()
-        if not node_version or node_version[0] < MIN_NODE:
+        node_probe = command_probe(node_path)
+        node_text = node_probe.get("version")
+        node_ok = node_probe.get("status") == "pass"
+        if not node_ok:
             checks.append(
                 _row(
                     "node",
                     "Node.js",
                     "development",
                     "fail",
-                    "Node " + (node_text or "版本未知") + "；需要 24+",
+                    _probe_reason("Node", node_probe.get("status")),
                     available_version=node_text,
                     fix=FIX_NODE,
                     blocking=True,
                 )
             )
         else:
-            checks.append(
-                _row(
-                    "node",
-                    "Node.js",
-                    "development",
-                    "pass",
-                    "Node " + node_text,
-                    available_version=node_text,
+            node_version = _version_tuple(node_text) if node_text else ()
+            if not node_version or node_version[0] < MIN_NODE:
+                checks.append(
+                    _row(
+                        "node",
+                        "Node.js",
+                        "development",
+                        "fail",
+                        "Node " + (node_text or "版本未知") + "；需要 24+",
+                        available_version=node_text,
+                        fix=FIX_NODE,
+                        blocking=True,
+                    )
                 )
-            )
+                node_ok = False
+            else:
+                checks.append(
+                    _row(
+                        "node",
+                        "Node.js",
+                        "development",
+                        "pass",
+                        "Node " + node_text,
+                        available_version=node_text,
+                    )
+                )
 
     if platform_name == "nt":
         npm_path = which("npm.cmd") or which("npm")
@@ -624,8 +730,9 @@ def collect(
             )
         )
     else:
-        npm_text = _safe_version(command_version(npm_path))
-        if npm_text:
+        npm_probe = command_probe(npm_path)
+        npm_text = npm_probe.get("version")
+        if npm_probe.get("status") == "pass":
             checks.append(
                 _row(
                     "npm",
@@ -643,7 +750,7 @@ def collect(
                     "npm",
                     "development",
                     "warning",
-                    "npm 已找到，但版本输出无法识别；请检查 npm --version",
+                    _probe_reason("npm", npm_probe.get("status")),
                     fix=FIX_NODE,
                 )
             )
@@ -673,7 +780,7 @@ def collect(
             )
         )
 
-    checks.append(_windows_auth(package_dir, source, bool(node_path), platform_name))
+    checks.append(_windows_auth(package_dir, source, node_ok, platform_name))
     checks.append(_source_package(package_dir, source))
     checks.append(_config_row(config, config_error))
     checks.append(_storage_row(config, config_error))

@@ -49,7 +49,7 @@ python scripts/dev.py doctor
 | 来源 | 内容 | 能做什么 / 不能做什么 |
 |---|---|---|
 | 完整源码包（`git clone` 或 Release 源码归档） | Python/Node 源码、`vendor/madmodel-proxy`、`runtime/windows`、合成测试、开发脚本 | 可做云端离线开发、Windows 真实认证与运行、贡献；真实写入仍需按具体事项验收 |
-| Python wheel（`python -m build` 生成的 `.whl`） | Python 包、静态服务目录、兼容命令 | 可做静态目录与库调用；不含 Node 锁文件、`vendor/`、`runtime/windows/`，不能完成真实校园认证 |
+| Python wheel（`python -m build` 生成的 `.whl`） | Python 包、静态服务目录、兼容命令 | 可做静态目录与库调用；不含 Node 运行依赖（`node_modules`）、`vendor/`、`runtime/windows/`，不能完成真实校园认证 |
 | 云端离线开发检出 | 完整源码、Python、Node.js 24、Chromium | 可运行 `doctor` / `check` / `smoke` / `test`；不访问校园账户，不保存或导入 Windows 凭据 |
 
 ## 云端开发

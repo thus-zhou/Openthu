@@ -30,18 +30,28 @@ def configuration_module():
     return thu_assistant.configuration
 
 
-def environment(state: Path) -> dict[str, str]:
+def environment(state: Path, config=None) -> dict[str, str]:
     env = os.environ.copy()
     for key in list(env):
-        if key.startswith(('THU_', 'MADMODEL_', 'LEARN_ASSISTANT_')):
+        if key.startswith(('THU_', 'MADMODEL_', 'LEARN_ASSISTANT_', 'OPENTHU_')):
             env.pop(key)
     if os.name == 'nt' and not env.get('PLAYWRIGHT_BROWSERS_PATH'):
         base = os.environ.get('LOCALAPPDATA')
         if base:
             env['PLAYWRIGHT_BROWSERS_PATH'] = str(Path(base) / 'ms-playwright')
+    configured_node = 'node'
+    configured_python = sys.executable
+    if config is not None:
+        configured_node = str(config.runtime.node)
+        configured_python = str(config.runtime.python)
+    node = (
+        configured_node
+        if Path(configured_node).is_absolute()
+        else (shutil.which(configured_node) or configured_node)
+    )
     env.update({
         'PYTHONPATH': str(ROOT / 'src'), 'PYTHONUTF8': '1', 'PYTHONDONTWRITEBYTECODE': '1',
-        'THU_NODE': shutil.which('node') or 'node', 'THU_PYTHON': sys.executable,
+        'THU_NODE': node, 'THU_PYTHON': configured_python,
         'THU_MADMODEL_DIR': str(ROOT / 'vendor/madmodel-proxy'),
         'THU_ACCESS_HELPER': str(ROOT / 'runtime/windows/access.js'),
         'THU_LEARN_PROVIDER': str(ROOT / 'src'),
@@ -65,7 +75,7 @@ def smoke(env: dict[str, str]):
         {'jsonrpc':'2.0','id':2,'method':'tools/list','params':{}},
         {'jsonrpc':'2.0','id':3,'method':'tools/call','params':{'name':'list_services','arguments':{}}},
     ]
-    result = run([sys.executable, '-m', 'thu_assistant.mcp_stdio'], env=env,
+    result = run([env.get('THU_PYTHON', sys.executable), '-m', 'thu_assistant.mcp_stdio'], env=env,
                  input=''.join(json.dumps(x)+'\n' for x in messages), capture_output=True, timeout=30)
     if result.returncode:
         raise RuntimeError('MCP process failed; inspect local installation')
@@ -116,21 +126,30 @@ def main():
             platform_name=os.name,
         )
         return subprocess.call(argv,cwd=ROOT/'src/thu_assistant')
+    config=None
+    if args.command in ('check','smoke','test'):
+        config_module=configuration_module()
+        try:
+            config=config_module.load_config(config_file=args.config)
+        except config_module.ConfigurationError as error:
+            print(f'配置无效：{error.item}（{error.code}）',file=sys.stderr)
+            return 1
     with tempfile.TemporaryDirectory(prefix='openthu-offline-') as tmp:
-        env=environment(Path(tmp))
+        env=environment(Path(tmp),config)
         if args.command in ('check','smoke'):
             if args.command=='check':
                 module=diagnostics_module()
-                report=module.collect(config_file=args.config)
+                report=module.collect(config_file=args.config,config=config)
                 if not report['ok']:
                     print(module.format_report(report),file=sys.stderr)
                     return 1
                 node=run([env['THU_NODE'],'--version'],capture_output=True,env=env)
-                if node.returncode or int(node.stdout.lstrip('v').split('.')[0])<24:
+                node_version=module._safe_version(node.stdout)
+                if node.returncode or not node_version or int(node_version.split('.')[0])<24:
                     raise RuntimeError('Node.js 24+ is required for this validated development setup')
                 for p in (ROOT/'src').rglob('*.py'):
                     compile(p.read_text(encoding='utf-8'),p.name,'exec')
-                scan=run([sys.executable,'scripts/privacy_scan.py'],env=env)
+                scan=run([env.get('THU_PYTHON',sys.executable),'scripts/privacy_scan.py'],env=env)
                 if scan.returncode:
                     return scan.returncode
             try:
@@ -141,7 +160,7 @@ def main():
             return 0
         results={}
         if not args.node_only:
-            result=run([sys.executable,'-m','pytest','-o','addopts=','-q','-p','no:cacheprovider'],
+            result=run([env.get('THU_PYTHON',sys.executable),'-m','pytest','-o','addopts=','-q','-p','no:cacheprovider'],
                        env=env,capture_output=True,timeout=600)
             print(result.stdout,end=''); print(result.stderr,end='',file=sys.stderr)
             results['python_exit']=result.returncode

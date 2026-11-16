@@ -48,6 +48,7 @@ class ResourceSpec:
     scope: str  # "package" or "source"
     required: bool
     capability: str
+    kind: str = "file"
 
 
 @dataclass(frozen=True)
@@ -77,7 +78,7 @@ RESOURCE_SPECS = (
     ResourceSpec("source.windows_auth", "runtime/windows/access.js", "source", True, "production-auth"),
     ResourceSpec("source.madmodel_proxy", "vendor/madmodel-proxy/package.json", "source", True, "production-auth"),
     ResourceSpec("source.dev_command", "scripts/dev.py", "source", False, "development"),
-    ResourceSpec("source.tests", "tests", "source", False, "development"),
+    ResourceSpec("source.tests", "tests", "source", False, "development", "dir"),
 )
 
 
@@ -291,6 +292,17 @@ def ensure_private_directory(
             raise PathError("PATH_NOT_DIRECTORY", item)
         if not os.access(candidate, os.R_OK | os.W_OK):
             raise PathError("PATH_NOT_ACCESSIBLE", item)
+    else:
+        existing_parent = candidate.parent
+        while not existing_parent.exists():
+            if existing_parent.parent == existing_parent:
+                existing_parent = None
+                break
+            existing_parent = existing_parent.parent
+        if existing_parent is None or not os.access(
+            existing_parent, os.W_OK | os.X_OK
+        ):
+            raise PathError("PATH_NOT_ACCESSIBLE", item)
     return candidate
 
 
@@ -317,7 +329,12 @@ def resolve_resource(
         else:
             root = Path(source_root_value).resolve() if source_root_value else None
     path = root / spec.relative_path if root is not None else None
-    available = path is not None and path.exists()
+    if path is None:
+        available = False
+    elif spec.kind == "dir":
+        available = path.is_dir()
+    else:
+        available = path.is_file()
     return ResolvedResource(
         id=spec.id,
         scope=spec.scope,
@@ -352,6 +369,7 @@ def resource_manifest(
                 "relative_path": spec.relative_path,
                 "required": spec.required,
                 "capability": spec.capability,
+                "kind": spec.kind,
                 "available": resolved.available,
             }
         )

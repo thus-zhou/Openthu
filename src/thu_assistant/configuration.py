@@ -65,6 +65,19 @@ _SECRET_HINTS = (
     "private_key",
 )
 _SECRET_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+_STORAGE_FIELDS = (
+    "storage.state_dir",
+    "storage.download_dir",
+    "storage.temp_dir",
+    "storage.log_dir",
+)
+_REQUIRED_PACKAGE_FILES = (
+    "gateway.js",
+    "services.json",
+    "security.js",
+    "cookies.js",
+    "package-lock.json",
+)
 
 _ENV_FIELDS = {
     "OPENTHU_RESOURCE_ROOT": "resources.root",
@@ -102,12 +115,6 @@ class ConfigurationError(ValueError):
 
     def public_dict(self) -> dict[str, str]:
         return {"code": self.code, "item": self.item}
-
-
-class _DuplicateKey(ValueError):
-    def __init__(self, key: str):
-        self.key = key
-        super().__init__(key)
 
 
 @dataclass(frozen=True)
@@ -201,13 +208,42 @@ class Configuration:
         return values.get(ENV_PREFIX + "SECRET_" + name.upper()) or None
 
 
+class _Object(dict):
+    """A JSON object that remembers duplicate keys for a precise error path."""
+
+    def __init__(self, pairs):
+        super().__init__()
+        self.duplicates = []
+        for key, value in pairs:
+            if key in self:
+                self.duplicates.append(key)
+            else:
+                self[key] = value
+
+
 def _pairs(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise _DuplicateKey(key)
-        result[key] = value
-    return result
+    return _Object(pairs)
+
+
+def _find_duplicate(value, path="config"):
+    if isinstance(value, _Object):
+        if value.duplicates:
+            return path + "." + str(value.duplicates[0])
+        for key, child in value.items():
+            found = _find_duplicate(child, path + "." + str(key))
+            if found:
+                return found
+    elif isinstance(value, dict):
+        for key, child in value.items():
+            found = _find_duplicate(child, path + "." + str(key))
+            if found:
+                return found
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            found = _find_duplicate(child, path + "[" + str(index) + "]")
+            if found:
+                return found
+    return None
 
 
 def _secret_like(key: str) -> bool:
@@ -246,7 +282,10 @@ def _validate_value(item: str, value, *, home: Path | str | None = None):
         return _require_string(value, item, command=True)
     if kind == "url":
         text = _require_string(value, item)
-        parsed = urlsplit(text)
+        try:
+            parsed = urlsplit(text)
+        except ValueError:
+            raise ConfigurationError("CONFIG_INVALID_URL", item) from None
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
             raise ConfigurationError("CONFIG_INVALID_URL", item)
         if parsed.username or parsed.password:
@@ -336,10 +375,11 @@ def _read_file(path: Path) -> dict:
         raise ConfigurationError("CONFIG_FILE_UNREADABLE", "config.file") from None
     try:
         data = json.loads(text, object_pairs_hook=_pairs)
-    except _DuplicateKey as error:
-        raise ConfigurationError("CONFIG_DUPLICATE_KEY", "config." + str(error.key)) from None
     except (ValueError, TypeError):
         raise ConfigurationError("CONFIG_INVALID_JSON", "config") from None
+    duplicate = _find_duplicate(data)
+    if duplicate:
+        raise ConfigurationError("CONFIG_DUPLICATE_KEY", duplicate)
     if not isinstance(data, dict):
         raise ConfigurationError("CONFIG_INVALID_TYPE", "config")
     return data
@@ -395,6 +435,46 @@ def _prepare_directory(
         raise ConfigurationError(error.code, item) from None
 
 
+def _resource_root(value) -> Path:
+    root = Path(value)
+    if (
+        not root.is_dir()
+        or not os.access(root, os.R_OK)
+        or any(not (root / name).is_file() for name in _REQUIRED_PACKAGE_FILES)
+    ):
+        raise ConfigurationError("CONFIG_RESOURCE_ROOT_INVALID", "resources.root")
+    return root
+
+
+def _validate_layer_values(values: dict[str, object], *, home=None) -> None:
+    """Validate semantic path rules per layer, not only after merging.
+
+    Syntax is already checked by ``_config_layer``/environment/CLI parsing.
+    This catches an invalid lower-layer state path even when a higher layer
+    overrides the final value, matching the documented layering contract.
+    """
+    actual_package = paths.package_root()
+    actual_source = paths.source_root()
+    if "resources.root" in values:
+        _resource_root(values["resources.root"])
+    state = values.get("storage.state_dir")
+    for item in _STORAGE_FIELDS:
+        if item not in values:
+            continue
+        state_for_item = None if item == "storage.state_dir" else state
+        try:
+            paths.ensure_private_directory(
+                values[item],
+                item=item,
+                package_root_value=actual_package,
+                source_root_value=actual_source,
+                state_dir=state_for_item,
+                include_key_dirs=state_for_item is not None,
+            )
+        except paths.PathError as error:
+            raise ConfigurationError(error.code, item) from None
+
+
 def load_config(
     *,
     cli: dict[str, object] | None = None,
@@ -424,6 +504,8 @@ def load_config(
     env_values = _env_layer(env, home=home)
     cli_values = _cli_layer(cli, home=home)
     layers = (("file", file_values), ("env", env_values), ("cli", cli_values))
+    for _, layer in layers:
+        _validate_layer_values(layer, home=home)
     values: dict[str, object] = {}
     sources: dict[str, str] = {}
     for name, layer in layers:
@@ -431,13 +513,7 @@ def load_config(
             values[item] = value
             sources[item] = name
 
-    resources_root = values.get("resources.root", paths.package_root())
-    resources_root = Path(resources_root)
-    if not resources_root.is_dir() or not os.access(resources_root, os.R_OK) or not (
-        (resources_root / "gateway.js").is_file()
-        and (resources_root / "services.json").is_file()
-    ):
-        raise ConfigurationError("CONFIG_RESOURCE_ROOT_INVALID", "resources.root")
+    resources_root = _resource_root(values.get("resources.root", paths.package_root()))
     detected_source = paths.detect_source_root(resources_root)
 
     state_dir = values.get("storage.state_dir", defaults.state_dir)
