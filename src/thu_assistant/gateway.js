@@ -2,11 +2,13 @@
 // stdin/stdout is a private subprocess boundary. Authentication material is
 // never returned as plaintext; browser bootstrap is itself DPAPI sealed.
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { once } = require('node:events');
 const { createRequire } = require('node:module');
 const { validateUrl, assertReadUrl, toTunnel, safeUrl, redact, sanitizeJson } = require('./security');
+const { createSecureCrypto, resolveCryptoConfig } = require('./crypto-bridge');
 const helper = require(process.env.THU_ACCESS_HELPER || path.join(__dirname, '../../runtime/windows/access.js'));
 const up = createRequire(path.join(process.env.THU_MADMODEL_DIR || path.join(__dirname, '../../vendor/madmodel-proxy'), 'package.json'));
 const auth = up('./madmodel-auth');
@@ -15,7 +17,12 @@ const locks = up('./platform/process-lock');
 const paths = up('./platform/paths');
 const { atomicWrite } = up('./platform/file-store');
 const {withPidLock,AuthGate,SerialQueue,errorRecord} = require('./scheduler');
-const stateDir = process.env.THU_ASSISTANT_STATE_DIR || path.join(process.env.LOCALAPPDATA, 'TsinghuaAssistant');
+const legacyStateDir = process.env.LOCALAPPDATA
+  ? path.join(process.env.LOCALAPPDATA, 'TsinghuaAssistant')
+  : path.join(os.homedir(), '.local', 'state', 'openthu');
+const stateDir = process.env.OPENTHU_STATE_DIR || process.env.THU_ASSISTANT_STATE_DIR || legacyStateDir;
+const cryptoConfig = resolveCryptoConfig(process.env, stateDir);
+const secureCrypto = cryptoConfig.enabled ? createSecureCrypto(cryptoConfig) : null;
 const {CampusCookies,allowedUrls,inScope} = require('./cookies');
 const {SessionStore} = require('./session-store');
 const {authenticationState,shouldRetryModel,browserSync,loginRequired} = require('./session-policy');
@@ -35,11 +42,12 @@ async function withAuthentication(action) {
     return result;
   },activeControl);
 }
-function sealBrowser(jar,account,serviceOrigin,url,apps,revision){
+async function sealBrowser(jar,account,serviceOrigin,url,apps,revision){
   const urls=allowedUrls(serviceOrigin,url),origins=apps[serviceOrigin]?.origins||[];
-  return helper.dpapi('protect',Buffer.from(JSON.stringify({version:2,account:activeSession.store.account,serviceOrigin,url,
+  const sealed=await activeSession.store.sealState({version:2,account:activeSession.store.account,serviceOrigin,url,
     cookies:jar.browserCookies(urls),cookieRecords:jar.export().filter(c=>inScope(c,urls)),
-    origins,appOrigins:origins,revision,redactions:[account?.username,account?.fingerPrint].filter(Boolean)}))).toString('base64');
+    origins,appOrigins:origins,revision,redactions:[account?.username,account?.fingerPrint].filter(Boolean)});
+  return sealed.toString('base64');
 }
 function importLearning(jar,token){
   const cookies=jar.browserCookies(['https://learn.tsinghua.edu.cn/']);
@@ -47,9 +55,17 @@ function importLearning(jar,token){
     {input:JSON.stringify({cookies,csrf:token}),encoding:'utf8',windowsHide:true,stdio:['pipe','pipe','pipe'],timeout:45000}));}
   catch{throw fail('LEARN_PLUGIN_IMPORT_FAILED');}
 }
+function learningSessionDir(){
+  return process.env.THU_LEARN_SESSION_DIR || process.env.OPENTHU_LEARN_SESSION_DIR ||
+    (process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA,'LearnAssistant') : path.join(stateDir,'LearnAssistant'));
+}
 function learningSignature(){
-  try{return crypto.createHash('sha256').update(fs.readFileSync(path.join(process.env.LOCALAPPDATA,'LearnAssistant','session.dpapi'))).digest('hex');}
-  catch{return null;}
+  const dir=learningSessionDir();
+  for(const name of ['session.secure','session.dpapi']){
+    try{return crypto.createHash('sha256').update(fs.readFileSync(path.join(dir,name))).digest('hex');}
+    catch{/* Try the compatible file name. */}
+  }
+  return null;
 }
 function markLearning(){
   const origin='https://learn.tsinghua.edu.cn';
@@ -286,8 +302,12 @@ async function main(command,control={}) {
   try {
     if(command.command==='login'&&command.force)authGate.reset();
     const account=credentials.readAccount();
-    const store=new SessionStore({dir:stateDir,account,dpapi:helper.dpapi,locks,atomicWrite,currentAccount:credentials.readAccount});
-    const base=await store.load(control),jar=new CampusCookies(base.cookies),client=new auth.MadmodelAuthClient(jar);
+    const persist=!['action_identity','unseal_browser_state'].includes(command.command)&&
+      !(command.command==='read'&&command.authenticate===false);
+    const legacyDpapi=(process.platform==='win32'||process.env.THU_SESSION_ALLOW_LEGACY==='1')?helper.dpapi:null;
+    const store=new SessionStore({dir:stateDir,account,dpapi:legacyDpapi,legacyDpapi:helper.dpapi,
+      crypto:secureCrypto,platform:process.platform,allowLegacy:!!legacyDpapi,locks,atomicWrite,currentAccount:credentials.readAccount});
+    const base=await store.load({...control,required:persist}),jar=new CampusCookies(base.cookies),client=new auth.MadmodelAuthClient(jar);
     activeSession={store,base,jar,apps:structuredClone(base.apps)};
     let serviceOrigin=new URL(command.service_origin||command.landing_url||command.url||
       (['model','models'].includes(command.command)?'https://madmodel.cs.tsinghua.edu.cn/':command.command==='login'?'https://learn.tsinghua.edu.cn/':'https://info.tsinghua.edu.cn/')).origin;
@@ -295,15 +315,22 @@ async function main(command,control={}) {
     collectSecrets(jar,account);
     let result;
     if(command.command==='import_browser_state') {
-      const data=JSON.parse(helper.dpapi('unprotect',Buffer.from(String(command.sealedState||''),'base64')));
+      let data;
+      if(command.state&&typeof command.state==='object')data=command.state;
+      else data=await store.unsealState(Buffer.from(String(command.sealedState||''),'base64'));
       let bootstrap;
-      try{bootstrap=JSON.parse(helper.dpapi('unprotect',Buffer.from(String(data.syncToken||''),'base64')));}catch{throw fail('BROWSER_SYNC_TOKEN_INVALID');}
+      try{bootstrap=await store.unsealState(Buffer.from(String(data.syncToken||''),'base64'));}
+      catch{throw fail('BROWSER_SYNC_TOKEN_INVALID');}
       const synced=browserSync(jar,data,bootstrap,store.account,activeSession.apps);
       serviceOrigin=bootstrap.serviceOrigin;
       result={status:'BROWSER_SESSION_ENCRYPTED',importedCookies:data.cookies.length,
-        syncToken:helper.dpapi('protect',Buffer.from(JSON.stringify({...synced,revision:activeSession.base.revision}))).toString('base64')};
+        stateFormat:store.backend,
+        syncToken:(await store.sealState({...synced,revision:activeSession.base.revision})).toString('base64')};
+    } else if(command.command==='unseal_browser_state') {
+      const data=await store.unsealState(Buffer.from(String(command.sealedState||''),'base64'));
+      result={state:data,stateFormat:store.backend};
     } else if(command.command==='action_identity') {
-      result={account_id:store.account};
+      result={account_id:store.account,storage_backend:store.backend};
     } else if(command.command==='ensure_learn_session') {
       const origin='https://learn.tsinghua.edu.cn',signature=learningSignature();
       if(!signature||activeSession.apps[origin]?.providerSignature!==signature){
@@ -401,12 +428,13 @@ async function main(command,control={}) {
       Object.assign(result,state,{checked_at:new Date().toISOString(),reason:state.reason,public_read:command.authenticate===false});
       if(state.authentication_state==='AUTHENTICATED')activeSession.apps[serviceOrigin]={...(activeSession.apps[serviceOrigin]||{}),checkedAt:result.checked_at,authentication_state:state.authentication_state};
       if(command.command==='browser_state') {
-        result={status:result.status,sealedState:sealBrowser(jar,account,serviceOrigin,response.finalUrl,activeSession.apps,activeSession.base.revision)};
+        result={status:result.status,stateFormat:store.backend,
+          sealedState:await sealBrowser(jar,account,serviceOrigin,response.finalUrl,activeSession.apps,activeSession.base.revision)};
       }
     } else throw fail('UNKNOWN_COMMAND');
     try {
       control.signal?.throwIfAborted();
-      await store.commit(activeSession.base,jar,activeSession.apps,control);
+      if(persist) await store.commit(activeSession.base,jar,activeSession.apps,control);
     } catch(error) {
       if(command.command==='model'&&result?.model)error.modelEvidence={...result,automatic_replay:false};
       throw error;
@@ -417,20 +445,32 @@ async function main(command,control={}) {
 
 if(require.main===module && process.argv.includes('--stdio')) {
   const queue=new SerialQueue(main,message=>process.stdout.write(JSON.stringify(message)+'\n'));
+  const shutdown=()=>{
+    if(queue.closed)return;
+    const deadline=Date.now()+10000;
+    const check=()=>{
+      if(!queue.active&&queue.queue.length===0||Date.now()>=deadline){
+        queue.close();try{secureCrypto?.close();}catch{}
+        return;
+      }
+      setTimeout(check,20);
+    };
+    check();
+  };
   let buffer='';process.stdin.setEncoding('utf8');
   process.stdin.on('data',part=>{
     buffer+=part;
     for(;;){
       const end=buffer.indexOf('\n');if(end<0)break;
-      if(end>2*1024*1024){queue.close();process.exitCode=1;process.stdin.destroy();return;}
+      if(end>2*1024*1024){shutdown();process.exitCode=1;process.stdin.destroy();return;}
       const line=buffer.slice(0,end);buffer=buffer.slice(end+1);
       try{queue.accept(JSON.parse(line));}catch{/* Never echo malformed input. */}
     }
-    if(buffer.length>2*1024*1024){queue.close();process.exitCode=1;process.stdin.destroy();}
+    if(buffer.length>2*1024*1024){shutdown();process.exitCode=1;process.stdin.destroy();}
   });
-  process.stdin.on('end',()=>queue.close());
-  process.stdin.on('error',()=>queue.close());
-  process.stdout.on('error',()=>{queue.close();process.exitCode=1;process.stdin.destroy();});
+  process.stdin.on('end',shutdown);
+  process.stdin.on('error',shutdown);
+  process.stdout.on('error',()=>{shutdown();process.exitCode=1;process.stdin.destroy();});
 } else if(require.main===module) {
   let raw='';process.stdin.setEncoding('utf8');
   process.stdin.on('data',part=>{raw+=part;if(raw.length>1024*1024){process.exitCode=1;process.stdin.destroy();}});
@@ -438,6 +478,7 @@ if(require.main===module && process.argv.includes('--stdio')) {
     process.stdout.write(JSON.stringify({ok:true,result})+'\n');
   }).catch(error=>{const code=typeof error.code==='string'&&/^[A-Z_]+$/.test(error.code)?error.code:
     error.name==='TimeoutError'?'NETWORK_TIMEOUT':'CAMPUS_ACCESS_FAILED';
-    process.stdout.write(JSON.stringify({ok:false,error:{code}})+'\n');process.exitCode=1;}));
+    process.stdout.write(JSON.stringify({ok:false,error:{code}})+'\n');process.exitCode=1;})
+    .finally(()=>{try{secureCrypto?.close();}catch{}}));
 }
 module.exports={pageResult,downloadFile,main};

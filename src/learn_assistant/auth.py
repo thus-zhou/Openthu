@@ -18,6 +18,7 @@ import os
 import re
 import sys
 import time
+import uuid
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Iterable
@@ -25,9 +26,37 @@ from urllib.parse import urlsplit
 
 from .errors import AuthenticationRequired, ProviderNotConfigured, ValidationError
 from .models import BrowserCookie, BrowserSession
+from thu_assistant.secure_store.envelope import StorageContext, parse_envelope
+from thu_assistant.secure_store.errors import SecureStoreError
+from thu_assistant.secure_store.providers import load_provider
+
+SECURE_SESSION_NAME = "session.secure"
+SECURE_MAGIC = b"THU-SECURE-1\0"
+
+
+def default_session_dir() -> Path:
+    """Return the one Learn session directory for this platform.
+
+    Windows keeps the historical ``%LOCALAPPDATA%\\LearnAssistant`` location.
+    Other platforms use the unified state directory; a missing key never
+    changes the path or creates a plaintext fallback.
+    """
+    explicit = os.environ.get("OPENTHU_LEARN_SESSION_DIR") or os.environ.get("THU_LEARN_SESSION_DIR")
+    if explicit:
+        return Path(explicit).expanduser()
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
+        return Path(base or Path.home()) / "LearnAssistant"
+    state = (
+        os.environ.get("OPENTHU_STATE_DIR")
+        or os.environ.get("THU_ASSISTANT_STATE_DIR")
+        or str(Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "openthu")
+    )
+    return Path(state).expanduser() / "LearnAssistant"
+
 
 DEFAULT_LOGIN_URL = "https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/bb5df85216504820be7bba2b0ae1535b/0"
-DEFAULT_SESSION_PATH = Path(os.environ.get("LOCALAPPDATA", "")) / "LearnAssistant" / "session.dpapi"
+DEFAULT_SESSION_PATH = default_session_dir() / "session.dpapi"
 
 
 def _now_iso() -> str:
@@ -95,7 +124,115 @@ class _DATA_BLOB(ctypes.Structure):
     _fields_ = [("cbData", ctypes.wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_byte))]
 
 
+_SECURE_PROVIDERS: dict[tuple[str, str | None], object] = {}
+_SECURE_PROVIDER_FAILURE: str | None = None
+
+
+def _secure_key_path() -> str | None:
+    return os.environ.get("OPENTHU_SECURE_KEY_FILE") or os.environ.get("THU_SECURE_KEY_FILE")
+
+
+def _secure_provider():
+    """Load the configured secure provider once per key location.
+
+    The wrapper is deliberately explicit: a configured key never falls back to
+    DPAPI or plaintext when the key is unreadable or belongs to another key.
+    """
+    global _SECURE_PROVIDER_FAILURE
+    path = _secure_key_path()
+    if not path:
+        return None
+    backend = os.environ.get("OPENTHU_SECURE_BACKEND") or os.environ.get("THU_SECURE_BACKEND") or None
+    key = (path, backend)
+    if key in _SECURE_PROVIDERS:
+        return _SECURE_PROVIDERS[key]
+    try:
+        provider = load_provider(path, backend)
+    except SecureStoreError as error:
+        _SECURE_PROVIDER_FAILURE = error.code
+        return None
+    except Exception:
+        _SECURE_PROVIDER_FAILURE = "SECURE_KEY_UNREADABLE"
+        return None
+    _SECURE_PROVIDERS[key] = provider
+    return provider
+
+
+def _secure_protect(
+    raw: bytes,
+    *,
+    purpose: str = "SESSION",
+    service_domain: str = "LEARN",
+    account: str | None = None,
+    revision: int = 0,
+    record_id: str | None = "learn-session",
+) -> bytes | None:
+    provider = _secure_provider()
+    if provider is None:
+        return None
+    try:
+        account_ref = provider.account_reference(
+            account or "",
+            purpose=purpose,
+            account_domain="CAMPUS",
+            service_domain=service_domain,
+        )
+        context = StorageContext(
+            purpose=purpose,
+            account_domain="CAMPUS",
+            service_domain=service_domain,
+            account_ref=account_ref,
+            revision=revision,
+            record_id=record_id,
+        )
+        return provider.seal(raw, context)
+    except SecureStoreError:
+        return None
+    except Exception:
+        return None
+
+
+def _secure_unprotect(raw: bytes) -> bytes | None:
+    provider = _secure_provider()
+    if provider is None or not raw.startswith(SECURE_MAGIC):
+        return None
+    try:
+        return provider.unseal(raw, None).plaintext
+    except (SecureStoreError, ValueError, TypeError):
+        return None
+
+
+def _secure_unprotect_session(raw: bytes) -> bytes | None:
+    """Read only the Learn session scope, not any envelope under this key."""
+    provider = _secure_provider()
+    if provider is None or not raw.startswith(SECURE_MAGIC):
+        return None
+    try:
+        envelope = parse_envelope(raw)
+        if (
+            envelope.context.purpose != "SESSION"
+            or envelope.context.account_domain != "CAMPUS"
+            or envelope.context.service_domain != "LEARN"
+            or envelope.context.record_id != "learn-session"
+        ):
+            return None
+        return provider.unseal(raw, envelope.context).plaintext
+    except (SecureStoreError, ValueError, TypeError):
+        return None
+
+
 def _dpapi_protect(raw: bytes) -> bytes | None:
+    """Compatibility wrapper: secure store first, Windows DPAPI second.
+
+    ``ActionStore`` and the todo cache bind this function object at import
+    time.  Keeping the same name and signature means those captured references
+    receive the new backend without editing their modules.
+    """
+    protected = _secure_protect(raw, purpose="ACTION", service_domain="LOCAL", record_id=None)
+    if protected is not None:
+        return protected
+    if _secure_key_path():
+        return None  # A configured secure key must fail closed, not downgrade.
     if os.name != "nt":
         return None
     crypt32 = ctypes.windll.crypt32
@@ -112,6 +249,10 @@ def _dpapi_protect(raw: bytes) -> bytes | None:
 
 
 def _dpapi_unprotect(raw: bytes) -> bytes | None:
+    """Compatibility wrapper that also reads new secure-store envelopes."""
+    secure = _secure_unprotect(raw)
+    if secure is not None:
+        return secure
     if os.name != "nt":
         return None
     crypt32 = ctypes.windll.crypt32
@@ -128,18 +269,60 @@ def _dpapi_unprotect(raw: bytes) -> bytes | None:
 
 
 class SecureSessionStore:
-    """仅使用 Windows DPAPI 保存会话 cookie。"""
+    """Save Learn cookies with the configured secure store, else Windows DPAPI.
+
+    The legacy ``LA-DPAPI-1`` file is read in place and never rewritten.  A new
+    secure envelope is written beside it only after encryption succeeds and is
+    verified by decrypting the bytes just written.  A configured but unusable
+    key fails closed; it never falls back to plaintext or to a different key.
+    """
 
     MAGIC = b"LA-DPAPI-1\0"
 
     def __init__(self, path: str | os.PathLike[str] | None = None) -> None:
-        self.path = Path(path).expanduser() if path else DEFAULT_SESSION_PATH
+        legacy = Path(path).expanduser() if path else default_session_dir() / "session.dpapi"
+        self.legacy_path = legacy
+        self.secure_path = (
+            legacy.with_name(SECURE_SESSION_NAME)
+            if legacy.name == "session.dpapi"
+            else legacy.with_name(legacy.name + ".secure")
+        )
+        self.last_format: str | None = None
+        self.last_error: str | None = None
+
+    @property
+    def path(self) -> Path:
+        """The file currently holding the newest readable state.
+
+        ``mcp_stdio`` watches this path to reload a changed provider session.
+        """
+        return self.secure_path if self.secure_path.is_file() else self.legacy_path
 
     @property
     def available(self) -> bool:
-        return os.name == "nt"
+        return bool(_secure_key_path()) or os.name == "nt"
 
-    def save(self, session: BrowserSession) -> bool:
+    @property
+    def protection(self) -> str:
+        if _secure_key_path():
+            return "secure-store"
+        return "Windows DPAPI" if os.name == "nt" else "unavailable"
+
+    @staticmethod
+    def _write(path: Path, data: bytes) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
+        try:
+            with open(temporary, "xb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    @staticmethod
+    def _payload(session: BrowserSession) -> bytes:
         payload = {
             "version": 1,
             "cookies": [asdict(cookie) for cookie in session.cookies],
@@ -148,25 +331,12 @@ class SecureSessionStore:
             "captured_at": session.captured_at,
             "source": session.source,
         }
-        raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        protected = _dpapi_protect(raw)
-        if protected is None:
-            return False
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_bytes(self.MAGIC + protected)
-        return True
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
-    def load(self) -> BrowserSession | None:
-        if not self.path.is_file():
-            return None
+    @staticmethod
+    def _parse(raw: bytes) -> BrowserSession | None:
         try:
-            raw = self.path.read_bytes()
-            if not raw.startswith(self.MAGIC):
-                return None
-            plain = _dpapi_unprotect(raw[len(self.MAGIC) :])
-            if plain is None:
-                return None
-            payload = json.loads(plain.decode("utf-8"))
+            payload = json.loads(raw.decode("utf-8"))
             if payload.get("version") != 1 or not isinstance(payload.get("cookies"), list):
                 return None
             cookies = tuple(
@@ -186,11 +356,102 @@ class SecureSessionStore:
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             return None
 
-    def clear(self) -> bool:
-        if not self.path.exists():
+    def save(self, session: BrowserSession) -> bool:
+        raw = self._payload(session)
+        protected = _secure_protect(
+            raw, purpose="SESSION", service_domain="LEARN", record_id="learn-session"
+        )
+        if protected is not None:
+            try:
+                if self.secure_path.exists():
+                    backup = self.secure_path.with_name(self.secure_path.name + ".previous")
+                    if not backup.exists():
+                        backup.write_bytes(self.secure_path.read_bytes())
+                self._write(self.secure_path, protected)
+            except OSError:
+                self.last_error = "STATE_WRITE_FAILED"
+                return False
+            if _secure_unprotect_session(protected) != raw:
+                self.last_error = "STATE_ENCRYPT_FAILED"
+                return False
+            self.last_format = "secure-store"
+            self.last_error = None
+            return True
+        if _secure_key_path():
+            self.last_error = _SECURE_PROVIDER_FAILURE or "SECURE_KEY_NOT_CONFIGURED"
             return False
-        self.path.unlink()
+        if os.name != "nt":
+            self.last_error = "SECURE_KEY_NOT_CONFIGURED"
+            return False
+        legacy = _dpapi_protect(raw)
+        if legacy is None:
+            self.last_error = "STATE_ENCRYPT_FAILED"
+            return False
+        try:
+            if self.legacy_path.exists():
+                backup = self.legacy_path.with_name(self.legacy_path.name + ".before-secure")
+                if not backup.exists():
+                    backup.write_bytes(self.legacy_path.read_bytes())
+            self._write(self.legacy_path, self.MAGIC + legacy)
+        except OSError:
+            self.last_error = "STATE_WRITE_FAILED"
+            return False
+        self.last_format = "legacy-dpapi"
+        self.last_error = None
         return True
+
+    def load(self) -> BrowserSession | None:
+        if self.secure_path.is_file():
+            if not _secure_key_path():
+                self.last_error = "SECURE_KEY_NOT_CONFIGURED"
+                return None
+            try:
+                raw = self.secure_path.read_bytes()
+            except OSError:
+                self.last_error = "STATE_READ_FAILED"
+                return None
+            plain = _secure_unprotect_session(raw)
+            if plain is None:
+                self.last_error = _SECURE_PROVIDER_FAILURE or "STATE_DECRYPT_FAILED"
+                return None
+            session = self._parse(plain)
+            self.last_format = "secure-store" if session is not None else None
+            self.last_error = None if session is not None else "STATE_CORRUPT"
+            return session
+        if not self.legacy_path.is_file():
+            self.last_format = None
+            self.last_error = None
+            return None
+        if os.name != "nt":
+            # A legacy ciphertext on another platform is not proof that the
+            # user logged out.  Report the platform boundary instead.
+            self.last_error = "SECURE_LEGACY_UNAVAILABLE"
+            return None
+        try:
+            raw = self.legacy_path.read_bytes()
+            if not raw.startswith(self.MAGIC):
+                self.last_error = "STATE_CORRUPT"
+                return None
+            plain = _dpapi_unprotect(raw[len(self.MAGIC) :])
+            if plain is None:
+                self.last_error = "STATE_DECRYPT_FAILED"
+                return None
+            session = self._parse(plain)
+            self.last_format = "legacy-dpapi" if session is not None else None
+            self.last_error = None if session is not None else "STATE_CORRUPT"
+            return session
+        except (OSError, ValueError, TypeError):
+            self.last_error = "STATE_READ_FAILED"
+            return None
+
+    def clear(self) -> bool:
+        removed = False
+        for path in (self.secure_path, self.legacy_path):
+            if path.exists():
+                path.unlink()
+                removed = True
+        self.last_format = None
+        return removed
 
 
 def _is_authenticated_learning_page(url: str, html: str) -> bool:

@@ -8,9 +8,12 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import threading
 import time
 import uuid
+
+from . import paths
 
 
 class CampusError(RuntimeError):
@@ -19,6 +22,85 @@ class CampusError(RuntimeError):
         self.retry_after_ms = retry_after_ms
         self.model_evidence = model_evidence
         super().__init__(code)
+
+
+def _absolute_path(value: str, item: str) -> Path:
+    """Expand a configured path without following a key-file symlink."""
+    text = str(value).strip()
+    if not text or any(character in text for character in ("\x00", "\n", "\r")):
+        raise CampusError("SECURE_KEY_LOCATION" if item == "secure.key_file" else "PATH_INVALID")
+    expanded = Path(os.path.expandvars(os.path.expanduser(text)))
+    if not expanded.is_absolute():
+        raise CampusError("SECURE_KEY_LOCATION" if item == "secure.key_file" else "PATH_NOT_ABSOLUTE")
+    return expanded
+
+
+def gateway_environment(env: dict[str, str] | None = None) -> dict[str, str]:
+    """Return the child environment for the owned Node gateway.
+
+    The state directory and the secure-key location come from the frozen path
+    resolver and explicit environment slots.  A missing Linux key is left
+    missing so the first protected operation fails with a precise code; it is
+    never replaced with a plaintext path or an implicit key beside the data.
+    """
+    source = dict(os.environ if env is None else env)
+    defaults = paths.default_paths(env=source)
+    raw_state = (
+        source.get("OPENTHU_STATE_DIR")
+        or source.get("THU_ASSISTANT_STATE_DIR")
+        or str(defaults.state_dir)
+    )
+    state = _absolute_path(raw_state, "storage.state_dir")
+    result = dict(source)
+    result["OPENTHU_STATE_DIR"] = str(state)
+    result["THU_ASSISTANT_STATE_DIR"] = str(state)
+
+    data_dir = (
+        source.get("OPENTHU_SECURE_DATA_DIR")
+        or source.get("THU_SECURE_DATA_DIR")
+        or str(state)
+    )
+    data = _absolute_path(data_dir, "storage.state_dir")
+    result["OPENTHU_SECURE_DATA_DIR"] = str(data)
+    result["THU_SECURE_DATA_DIR"] = str(data)
+
+    configured_key = source.get("OPENTHU_SECURE_KEY_FILE") or source.get("THU_SECURE_KEY_FILE")
+    if configured_key:
+        key = _absolute_path(configured_key, "secure.key_file")
+        result["OPENTHU_SECURE_KEY_FILE"] = str(key)
+        result["THU_SECURE_KEY_FILE"] = str(key)
+    else:
+        default_key = defaults.config_file.parent / "keys" / "master.key"
+        if default_key.is_file():
+            result["OPENTHU_SECURE_KEY_FILE"] = str(default_key)
+            result["THU_SECURE_KEY_FILE"] = str(default_key)
+        else:
+            result.pop("OPENTHU_SECURE_KEY_FILE", None)
+            result.pop("THU_SECURE_KEY_FILE", None)
+
+    backend = source.get("OPENTHU_SECURE_BACKEND") or source.get("THU_SECURE_BACKEND")
+    if backend:
+        result["OPENTHU_SECURE_BACKEND"] = backend
+        result["THU_SECURE_BACKEND"] = backend
+
+    python = source.get("OPENTHU_PYTHON") or source.get("THU_PYTHON") or sys.executable
+    node = source.get("OPENTHU_NODE") or source.get("THU_NODE") or "node"
+    result["OPENTHU_PYTHON"] = str(python)
+    result["THU_PYTHON"] = str(python)
+    result["OPENTHU_NODE"] = str(node)
+    result["THU_NODE"] = str(node)
+
+    learn_dir = source.get("OPENTHU_LEARN_SESSION_DIR") or source.get("THU_LEARN_SESSION_DIR")
+    if not learn_dir:
+        if os.name == "nt":
+            base = source.get("LOCALAPPDATA") or source.get("APPDATA")
+            learn_dir = str(Path(base) / "LearnAssistant") if base else str(state / "LearnAssistant")
+        else:
+            learn_dir = str(state / "LearnAssistant")
+    result["OPENTHU_LEARN_SESSION_DIR"] = str(learn_dir)
+    result["THU_LEARN_SESSION_DIR"] = str(learn_dir)
+    result["THU_ACCESS_STATE_DIR"] = source.get("THU_ACCESS_STATE_DIR") or str(state / "THUAccess")
+    return result
 
 
 _control = ContextVar('gateway_control', default=(None, None))
@@ -45,7 +127,7 @@ class Pending:
 class GatewayClient:
     def __init__(self, argv=None, env=None):
         self.argv = argv or [os.environ.get('THU_NODE', 'node'), str(Path(__file__).with_name('gateway.js')), '--stdio']
-        self.env = env
+        self.env = gateway_environment() if env is None else env
         self.lock = threading.RLock()
         self.process = None
         self.pending = {}

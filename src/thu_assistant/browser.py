@@ -1,6 +1,5 @@
 from __future__ import annotations
 from datetime import datetime, timezone
-import base64
 import hashlib
 import json
 import re
@@ -105,11 +104,12 @@ class BrowserManager:
 
     def open(self, service_id=None, url=None, visible=True, via_webvpn=False):
         bootstrap = gateway('browser_state', **request_arguments(service_id,url,via_webvpn))
-        from learn_assistant.auth import _dpapi_unprotect
-        plain = _dpapi_unprotect(base64.b64decode(bootstrap['sealedState']))
-        if plain is None:
-            raise CampusError('BROWSER_SESSION_DECRYPT_FAILED')
-        state = json.loads(plain)
+        try:
+            state = gateway('unseal_browser_state', sealedState=bootstrap['sealedState'])['state']
+        except CampusError as error:
+            if error.code and (error.code.startswith('SECURE_') or error.code.startswith('STATE_')):
+                raise
+            raise CampusError('BROWSER_SESSION_DECRYPT_FAILED') from None
         validate_url(state['url'])
         if self.runtime is None:
             from playwright.sync_api import sync_playwright
@@ -124,7 +124,7 @@ class BrowserManager:
         sid = uuid.uuid4().hex
         session = {'browser':browser,'context':context,'page':page,'revision':0,'refs':{},'blocked':[],'responses':[],
                    'service_origin':state['serviceOrigin'],'sync_token':bootstrap['sealedState'],
-                   'account_id':state['account'],
+                   'account_id':state['account'],'session_id':sid,
                    'secrets':[c['value'] for c in state['cookies'] if len(c['value'])>=6]+state.get('redactions',[]), 'request_gate':None}
         self.sessions[sid] = session
         context.on('page',lambda new_page:session.update(page=new_page))
@@ -191,7 +191,6 @@ class BrowserManager:
 
     def _complete_sso(self,session):
         page=session['page'];context=session['context']
-        from learn_assistant.auth import _dpapi_unprotect
         for attempt in range(3):
             page=session['page']
             self._settle(page)
@@ -206,7 +205,7 @@ class BrowserManager:
             try:
                 if not self._persist_context(session):raise CampusError(session.get('persistence_error','BROWSER_STATE_NOT_SAVED'))
                 extra=gateway('browser_state',url=page.url,service_origin=session['service_origin'])
-                refreshed=json.loads(_dpapi_unprotect(base64.b64decode(extra['sealedState'])))
+                refreshed=gateway('unseal_browser_state',sealedState=extra['sealedState'])['state']
                 session['sync_token']=extra['sealedState']
                 context.add_cookies(refreshed['cookies'])
                 session['secrets']+=refreshed.get('redactions',[])
@@ -234,26 +233,30 @@ class BrowserManager:
     @staticmethod
     def _persist_context(s):
         try:
-            from learn_assistant.auth import _dpapi_protect
             stored=s['context'].storage_state()
             cookies=[c for c in stored['cookies'] if (c.get('domain','').lstrip('.')=='tsinghua.edu.cn' or c.get('domain','').endswith('.tsinghua.edu.cn'))]
             origins=[]
             for origin in stored['origins']:
                 try:validate_url(origin['origin']);origins.append(origin)
                 except CampusError:continue
-            protected=_dpapi_protect(json.dumps({'cookies':cookies,'origins':origins,'syncToken':s.get('sync_token')},ensure_ascii=False).encode())
-            if protected:
-                result=gateway('import_browser_state',sealedState=base64.b64encode(protected).decode())
-                s['sync_token']=result['syncToken']
-                s.pop('persistence_error',None)
-                return True
-            s['persistence_error']='STATE_ENCRYPT_FAILED'
+            # The owned gateway seals this state with the configured provider.
+            # No plaintext cookie is written to disk or returned as an MCP value.
+            result=gateway('import_browser_state',state={'cookies':cookies,'origins':origins,'syncToken':s.get('sync_token')})
+            s['sync_token']=result['syncToken']
+            s.pop('persistence_error',None)
+            return True
         except CampusError as error:s['persistence_error']=error.code
         except Exception:s['persistence_error']='BROWSER_STATE_SYNC_FAILED'
         return False
 
     def snapshot(self,session_id,offset=0,limit=24000):
         s = self._session(session_id)
+        if s.get('account_id'):
+            try:current=gateway('action_identity').get('account_id')
+            except CampusError:current=s.get('account_id')
+            if current and current!=s['account_id']:
+                self.close(session_id)
+                raise CampusError('STATE_ACCOUNT_MISMATCH')
         s['secrets'] += [c['value'] for c in s['context'].cookies() if len(c.get('value',''))>=6]
         for origin in s['context'].storage_state().get('origins',[]):
             s['secrets'] += [v['value'] for v in origin.get('localStorage',[]) if SECRET.search(v.get('name','')) and len(v.get('value',''))>=6]

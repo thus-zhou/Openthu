@@ -90,14 +90,14 @@ def test_mcp_rejects_unknown_or_malformed_calls_and_redacts_exception_messages()
 
 def test_browser_persistence_reports_errors_and_rotates_sync_token(monkeypatch):
     import thu_assistant.browser as module
-    import learn_assistant.auth as auth
     class Context:
         def storage_state(self):return {'cookies':[],'origins':[]}
     session={'context':Context(),'sync_token':'previous'}
-    monkeypatch.setattr(auth,'_dpapi_protect',lambda data:data)
     def success(command,**kwargs):
-        import base64
-        assert json.loads(base64.b64decode(kwargs['sealedState']))['syncToken']=='previous'
+        assert command=='import_browser_state'
+        assert kwargs['state']['syncToken']=='previous'
+        assert kwargs['state']['cookies']==[]
+        assert kwargs['state']['origins']==[]
         return {'syncToken':'next'}
     monkeypatch.setattr(module,'gateway',success)
     assert BrowserManager._persist_context(session)
@@ -107,6 +107,7 @@ def test_browser_persistence_reports_errors_and_rotates_sync_token(monkeypatch):
     assert not BrowserManager._persist_context(session)
     assert session['persistence_error']=='STATE_CONFLICT'
     assert session['sync_token']=='next'
-    monkeypatch.setattr(auth,'_dpapi_protect',lambda data:None)
+    def encrypt_failure(*a,**k):raise CampusError('STATE_ENCRYPT_FAILED')
+    monkeypatch.setattr(module,'gateway',encrypt_failure)
     assert not BrowserManager._persist_context(session)
     assert session['persistence_error']=='STATE_ENCRYPT_FAILED'

@@ -6,8 +6,6 @@ import json
 import os
 from pathlib import Path
 import sys
-import uuid
-from datetime import datetime, timezone
 
 provider = Path(os.environ.get('THU_LEARN_PROVIDER', str(Path(__file__).resolve().parents[2] / 'src')))
 sys.path.insert(0, str(provider))
@@ -25,20 +23,12 @@ def main():
         raise ValueError('authentication')
     courses = live.list_courses()
     store = SecureSessionStore()
-    store.path.parent.mkdir(parents=True, exist_ok=True)
-    temp = store.path.with_name(store.path.name + '.' + uuid.uuid4().hex + '.thu-access.tmp')
-    try:
-        if not SecureSessionStore(temp).save(session):
-            raise ValueError('dpapi')
-        # Preserve the prior encrypted session once; never export plaintext.
-        if store.path.exists():
-            backup = store.path.with_name(store.path.name + '.before-thu-access')
-            if not backup.exists():
-                backup.write_bytes(store.path.read_bytes())
-        os.replace(temp, store.path)
-    finally:
-        temp.unlink(missing_ok=True)
-    print(json.dumps({'persisted': True, 'protection': 'Windows DPAPI',
+    # SecureSessionStore writes atomically and verifies the new envelope; the
+    # previous encrypted file is retained beside it.
+    if not store.save(session):
+        raise ValueError(store.last_error or 'encryption')
+    print(json.dumps({'persisted': True, 'protection': store.protection,
+                      'format': store.last_format,
                       'freshProviderAuthenticated': True, 'courseCount': len(courses)}, ensure_ascii=False))
 
 if __name__ == '__main__':
