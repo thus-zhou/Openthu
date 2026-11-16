@@ -30,6 +30,8 @@ from .limits import MediaLimits
 from .registry import MediaReference, ReferenceRegistry, expiry_for, utc_now
 
 _MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+_SOURCE_ID = re.compile(r"^[a-z][a-z0-9_.-]{2,120}$")
+_CLEAN = re.compile(r"[\x00-\x1f\x7f]")
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$")
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
@@ -156,6 +158,7 @@ class ModelInputBroker:
         now: datetime | None = None,
     ) -> ModelAssetBundle:
         moment = now or self.clock()
+        self._prune(moment)
         if not isinstance(request_id, str) or not _REQUEST_ID.fullmatch(request_id):
             raise MediaInvalidArgument("request_id_format")
         if not isinstance(model_id, str) or not _MODEL_ID.fullmatch(model_id):
@@ -294,8 +297,22 @@ class ModelInputBroker:
         if bundle.state in ("PREPARED", "AUTHORIZED"):
             bundle.state = "CANCELLED"
 
+    def _prune(self, now: datetime) -> None:
+        """Drop finished bundles past their TTL; they are audit history, not state."""
+        expired = [
+            bundle_id
+            for bundle_id, bundle in self._bundles.items()
+            if bundle.state in ("CONSUMED", "CANCELLED")
+            and now >= bundle.expires_at
+        ]
+        for bundle_id in expired:
+            self._bundles.pop(bundle_id, None)
+
     def drop(self, bundle_id: object) -> None:
         self._bundles.pop(str(bundle_id), None)
+
+    def bundle_count(self) -> int:
+        return len(self._bundles)
 
     def active(self) -> list[str]:
         return [
@@ -332,6 +349,20 @@ def capability_report(
         "NONE", "OFFLINE_CONTRACT", "SYNTHETIC_TRANSPORT", "LIVE_READ", "UNKNOWN"
     ):
         raise MediaInvalidArgument("evidence_level")
+    if not isinstance(model_id, str) or not _MODEL_ID.fullmatch(model_id):
+        raise MediaInvalidArgument("model_id_format")
+    if not isinstance(source_id, str) or not _SOURCE_ID.fullmatch(source_id):
+        raise MediaInvalidArgument("source_id_format")
+    if catalog_support_image is not None and not isinstance(catalog_support_image, bool):
+        raise MediaInvalidArgument("catalog_support_image_type")
+    if not isinstance(synthetic, bool):
+        raise MediaInvalidArgument("synthetic_type")
+    if checked_at is not None and not isinstance(checked_at, datetime):
+        raise MediaInvalidArgument("checked_at_type")
+    if reason_code is not None:
+        reason_code = _CLEAN.sub("", str(reason_code))[:120] or None
+    if warning is not None:
+        warning = _CLEAN.sub("", str(warning))[:300] or None
     moment = checked_at or utc_now()
 
     if catalog_state == "NOT_LISTED":

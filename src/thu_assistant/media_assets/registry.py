@@ -40,11 +40,12 @@ ACCOUNT_DOMAINS = ("CAMPUS", "MODEL", "LOCAL", "SYSTEM", "UNKNOWN")
 SERVICE_DOMAINS = ("INFO", "LEARN", "LIBRARY", "SPORTS", "MADMODEL", "LOCAL", "UNKNOWN")
 
 _ID = re.compile(r"^media_[A-Za-z0-9_-]{8,64}$")
-_SCOPE = re.compile(r"^(?:none|acct_[A-Za-z0-9_-]{16,64})$")
+_SCOPE = re.compile(r"^acct_[A-Za-z0-9_-]{16,64}$")
 _TASK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$")
 _EVIDENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$")
 _HEX64 = re.compile(r"^[a-f0-9]{64}$")
 _MIME = re.compile(r"^[a-z0-9][a-z0-9.+-]+/[a-z0-9][a-z0-9.+-]+$")
+_FILE_NAME = re.compile(r"^media-[0-9a-f]{32}\.[A-Za-z0-9]{1,8}$")
 
 
 def utc_now() -> datetime:
@@ -56,8 +57,19 @@ def _iso(value: datetime | None) -> str | None:
 
 
 def validate_scope(value: object, *, name: str) -> str:
+    """A media scope must be a real account pseudonym.
+
+    ``none`` is 2.2's sentinel for "no account bound", never a media scope: two
+    callers using it would share one reference namespace.
+    """
     if not isinstance(value, str) or not _SCOPE.fullmatch(value):
         raise MediaInvalidArgument(f"{name}_format")
+    return value
+
+
+def validate_evidence(value: object) -> str:
+    if not isinstance(value, str) or not _EVIDENCE.fullmatch(value):
+        raise MediaInvalidArgument("source_evidence_id")
     return value
 
 
@@ -173,6 +185,9 @@ class MediaReference:
 
     @classmethod
     def from_state_entry(cls, payload: dict[str, Any], *, root: Path) -> "MediaReference":
+        file_name = str(payload["file_name"])
+        if not _FILE_NAME.fullmatch(file_name):
+            raise ValueError("file_name")
         source = payload.get("source") or {}
         return cls(
             media_id=str(payload["asset_id"]),
@@ -200,7 +215,7 @@ class MediaReference:
             display_name=str(source.get("display_name", "unnamed")),
             synthetic=bool(source.get("synthetic", False)),
             external_transfer_allowed=bool(payload.get("external_transfer_allowed")),
-            path=Path(root) / str(payload["file_name"]),
+            path=Path(root) / file_name,
             source_sha256=str(source.get("source_sha256", "")),
             source_mime=str(source.get("source_mime", "")),
             transform=dict(payload.get("transform") or {}),
@@ -435,6 +450,7 @@ __all__ = [
     "expiry_for",
     "utc_now",
     "validate_choice",
+    "validate_evidence",
     "validate_scope",
     "validate_task",
     "verify_bytes",

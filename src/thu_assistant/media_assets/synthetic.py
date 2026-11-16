@@ -186,7 +186,10 @@ def zip_document(entry: str = "word/document.xml") -> bytes:
 
 
 def executable_stub() -> bytes:
-    return b"MZ" + b"\x90" * 62 + b"PYTHON-SYNTHETIC-NOT-EXECUTED"
+    """A structurally plausible PE stub; never executed."""
+    header = bytearray(b"MZ" + b"\x90" * 62)
+    header[0x3C:0x40] = (0x80).to_bytes(4, "little")
+    return bytes(header) + b"\x00" * 64 + b"PE\x00\x00" + b"SYNTHETIC-NOT-EXECUTED"
 
 
 def plain_text() -> bytes:

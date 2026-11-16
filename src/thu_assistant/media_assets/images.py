@@ -19,7 +19,7 @@ The derived hash, not the original hash, identifies what later modules may send.
 from __future__ import annotations
 
 import io
-import threading
+import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Callable
@@ -39,7 +39,6 @@ ORIENTATION_TAG = 0x0112
 _ACCEPTED_FORMATS = {"image/jpeg": ("JPEG",), "image/png": ("PNG",), "image/webp": ("WEBP",)}
 _JPEG_MODES = {"1", "L", "RGB", "CMYK"}
 _METADATA_KEYS = ("exif", "icc_profile", "comment", "xmp", "xml", "photoshop", "dpi")
-_PILLOW_LOCK = threading.RLock()
 
 
 @dataclass(frozen=True)
@@ -67,18 +66,19 @@ class ImageResult:
 
 
 @contextmanager
-def _pillow_guard():
+def _pillow():
+    """Import Pillow without touching its process-wide bomb threshold.
+
+    The explicit pixel/side limits below are the authority. Pillow's own
+    ``DecompressionBombWarning`` is suppressed locally so an over-limit header
+    does not print, while ``DecompressionBombError`` still maps to our limit
+    error.
+    """
     try:
         from PIL import Image
     except ImportError:
         raise MediaDecoderUnavailable("pillow") from None
-    with _PILLOW_LOCK:
-        previous = Image.MAX_IMAGE_PIXELS
-        Image.MAX_IMAGE_PIXELS = None
-        try:
-            yield Image
-        finally:
-            Image.MAX_IMAGE_PIXELS = previous
+    yield Image
 
 
 def _check_cancel(cancel: Callable[[], bool] | None) -> None:
@@ -88,14 +88,16 @@ def _check_cancel(cancel: Callable[[], bool] | None) -> None:
 
 def _open_image(Image, data: bytes, mime_type: str):
     buffer = io.BytesIO(data)
-    try:
-        image = Image.open(buffer, formats=_ACCEPTED_FORMATS.get(mime_type))
-    except Image.UnidentifiedImageError:
-        raise MediaDecodeFailed("unidentified") from None
-    except Image.DecompressionBombError:
-        raise MediaResourceLimit("decode_bomb") from None
-    except (OSError, ValueError):
-        raise MediaDecodeFailed("header") from None
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+        try:
+            image = Image.open(buffer, formats=_ACCEPTED_FORMATS.get(mime_type))
+        except Image.UnidentifiedImageError:
+            raise MediaDecodeFailed("unidentified") from None
+        except Image.DecompressionBombError:
+            raise MediaResourceLimit("decode_bomb") from None
+        except (OSError, ValueError):
+            raise MediaDecodeFailed("header") from None
     if image.format is None or image.format.upper() not in (
         "JPEG", "PNG", "WEBP"
     ):
@@ -131,7 +133,9 @@ def _normalise_mode(Image, image, mime_type: str):
     return image
 
 
-def _encode(Image, image, mime_type: str, *, quality: int = 90) -> bytes:
+def _encode(
+    Image, image, mime_type: str, *, quality: int = 90, compress_level: int = 6
+) -> bytes:
     output = io.BytesIO()
     image.info = {}
     try:
@@ -139,7 +143,7 @@ def _encode(Image, image, mime_type: str, *, quality: int = 90) -> bytes:
             image.save(output, format="JPEG", quality=quality, optimize=False,
                        progressive=False)
         elif mime_type == "image/png":
-            image.save(output, format="PNG", compress_level=6)
+            image.save(output, format="PNG", compress_level=compress_level)
         else:
             image.save(output, format="WEBP", quality=90, method=4)
     except (OSError, ValueError):
@@ -163,7 +167,7 @@ def sanitize(
         raise MediaTypeUnsupported("image_mime")
 
     _check_cancel(cancel)
-    with _pillow_guard() as Image:
+    with _pillow() as Image:
         source = _open_image(Image, data, mime_type)
         try:
             width, height = _enforce_limits(source, limits)
@@ -221,6 +225,10 @@ def sanitize(
                     if len(encoded) <= limits.max_image_bytes:
                         break
                     encoded = _encode(Image, oriented, mime_type, quality=quality)
+            elif mime_type == "image/png" and len(encoded) > limits.max_image_bytes:
+                # A deeply optimised source can grow at level 6; retry harder
+                # before rejecting a file that already satisfied the input cap.
+                encoded = _encode(Image, oriented, mime_type, compress_level=9)
             oriented.close()
         finally:
             source.close()
@@ -262,14 +270,4 @@ def sanitize(
     )
 
 
-def describe_dimensions(data: bytes, *, mime_type: str) -> tuple[int, int]:
-    """Header-only dimension read used for diagnostics and tests."""
-    with _pillow_guard() as Image:
-        image = _open_image(Image, data, mime_type)
-        try:
-            return image.size
-        finally:
-            image.close()
-
-
-__all__ = ["ImageResult", "ORIENTATION_TAG", "describe_dimensions", "sanitize"]
+__all__ = ["ImageResult", "ORIENTATION_TAG", "sanitize"]

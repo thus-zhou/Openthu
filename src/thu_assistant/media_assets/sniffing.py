@@ -73,7 +73,6 @@ _MAGIC = (
     (b"\xff\xd8\xff", "image/jpeg"),
     (b"GIF87a", "image/gif"),
     (b"GIF89a", "image/gif"),
-    (b"BM", "image/bmp"),
     (b"%PDF-", "application/pdf"),
     (b"PK\x03\x04", "application/zip"),
     (b"PK\x05\x06", "application/zip"),
@@ -148,7 +147,13 @@ def detect(head: bytes) -> Detection:
     for magic, mime in _MAGIC:
         if head.startswith(magic):
             return Detection(mime, family_of(mime), "magic")
-    if len(head) >= 2 and head[0:2] == b"MZ":
+    if (
+        head[0:2] == b"MZ"
+        and len(head) >= 64
+        and 0 < int.from_bytes(head[0x3C:0x40], "little") < 0x1000
+    ):
+        # A two-byte "MZ" prefix also appears in ordinary text; require the
+        # DOS header's e_lfanew field to point at a plausible PE header.
         return Detection("application/x-msdownload", EXECUTABLE, "magic")
     if head[0:4] in (b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf"):
         return Detection("application/x-mach-binary", EXECUTABLE, "magic")

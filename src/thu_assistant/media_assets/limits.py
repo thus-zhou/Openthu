@@ -89,6 +89,15 @@ class MediaLimits:
         local list; an empty intersection is an input error, because a platform
         that accepts nothing here cannot receive local media.
         """
+        known = {
+            "max_bytes_per_image", "max_images_per_request",
+            "max_total_bytes_per_request", "max_pixels_per_image", "mime_types",
+            "stricter_platform_contract_wins",
+        }
+        unknown = sorted(set(platform) - known)
+        if unknown:
+            # A misspelt limit must not silently keep the looser local value.
+            raise ValueError(f"unknown platform limit {unknown[0]}")
         changes: dict[str, object] = {}
         numeric = {
             "max_bytes_per_image": "max_image_bytes",

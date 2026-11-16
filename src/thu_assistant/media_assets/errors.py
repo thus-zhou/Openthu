@@ -153,6 +153,10 @@ MediaReferenceConsumed = _define(
 MediaReferenceRevoked = _define(
     "MediaReferenceRevoked", "MEDIA_REFERENCE_REVOKED", "CONFLICT", False, "FIX_INPUT"
 )
+MediaTempInUse = _define(
+    "MediaTempInUse", "MEDIA_TEMP_IN_USE", "CONFLICT", False, "FIX_INPUT",
+    "Another live instance owns this controlled temporary root.",
+)
 
 # NOT_IMPLEMENTED: the decoder or transport is absent from this build.
 MediaDecoderUnavailable = _define(
@@ -171,6 +175,10 @@ MediaTempUnavailable = _define(
 )
 MediaWriteFailed = _define(
     "MediaWriteFailed", "MEDIA_WRITE_FAILED", "INTERNAL", False, "CONTACT_SUPPORT"
+)
+MediaReadFailed = _define(
+    "MediaReadFailed", "MEDIA_READ_FAILED", "INTERNAL", False, "CONTACT_SUPPORT",
+    "A local read failed after the file was opened and validated.",
 )
 MediaReferenceNotFound = _define(
     "MediaReferenceNotFound", "MEDIA_REFERENCE_NOT_FOUND", "INTERNAL", False, "CONTACT_SUPPORT"
@@ -209,6 +217,7 @@ __all__ = [
     "MediaNotRegularFile",
     "MediaPathInvalid",
     "MediaProcessingTimeout",
+    "MediaReadFailed",
     "MediaReferenceAccountMismatch",
     "MediaReferenceConsumed",
     "MediaReferenceCorrupt",
@@ -222,6 +231,7 @@ __all__ = [
     "MediaSizeLimit",
     "MediaSourceKindInvalid",
     "MediaStateUnavailable",
+    "MediaTempInUse",
     "MediaTempInsecure",
     "MediaTempUnavailable",
     "MediaTransferNotAuthorized",

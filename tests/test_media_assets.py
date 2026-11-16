@@ -30,7 +30,8 @@ import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
 from thu_assistant.media_assets import MediaAssets, MediaLimits
-from thu_assistant.media_assets import synthetic
+from thu_assistant.media_assets import boundary, sniffing, synthetic
+from thu_assistant.media_assets.boundary import sanitize_display_name
 from thu_assistant.media_assets.errors import (
     ERROR_CLASSES,
     MediaBundleLimit,
@@ -45,6 +46,7 @@ from thu_assistant.media_assets.errors import (
     MediaNotRegularFile,
     MediaPathInvalid,
     MediaProcessingTimeout,
+    MediaReadFailed,
     MediaReferenceAccountMismatch,
     MediaReferenceConsumed,
     MediaReferenceCorrupt,
@@ -57,6 +59,7 @@ from thu_assistant.media_assets.errors import (
     MediaSizeLimit,
     MediaSourceKindInvalid,
     MediaStateUnavailable,
+    MediaTempInUse,
     MediaTempInsecure,
     MediaTransferNotAuthorized,
     MediaTypeUnsupported,
@@ -130,6 +133,14 @@ def register_image(
         external_transfer_allowed=transfer,
         retention=retention,
     )
+
+
+LOCK_NAME = ".media-lock"
+
+
+def media_files(root: Path) -> list[Path]:
+    """Derived files, excluding the single-owner lock marker."""
+    return [item for item in root.iterdir() if item.name != LOCK_NAME]
 
 
 def png_file(sources: Path, name: str = "synthetic.png", data: bytes | None = None) -> Path:
@@ -303,7 +314,7 @@ def test_oversized_file_is_rejected_before_decode(assets, sources):
     )
     with pytest.raises(MediaSizeLimit):
         register_image(assets, path)
-    assert list(assets.temp.root.iterdir()) == []
+    assert media_files(assets.temp.root) == []
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits; Windows ACLs are covered by 2.2")
@@ -500,7 +511,7 @@ def test_small_file_with_huge_dimensions_fails_within_limits(assets, sources):
     assert path.stat().st_size < 4096
     with pytest.raises(MediaResourceLimit):
         register_image(assets, path)
-    assert list(assets.temp.root.iterdir()) == []
+    assert media_files(assets.temp.root) == []
 
 
 def test_pixel_limit_is_enforced_with_a_stricter_limit(tmp_path, sources):
@@ -783,7 +794,7 @@ def test_disk_full_leaves_no_half_product(tmp_path, sources):
     assets = MediaAssets(tmp_path / "temp", write_hook=failing_write)
     with pytest.raises(MediaWriteFailed):
         register_image(assets, png_file(sources))
-    assert list(assets.temp.root.iterdir()) == []
+    assert media_files(assets.temp.root) == []
     assert len(assets.registry) == 0
     assert assets.audit_report()["temp_writes"] == 0
 
@@ -805,7 +816,7 @@ def test_cancel_during_processing_leaves_nothing(assets, sources):
             external_transfer_allowed=True,
             cancel=cancel,
         )
-    assert list(assets.temp.root.iterdir()) == []
+    assert media_files(assets.temp.root) == []
     assert len(assets.registry) == 0
 
 
@@ -820,7 +831,7 @@ def test_processing_deadline_aborts_without_output(assets, sources):
             external_transfer_allowed=True,
             deadline=time.monotonic() - 1,
         )
-    assert list(assets.temp.root.iterdir()) == []
+    assert media_files(assets.temp.root) == []
     assert len(assets.registry) == 0
 
 
@@ -942,6 +953,8 @@ def test_encrypted_state_roundtrip_and_cross_account_rejection(tmp_path, sources
 
     assets = MediaAssets(root, state_store=store)
     reference = register_image(assets, png_file(sources), retention="EXPLICIT_DELETE")
+    record_id = assets.state_record_id(SCOPE)
+    assets.close()
 
     reloaded = MediaAssets(root, state_store=store)
     assert reloaded.restore_state(SCOPE) == 1
@@ -949,7 +962,7 @@ def test_encrypted_state_roundtrip_and_cross_account_rejection(tmp_path, sources
     assert hashlib.sha256(data).hexdigest() == reference.sha256
 
     stored = store.read_json(
-        f"media-{SCOPE}",
+        record_id,
         purpose="MEDIA",
         account_domain="CAMPUS",
         service_domain="LOCAL",
@@ -960,7 +973,7 @@ def test_encrypted_state_roundtrip_and_cross_account_rejection(tmp_path, sources
     assert "file_name" in payload
 
     with pytest.raises(MediaStateUnavailable):
-        MediaStateStore(store, record_id=f"media-{SCOPE}").load(account=OTHER_SCOPE)
+        MediaStateStore(store, record_id=record_id).load(account=OTHER_SCOPE)
 
 
 # ---------------------------------------------------------------------------
@@ -1009,14 +1022,14 @@ print(ref.media_id)
 
 def test_explicit_retention_survives_a_restart(tmp_path):
     _run_media_script(REGISTER_SCRIPT, str(tmp_path), "EXPLICIT_DELETE")
-    leftovers = [item for item in (tmp_path / "temp").iterdir()]
+    leftovers = media_files(tmp_path / "temp")
     assert len(leftovers) == 1
     assert leftovers[0].stat().st_size > 0
 
 
 def test_session_retention_is_removed_at_process_exit(tmp_path):
     _run_media_script(REGISTER_SCRIPT, str(tmp_path), "SESSION")
-    leftovers = list((tmp_path / "temp").iterdir())
+    leftovers = media_files(tmp_path / "temp")
     assert leftovers == []
 
 
@@ -1092,3 +1105,240 @@ def test_cleanup_removes_expired_reference_files(assets, sources, clock):
     report = assets.cleanup()
     assert report.removed == 1
     assert not reference.path.exists()
+
+
+# ---------------------------------------------------------------------------
+# audit regressions (P1/P2 from .local/audits/3.3-audit-20261117.md)
+# ---------------------------------------------------------------------------
+
+
+def test_scope_none_is_not_a_media_account(assets, sources):
+    """P1-1: 2.2's 'no account' sentinel must never bind a media scope."""
+    path = png_file(sources)
+    with pytest.raises(MediaInvalidArgument):
+        assets.register_user_file(path, account_scope="none", task_id=TASK)
+    assert media_files(assets.temp.root) == []
+    assert len(assets.registry) == 0
+
+
+def test_second_instance_cannot_own_the_same_temp_root(tmp_path, sources):
+    """P1-2: an unowned sweep could delete another instance's live files."""
+    root = tmp_path / "shared"
+    first = MediaAssets(root)
+    reference = register_image(first, png_file(sources), retention="EXPLICIT_DELETE")
+    with pytest.raises(MediaTempInUse):
+        MediaAssets(root)
+    assert reference.path.exists()
+    first.close()
+    second = MediaAssets(root)          # the lock is released on close
+    assert reference.path.exists()      # EXPLICIT_DELETE survives the owner exit
+    second.close()
+
+
+def test_state_record_id_is_scoped_to_the_controlled_root(tmp_path):
+    first = MediaAssets(tmp_path / "a")
+    second = MediaAssets(tmp_path / "b")
+    try:
+        assert first.state_record_id(SCOPE) != second.state_record_id(SCOPE)
+        assert first.state_record_id(SCOPE).startswith(f"media-{SCOPE}-")
+    finally:
+        first.close()
+        second.close()
+
+
+def test_media_assets_rejects_wrong_limit_or_clock_types(tmp_path):
+    with pytest.raises(MediaInvalidArgument):
+        MediaAssets(tmp_path / "t1", limits={"max_image_bytes": 1})  # type: ignore[arg-type]
+    with pytest.raises(MediaInvalidArgument):
+        MediaAssets(tmp_path / "t2", clock="now")  # type: ignore[arg-type]
+
+
+def test_body_read_failure_is_normalised_on_both_paths(tmp_path, sources):
+    """P2-1: a mid-read EIO must not escape as a bare OSError."""
+    image = synthetic.write_file(sources, "one.png", synthetic.png())
+    pdf = synthetic.write_file(sources, "one.pdf", synthetic.pdf_document())
+    real_read = boundary.os.read
+
+    def fail_after_head(fd, size):
+        if fail_after_head.calls:
+            raise OSError(errno.EIO, "simulated body failure")
+        fail_after_head.calls = 1
+        return real_read(fd, size)
+
+    for kind, path in (("IMAGE", image), ("ATTACHMENT", pdf)):
+        fail_after_head.calls = 0
+        boundary.os.read = fail_after_head
+        assets = MediaAssets(tmp_path / f"read-{kind}")
+        try:
+            with pytest.raises(MediaReadFailed):
+                if kind == "IMAGE":
+                    assets.register_user_file(path, account_scope=SCOPE, task_id=TASK)
+                else:
+                    assets.register_downloaded_attachment(
+                        path, kind="ATTACHMENT", account_scope=SCOPE, task_id=TASK
+                    )
+        finally:
+            boundary.os.read = real_read
+            assets.close()
+        assert media_files(tmp_path / f"read-{kind}") == []
+
+
+def test_cancel_after_the_derived_write_leaves_no_file(tmp_path, sources):
+    """P2-2: the post-write gate must discard the derived file."""
+    written = {"done": False}
+    real_write = os.write
+
+    def watching_write(fd, data):
+        count = real_write(fd, data)
+        written["done"] = True
+        return count
+
+    assets = MediaAssets(tmp_path / "temp", write_hook=watching_write)
+    with pytest.raises(MediaCancelled):
+        assets.register_user_file(
+            png_file(sources),
+            account_scope=SCOPE,
+            task_id=TASK,
+            purpose="MODEL_INPUT",
+            source_evidence_id=EVIDENCE,
+            external_transfer_allowed=True,
+            cancel=lambda: written["done"],
+        )
+    assert media_files(assets.temp.root) == []
+    assert len(assets.registry) == 0
+
+
+def test_capability_report_satisfies_its_contract(assets):
+    """P2-3: the public capability object must pass the frozen schema."""
+    schema = json.loads(
+        (ROOT / "contracts" / "v0.2" / "sources" / "data-models"
+         / "model-image-capability.schema.json").read_text("utf-8")
+    )
+    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    report = assets.capability(
+        model_id="synthetic-model-a",
+        catalog_state="LISTED",
+        catalog_support_image=True,
+        protocol_state="UNVERIFIED",
+        evidence_level="OFFLINE_CONTRACT",
+        warning="x" * 400,
+    )
+    assert len(report["warning"]) == 300
+    assert validator.is_valid(report), list(validator.iter_errors(report))
+    with pytest.raises(MediaInvalidArgument):
+        assets.capability(
+            model_id="bad id",
+            catalog_state="LISTED",
+            catalog_support_image=True,
+            protocol_state="UNVERIFIED",
+            evidence_level="OFFLINE_CONTRACT",
+        )
+
+
+def test_restore_rejects_path_traversal_and_counts_skips(tmp_path, sources):
+    """P2-4/P2-7: a persisted file name may not escape; skips are counted."""
+    from thu_assistant.secure_store import SecureStore, create_key_file, load_provider
+
+    backend = "windows-dpapi" if os.name == "nt" else "file-key"
+    key_path = tmp_path / "keys" / "master.key"
+    create_key_file(key_path, backend)
+    store = SecureStore(load_provider(key_path), tmp_path / "data")
+    root = tmp_path / "temp"
+    assets = MediaAssets(root, state_store=store)
+    record_id = assets.state_record_id(SCOPE)
+    base_entry = {
+        "asset_id": "media_" + "a" * 24,
+        "kind": "IMAGE",
+        "mime_type": "image/png",
+        "byte_size": 10,
+        "sha256": "0" * 64,
+        "width": 1,
+        "height": 1,
+        "pixel_count": 1,
+        "created_at": "2026-11-16T12:00:00+00:00",
+        "expires_at": None,
+        "retention": "EXPLICIT_DELETE",
+        "account_scope": SCOPE,
+        "purpose": "USER_REVIEW",
+        "account_domain": "CAMPUS",
+        "service_domain": "LOCAL",
+        "task_id": TASK,
+        "file_name": "../../escape.png",
+        "source": {
+            "kind": "USER_SELECTED", "source_evidence_id": EVIDENCE,
+            "display_name": "e.png", "synthetic": False,
+            "source_sha256": "0" * 64, "source_mime": "image/png",
+        },
+        "transform": {},
+        "state": "ACTIVE",
+        "uses": 0,
+    }
+    store.write_json(
+        record_id, {"version": 1, "entries": [base_entry]},
+        purpose="MEDIA", account_domain="CAMPUS", service_domain="LOCAL", account=SCOPE,
+    )
+    assert assets.restore_state(SCOPE) == 0
+    assert assets.audit_report()["state_skipped"] == 1
+
+
+def test_image_sanitising_keeps_pillows_global_limit(assets, sources):
+    """P2-5: the module must not relax a process-wide Pillow threshold."""
+    from PIL import Image
+
+    before = Image.MAX_IMAGE_PIXELS
+    register_image(assets, png_file(sources))
+    assert Image.MAX_IMAGE_PIXELS == before
+
+
+def test_limits_match_the_frozen_contract():
+    schema = json.loads((ROOT / "contracts" / "v0.2" / "media-reference.schema.json").read_text("utf-8"))
+    published = schema["x-image-limits"]
+    limits = MediaLimits()
+    assert limits.max_image_bytes == published["max_bytes_per_image"]
+    assert limits.max_images_per_request == published["max_images_per_request"]
+    assert limits.max_total_image_bytes == published["max_total_bytes_per_request"]
+    assert limits.max_pixels_per_image == published["max_pixels_per_image"]
+    assert list(limits.image_mime_types) == list(published["mime_types"])
+
+
+def test_stricter_limits_reject_unknown_keys_and_accept_the_contract_shape():
+    schema = json.loads((ROOT / "contracts" / "v0.2" / "media-reference.schema.json").read_text("utf-8"))
+    assert MediaLimits().stricter(schema["x-image-limits"]).max_image_bytes == 8388608
+    with pytest.raises(ValueError):
+        MediaLimits().stricter({"max_bytes_per_images": 1024})
+
+
+def test_source_evidence_id_rejects_control_characters(assets, sources):
+    with pytest.raises(MediaInvalidArgument):
+        assets.register_user_file(
+            png_file(sources), account_scope=SCOPE, task_id=TASK,
+            source_evidence_id="line\nbreak",
+        )
+
+
+def test_display_name_strips_bidi_overrides():
+    assert "\u202e" not in sanitize_display_name("photo\u202egnp.exe")
+    assert sanitize_display_name("photo\u202egnp.exe").endswith(".exe")
+
+
+def test_text_that_merely_starts_with_mz_or_bm_is_not_magic():
+    assert sniffing.detect(b"MZ is a magazine, issue 3").family != "EXECUTABLE"
+    assert sniffing.detect(b"BMW owner manual").family != "IMAGE"
+    assert sniffing.detect(synthetic.executable_stub()).family == "EXECUTABLE"
+
+
+def test_finished_bundles_are_pruned_after_their_ttl(assets, sources, clock):
+    reference = register_image(assets, png_file(sources), clock=clock)
+    bundle = assets.prepare_model_bundle(
+        [reference.media_id], account_scope=SCOPE, task_id=TASK,
+        request_id="req-synthetic-1", model_id="synthetic-model-a",
+    )
+    grant = assets.authorize_model_send(bundle.bundle_id, request_id="req-synthetic-1")
+    assets.consume_model_bundle(grant, request_id="req-synthetic-1")
+    assert assets.broker.bundle_count() == 1
+    clock.advance(seconds=301)
+    assets.prepare_model_bundle(
+        [reference.media_id], account_scope=SCOPE, task_id=TASK,
+        request_id="req-synthetic-2", model_id="synthetic-model-a",
+    )
+    assert assets.broker.bundle_count() == 1

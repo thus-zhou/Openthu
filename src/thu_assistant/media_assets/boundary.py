@@ -38,7 +38,9 @@ from .errors import (
 URL_LIKE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
 CHUNK_SIZE = 1024 * 1024
 HEAD_SIZE = 4096
-_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_CONTROL = re.compile(
+    r"[\x00-\x1f\x7f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]"
+)
 
 
 def validate_local_path(value: object) -> Path:
@@ -253,17 +255,11 @@ def ensure_within(base: Path, candidate: Path) -> Path:
     return resolved
 
 
-def hash_file(path: Path, *, max_bytes: int) -> tuple[int, str]:
-    with open_verified(path, max_bytes=max_bytes) as handle:
-        return handle.copy_to(lambda chunk: None)
-
-
 __all__ = [
     "CHUNK_SIZE",
     "HEAD_SIZE",
     "VerifiedFile",
     "ensure_within",
-    "hash_file",
     "open_verified",
     "sanitize_display_name",
     "validate_local_path",

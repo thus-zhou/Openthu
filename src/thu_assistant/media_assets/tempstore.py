@@ -25,9 +25,10 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from .boundary import ensure_within
-from .errors import MediaTempInsecure, MediaTempUnavailable, MediaWriteFailed
+from .errors import MediaTempInUse, MediaTempInsecure, MediaTempUnavailable, MediaWriteFailed
 
 NAME_PATTERN = re.compile(r"^media-[0-9a-f]{32}(\.[A-Za-z0-9]{1,8})?(\.part)?$")
+LOCK_NAME = ".media-lock"
 ALLOWED_SUFFIXES = {
     ".png", ".jpg", ".webp", ".pdf", ".zip", ".gz", ".json", ".csv",
     ".txt", ".md", ".docx", ".pptx", ".xlsx", ".bin",
@@ -82,6 +83,57 @@ def _is_reparse(st: os.stat_result) -> bool:
     )
 
 
+def _lock_root(root: Path) -> int:
+    """Take a non-blocking exclusive lock that marks this root's single owner.
+
+    ``flock`` and ``msvcrt.locking`` conflict per open file description, so this
+    also refuses a second instance inside the same process. A second owner must
+    not sweep files it does not track.
+    """
+    path = root / LOCK_NAME
+    flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_BINARY", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError:
+        raise MediaTempUnavailable("lock_create") from None
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            if os.fstat(fd).st_size == 0:
+                os.write(fd, b"0")
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        raise MediaTempInUse("root") from None
+    return fd
+
+
+def _unlock_root(fd: int) -> None:
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    except OSError:
+        pass
+    try:
+        os.close(fd)
+    except OSError:
+        pass
+
+
 def _fsync_directory(path: Path) -> None:
     if os.name == "nt":
         return
@@ -115,6 +167,7 @@ class TempArea:
     ) -> None:
         self.root = self._prepare_root(root)
         self._write_hook = write_hook or os.write
+        self._lock_fd: int | None = _lock_root(self.root)
         self.keep_provider: Callable[[], set[Path]] | None = None
         self._files: set[Path] = set()
         self._persistent: set[Path] = set()
@@ -321,8 +374,13 @@ class TempArea:
                 keep = self.keep_provider() if self.keep_provider else ()
             except Exception:
                 keep = ()
-        report = self.sweep(keep=keep)
-        self._closed = True
+        try:
+            report = self.sweep(keep=keep)
+        finally:
+            self._closed = True
+            if self._lock_fd is not None:
+                _unlock_root(self._lock_fd)
+                self._lock_fd = None
         return report
 
     def contains(self, path: Path) -> bool:

@@ -22,6 +22,7 @@ from .boundary import ensure_within, open_verified, sanitize_display_name
 from .errors import (
     MediaCancelled,
     MediaError,
+    MediaReadFailed,
     MediaInvalidArgument,
     MediaProcessingTimeout,
     MediaReferenceCorrupt,
@@ -47,6 +48,7 @@ from .registry import (
     expiry_for,
     utc_now,
     validate_choice,
+    validate_evidence,
     validate_scope,
     validate_task,
     verify_bytes,
@@ -76,6 +78,7 @@ class MediaAudit:
 
     source_reads: int = 0
     network_attempts: int = 0
+    state_skipped: int = 0
 
     def as_dict(self, *, temp: TempArea, references: int) -> dict[str, int]:
         return {
@@ -83,6 +86,7 @@ class MediaAudit:
             "temp_writes": temp.written,
             "temp_deletes": temp.deleted,
             "network_attempts": self.network_attempts,
+            "state_skipped": self.state_skipped,
             "references": references,
         }
 
@@ -99,11 +103,23 @@ class MediaAssets:
         state_store: Any = None,
         write_hook: Callable[[int, bytes], int] | None = None,
     ) -> None:
+        if limits is not None and not isinstance(limits, MediaLimits):
+            raise MediaInvalidArgument("limits_type")
+        if not callable(clock):
+            raise MediaInvalidArgument("clock_type")
+        if state_store is not None and not (
+            hasattr(state_store, "write_json") and hasattr(state_store, "read_json")
+        ):
+            raise MediaInvalidArgument("state_store_type")
         self.limits = limits or DEFAULT_LIMITS
         self.clock = clock
         self.temp = TempArea(temp_root, write_hook=write_hook)
         self.registry = ReferenceRegistry()
-        self.temp.keep_provider = lambda: self.registry.close_keep_paths(self.clock())
+        # Capture the registry and clock, not ``self``: the temporary area must
+        # not keep its owner alive through a reference cycle, or a Windows test
+        # or CLI could hold the root lock until a full garbage collection.
+        registry, clock = self.registry, self.clock
+        self.temp.keep_provider = lambda: registry.close_keep_paths(clock())
         self.broker = ModelInputBroker(self.registry, self.limits, clock=clock)
         self.audit = MediaAudit()
         self.state_store = state_store
@@ -151,10 +167,7 @@ class MediaAssets:
         validate_choice(retention, name="retention", choices=RETENTIONS)
         validate_scope(account_scope, name="account_scope")
         validate_task(task_id)
-        if not isinstance(source_evidence_id, str) or not (
-            1 <= len(source_evidence_id) <= 120
-        ):
-            raise MediaInvalidArgument("source_evidence_id")
+        validate_evidence(source_evidence_id)
         if not isinstance(external_transfer_allowed, bool):
             raise MediaInvalidArgument("external_transfer_allowed")
         if not isinstance(synthetic, bool):
@@ -187,7 +200,10 @@ class MediaAssets:
             gate()
 
             if kind == "IMAGE":
-                original = handle.read_all()
+                try:
+                    original = handle.read_all()
+                except OSError:
+                    raise MediaReadFailed("io") from None
                 self.audit.source_reads += 1
                 source_sha256 = hashlib.sha256(original).hexdigest()
                 gate()
@@ -219,9 +235,13 @@ class MediaAssets:
                             gate()
                         yield chunk
 
-                stored = self.temp.write_stream(
-                    chunks(), suffix=_SUFFIX_BY_MIME.get(mime_type, ".bin")
-                )
+                try:
+                    stored = self.temp.write_stream(
+                        chunks(), suffix=_SUFFIX_BY_MIME.get(mime_type, ".bin")
+                    )
+                except OSError:
+                    # A body read failed mid-stream; write_stream removed its part.
+                    raise MediaReadFailed("io") from None
                 self.audit.source_reads += 1
                 source_sha256 = hasher.hexdigest()
                 byte_size = stored.byte_size
@@ -235,39 +255,39 @@ class MediaAssets:
                 }
                 served_mime = mime_type
 
-        gate()
-        reference = MediaReference(
-            media_id="media_" + os.urandom(12).hex(),
-            kind=kind,
-            mime_type=served_mime,
-            byte_size=byte_size,
-            sha256=sha256,
-            width=width,
-            height=height,
-            pixel_count=pixel_count,
-            source_evidence_id=source_evidence_id,
-            account_domain=account_domain,
-            service_domain=service_domain,
-            account_scope=account_scope,
-            task_id=task_id,
-            purpose=purpose,
-            source_kind=source_kind,
-            created_at=moment,
-            expires_at=expires_at,
-            retention=retention,
-            display_name=sanitize_display_name(
-                display_name if display_name is not None else Path(source_name).name
-            ),
-            synthetic=synthetic,
-            external_transfer_allowed=external_transfer_allowed,
-            path=stored.path,
-            source_sha256=source_sha256,
-            source_mime=mime_type,
-            transform=transform,
-        )
-        if retention == "PROJECT_CACHE":
-            self.temp.mark_persistent(stored.path)
         try:
+            gate()
+            reference = MediaReference(
+                media_id="media_" + os.urandom(12).hex(),
+                kind=kind,
+                mime_type=served_mime,
+                byte_size=byte_size,
+                sha256=sha256,
+                width=width,
+                height=height,
+                pixel_count=pixel_count,
+                source_evidence_id=source_evidence_id,
+                account_domain=account_domain,
+                service_domain=service_domain,
+                account_scope=account_scope,
+                task_id=task_id,
+                purpose=purpose,
+                source_kind=source_kind,
+                created_at=moment,
+                expires_at=expires_at,
+                retention=retention,
+                synthetic=synthetic,
+                external_transfer_allowed=external_transfer_allowed,
+                path=stored.path,
+                source_sha256=source_sha256,
+                source_mime=mime_type,
+                transform=transform,
+                display_name=sanitize_display_name(
+                    display_name if display_name is not None else Path(source_name).name
+                ),
+            )
+            if retention == "PROJECT_CACHE":
+                self.temp.mark_persistent(stored.path)
             self.registry.add(reference)
         except BaseException:
             self.temp.discard(stored.path)
@@ -534,10 +554,18 @@ class MediaAssets:
         return self.audit.as_dict(temp=self.temp, references=len(self.registry))
 
     # -- optional encrypted state -------------------------------------
+    def state_record_id(self, account_scope: str) -> str:
+        """Stable encrypted record id for one account and one controlled root."""
+        validate_scope(account_scope, name="account_scope")
+        digest = hashlib.sha256(
+            str(self.temp.root.resolve()).encode("utf-8")
+        ).hexdigest()[:12]
+        return f"media-{account_scope}-{digest}"
+
     def _state_for(self, account_scope: str) -> MediaStateStore:
         return MediaStateStore(
             self.state_store,
-            record_id=f"media-{account_scope}",
+            record_id=self.state_record_id(account_scope),
             account_domain="CAMPUS",
             service_domain="LOCAL",
         )
@@ -562,11 +590,15 @@ class MediaAssets:
             try:
                 reference = MediaReference.from_state_entry(entry, root=self.temp.root)
             except (KeyError, TypeError, ValueError):
+                self.audit.state_skipped += 1
                 continue
             if reference.account_scope != account_scope:
+                self.audit.state_skipped += 1
                 continue
             if self.registry.restore(reference):
                 restored += 1
+            else:
+                self.audit.state_skipped += 1
         return restored
 
 
