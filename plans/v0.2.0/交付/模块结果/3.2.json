@@ -88,6 +88,17 @@
       "runs": [43933004147, 43932991662],
       "note": "Head d897ccc contains the 3.2 delivery and record commits plus the 3.3 delivery commit."
     },
+    "joint_batch_tree": {
+      "head_sha": "dc5edea",
+      "python_passed": 608,
+      "python_skipped": 5,
+      "python_failed": 0,
+      "node_passed": 64,
+      "node_failed": 0,
+      "check_files": 400,
+      "check_findings": 0,
+      "note": "3.1 + 3.2 + 3.3 joint tree; not the official batch integration record."
+    },
     "live_campus_calls": 0,
     "model_calls": 0,
     "business_submissions": 0
