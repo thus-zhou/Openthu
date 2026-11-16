@@ -65,6 +65,9 @@ def smoke(env: dict[str, str]):
 
 
 def main():
+    for stream in (sys.stdout,sys.stderr):
+        if hasattr(stream,'reconfigure'):
+            stream.reconfigure(encoding='utf-8',errors='replace')
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command',choices=['setup-node','check','smoke','test'])
     parser.add_argument('--python-only',action='store_true')

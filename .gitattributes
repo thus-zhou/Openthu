@@ -3,3 +3,5 @@
 *.png binary
 *.zip binary
 *.gz binary
+src/learn_assistant/vendor/thu-learn-lib/* -text
+vendor/madmodel-proxy/** -text
