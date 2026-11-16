@@ -108,7 +108,12 @@ def _atomic_write(path: Path, data: bytes) -> None:
     created = False
     try:
         fd = os.open(
-            temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+            temporary,
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | getattr(os, "O_BINARY", 0),
+            0o600,
         )
         created = True
         try:
