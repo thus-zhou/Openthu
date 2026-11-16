@@ -22,6 +22,14 @@ def diagnostics_module():
     return dev_diagnostics
 
 
+def configuration_module():
+    src_dir = str(ROOT / 'src')
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
+    import thu_assistant.configuration
+    return thu_assistant.configuration
+
+
 def environment(state: Path) -> dict[str, str]:
     env = os.environ.copy()
     for key in list(env):
@@ -81,27 +89,34 @@ def main():
     parser.add_argument('--python-only',action='store_true')
     parser.add_argument('--node-only',action='store_true')
     parser.add_argument('--json',action='store_true',help='machine-readable diagnostics for doctor')
+    parser.add_argument('--config',metavar='PATH',help='explicit configuration file')
     args=parser.parse_args()
     if args.command=='doctor':
         module=diagnostics_module()
-        report=module.collect()
+        report=module.collect(config_file=args.config)
         if args.json:
             print(json.dumps(report,ensure_ascii=False,indent=2))
         else:
             print(module.format_report(report))
         return 0 if report['ok'] else 1
     if args.command=='setup-node':
+        config_module=configuration_module()
+        try:
+            config=config_module.load_config(config_file=args.config)
+        except config_module.ConfigurationError as error:
+            print(f'配置无效：{error.item}（{error.code}）',file=sys.stderr)
+            return 1
         npm=shutil.which('npm.cmd' if os.name=='nt' else 'npm')
         if not npm:
             parser.error('Node.js 24 and npm are required; install Node.js 24 from https://nodejs.org/ and retry')
-        registry=os.environ.get('OPENTHU_NPM_REGISTRY','https://registry.npmjs.org')
+        registry=config.network.npm_registry
         return subprocess.call([npm,'ci','--ignore-scripts','--no-audit','--no-fund','--registry='+registry],cwd=ROOT/'src/thu_assistant')
     with tempfile.TemporaryDirectory(prefix='openthu-offline-') as tmp:
         env=environment(Path(tmp))
         if args.command in ('check','smoke'):
             if args.command=='check':
                 module=diagnostics_module()
-                report=module.collect()
+                report=module.collect(config_file=args.config)
                 if not report['ok']:
                     print(module.format_report(report),file=sys.stderr)
                     return 1

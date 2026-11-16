@@ -31,9 +31,21 @@ python scripts/dev.py test
 
 ## 首次安装诊断
 
-安装依赖后先运行 `python scripts/dev.py doctor`。它逐项检查 Python 版本与虚拟环境、Python 开发包、Node.js/npm、`src/thu_assistant/package-lock.json` 固定的运行依赖、Playwright Chromium、Windows 生产认证条件和源码包完整性；缺失项会给出可直接执行的修复命令。
+安装依赖后先运行 `python scripts/dev.py doctor`。它按 `development`、`readonly`、`browser`、`production-auth`、`packaging` 和 `config` 分类检查 Python 版本与虚拟环境、开发包、Node.js/npm、`src/thu_assistant/package-lock.json` 固定的运行依赖、只读服务目录、Playwright Chromium、Windows 生产认证条件、源码包布局和配置；每项给出可执行修复命令。
 
-诊断默认输出只包含仓库相对名称、版本、状态和修复命令，不含绝对路径、主机名、账号或凭据，可直接贴到公开 Issue。`python scripts/dev.py doctor --json` 提供机器可读结果。`python scripts/dev.py check` 会先运行同一诊断，再执行隐私扫描、源码编译和 MCP 冒烟检查。
+条目状态为“通过 / 警告 / 失败 / 不适用”。失败条目只有标记为阻塞时才阻止开始；Linux 上 Windows 生产认证为“不适用”，缺少 Chromium 只影响浏览器能力，不把合法离线安装误判为损坏。Python 最低版本取自 `pyproject.toml`，已验证版本不是唯一可用版本。
+
+诊断默认输出只包含逻辑检查项、脱敏版本、仓库相对资源名、状态和修复命令，不含绝对路径、主机名、账号、凭据或命令原始输出，可直接贴到公开 Issue。`python scripts/dev.py doctor --json` 提供机器可读结果；`python scripts/dev.py check` 会先运行同一诊断，再执行隐私扫描、源码编译和 MCP 冒烟检查。显式配置无效时使用 `--config PATH` 重新指定，不会静默回退到旧目录或另一账号。
+
+## 配置与路径
+
+配置优先级固定为：命令行明确参数、`OPENTHU_*` 环境变量、本机 JSON 配置文件、安全默认值。不同来源不隐式合并秘密；秘密只能由具体模块通过 `Configuration.read_secret()` 从 `OPENTHU_SECRET_<NAME>` 读取，不进入配置文件或公开序列化结果。
+
+默认配置文件位于各平台的应用配置目录（Windows 为 `%APPDATA%\Openthu\config.json`，Linux 为 `$XDG_CONFIG_HOME/openthu/config.json`）。可用 `--config PATH` 或 `OPENTHU_CONFIG_FILE` 指定；显式指定但不可读会报错，不会改用其他文件。示例见 [`configs/openthu.example.json`](configs/openthu.example.json)。
+
+常用环境变量包括 `OPENTHU_STATE_DIR`、`OPENTHU_DOWNLOAD_DIR`、`OPENTHU_TEMP_DIR`、`OPENTHU_LOG_DIR`、`OPENTHU_NODE`、`OPENTHU_PYTHON`、`OPENTHU_NPM_REGISTRY`、`OPENTHU_LISTEN_HOST`、`OPENTHU_LISTEN_PORT`、`OPENTHU_PAGE_SIZE` 和 `OPENTHU_REFRESH_SECONDS`。旧调用者的 `THU_ASSISTANT_STATE_DIR`、`THU_NODE`、`THU_PYTHON` 仍作为低优先级别名可用；规范化环境变量优先。
+
+状态、下载、临时和日志目录必须是绝对路径，支持 `~` 展开并会规范化。默认状态目录在代码库之外；用户自选位置不得指向源码包、程序资源、`.git` 或密钥子目录，相对路径会被拒绝。状态目录迁移只提供预览和目标，本版本不搬移任何真实会话或凭据。配置对象公开摘要只含来源标签和安全的非路径值。
 
 ## 获取方式与能力边界
 

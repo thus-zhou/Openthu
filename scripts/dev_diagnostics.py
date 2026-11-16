@@ -1,9 +1,14 @@
-"""First-run dependency diagnostics for an Openthu development checkout.
+"""First-run dependency, configuration and capability diagnostics.
 
-The report is intended to be safe in a public issue: it contains repository-
-relative names, tool versions, status codes and fix commands only.  Absolute
-paths, host names, account identifiers and credential values never enter the
-report.
+The report is safe to paste into a public issue.  It contains logical check
+ids, status classes, sanitized version strings, repository-relative resource
+names and fix commands.  Absolute paths, host names, account identifiers,
+command output and credential values never enter the report.
+
+Statuses are ``pass``, ``warning``, ``fail`` and ``not_applicable``.  A
+``fail`` blocks only when its ``blocking`` flag is true; production-auth and
+browser capabilities can therefore be unavailable without pretending that a
+valid offline development installation is broken.
 """
 from __future__ import annotations
 
@@ -11,18 +16,27 @@ import argparse
 import importlib.metadata
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+_SRC = ROOT / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
+from thu_assistant import configuration as configuration_module  # noqa: E402
+from thu_assistant import paths as path_resolver  # noqa: E402
 
 MIN_PYTHON = (3, 10)
 VALIDATED_PYTHON = (3, 12)
 MIN_NODE = 24
 DEV_PACKAGES = ("pytest", "requests", "playwright", "build", "openthu")
 PINNED_NODE_PACKAGE = "tough-cookie"
+MAX_DIAGNOSTIC_OUTPUT = 4096
 
 FIX_PYTHON = (
     "安装 Python 3.12（最低 3.10），在项目目录运行 python -m venv .venv，"
@@ -41,32 +55,78 @@ FIX_WINDOWS_AUTH = (
     "真实登录请在 Windows 完整源码包中运行；"
     "云端不要用明文凭据替代 Windows DPAPI。"
 )
+FIX_CONFIG = "检查配置项名称和类型；显式配置无效时不会回退到旧目录或另一账号。"
+
+_VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
+
+
+def _safe_version(text):
+    """Return ``major.minor.patch`` only; never echo arbitrary command output."""
+    if text is None:
+        return None
+    lines = str(text).splitlines()
+    first = lines[0].strip()[:80] if lines else ""
+    match = _VERSION_RE.fullmatch(first)
+    return ".".join(match.groups()) if match else None
 
 
 def _version_tuple(text):
-    parts = str(text).strip().lstrip("vV").split(".")
-    values = []
-    for part in parts[:3]:
-        digits = "".join(ch for ch in part if ch.isdigit())
-        values.append(int(digits) if digits else 0)
-    return tuple(values)
+    safe = _safe_version(text)
+    if safe is None:
+        return ()
+    return tuple(int(part) for part in safe.split("."))
 
 
 def _command_version(path):
+    """Run one executable with a fixed argument and bounded output.
+
+    The caller supplies a resolved executable path; no fix string, shell or
+    user-provided argument is executed.  A reader stops after the output cap
+    and the process is killed on timeout, so a noisy or hostile executable
+    cannot flood this process.  Raw output never reaches the report: only a
+    validated version string survives.
+    """
     try:
-        result = subprocess.run(
-            [path, "--version"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
+        process = subprocess.Popen(
+            [str(path), "--version"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=False,
         )
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, ValueError):
         return None
-    if result.returncode != 0:
+    captured = bytearray()
+
+    def read_output():
+        assert process.stdout is not None
+        while len(captured) <= MAX_DIAGNOSTIC_OUTPUT:
+            chunk = process.stdout.read(1024)
+            if not chunk:
+                break
+            captured.extend(chunk)
+
+    reader = threading.Thread(target=read_output, daemon=True)
+    reader.start()
+    try:
+        process.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        try:
+            process.kill()
+            process.wait(timeout=2)
+        except (OSError, subprocess.SubprocessError):
+            pass
         return None
-    output = (result.stdout or "").strip() or (result.stderr or "").strip()
-    return output.splitlines()[0].strip() if output else None
+    finally:
+        if process.stdout is not None:
+            try:
+                process.stdout.close()
+            except OSError:
+                pass
+    reader.join(timeout=2)
+    if process.returncode != 0 or len(captured) > MAX_DIAGNOSTIC_OUTPUT:
+        return None
+    output = captured.decode("utf-8", errors="replace").strip()
+    return _safe_version(output)
 
 
 def _distribution_version(name):
@@ -89,143 +149,262 @@ def _browser_available():
 
 def _read_json(path):
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    return value if isinstance(value, dict) else None
 
 
-def _row(check_id, label, status, detail, fix=None, required=True):
-    row = {"id": check_id, "label": label, "status": status, "detail": detail}
-    if fix:
-        row["fix"] = fix
-    if not required:
-        row["required"] = False
-    return row
+def _declared_python(root: Path):
+    try:
+        text = (root / "pyproject.toml").read_text(encoding="utf-8")
+    except OSError:
+        return MIN_PYTHON
+    match = re.search(r'requires-python\s*=\s*["\']\s*>=\s*(\d+)\.(\d+)', text)
+    return (int(match.group(1)), int(match.group(2))) if match else MIN_PYTHON
 
 
-def _node_runtime(root):
-    package_dir = root / "src" / "thu_assistant"
+def _row(
+    check_id,
+    label,
+    capability,
+    status,
+    reason,
+    *,
+    available_version=None,
+    fix=None,
+    blocking=False,
+):
+    return {
+        "id": check_id,
+        "label": label,
+        "capability": capability,
+        "status": status,
+        "available_version": available_version,
+        "reason": reason,
+        "fix": fix,
+        "blocking": bool(blocking),
+    }
+
+
+def _node_runtime(package_dir: Path):
     lock = _read_json(package_dir / "package-lock.json")
-    if lock is None:
+    if not isinstance(lock, dict):
         return _row(
             "node-runtime",
             "锁文件运行依赖",
-            "missing",
+            "development",
+            "fail",
             "找不到 src/thu_assistant/package-lock.json",
-            FIX_SOURCE,
+            fix=FIX_SOURCE,
+            blocking=True,
         )
     packages = lock.get("packages") if isinstance(lock.get("packages"), dict) else {}
     entry = packages.get("node_modules/" + PINNED_NODE_PACKAGE)
     pinned = entry.get("version") if isinstance(entry, dict) else None
     if not pinned:
-        dependencies = lock.get("dependencies") if isinstance(lock.get("dependencies"), dict) else {}
+        dependencies = (
+            lock.get("dependencies") if isinstance(lock.get("dependencies"), dict) else {}
+        )
         entry = dependencies.get(PINNED_NODE_PACKAGE)
         pinned = entry.get("version") if isinstance(entry, dict) else None
     if not pinned:
         return _row(
             "node-runtime",
             "锁文件运行依赖",
-            "missing",
+            "development",
+            "fail",
             "锁文件没有固定 " + PINNED_NODE_PACKAGE + " 版本",
-            FIX_SOURCE,
+            fix=FIX_SOURCE,
+            blocking=True,
         )
     installed = _read_json(
         package_dir / "node_modules" / PINNED_NODE_PACKAGE / "package.json"
     )
-    if installed is None:
+    if not isinstance(installed, dict):
         return _row(
             "node-runtime",
             "锁文件运行依赖",
-            "missing",
+            "development",
+            "fail",
             "运行依赖未安装（锁文件要求 " + PINNED_NODE_PACKAGE + " " + pinned + "）",
-            FIX_NODE_DEPS,
+            available_version=pinned,
+            fix=FIX_NODE_DEPS,
+            blocking=True,
         )
-    actual = str(installed.get("version") or "未知")
+    actual = _safe_version(installed.get("version")) or "未知"
     if actual != pinned:
         return _row(
             "node-runtime",
             "锁文件运行依赖",
-            "outdated",
+            "development",
+            "fail",
             "已安装 " + PINNED_NODE_PACKAGE + " " + actual + "，锁文件要求 " + pinned,
-            FIX_NODE_DEPS,
+            available_version=actual,
+            fix=FIX_NODE_DEPS,
+            blocking=True,
         )
     return _row(
         "node-runtime",
         "锁文件运行依赖",
-        "ok",
+        "development",
+        "pass",
         PINNED_NODE_PACKAGE + " " + pinned + "（与锁文件一致）",
+        available_version=pinned,
     )
 
 
-def _source_package(root):
-    required = {
-        "vendor/madmodel-proxy/package.json": root / "vendor" / "madmodel-proxy" / "package.json",
-        "runtime/windows/access.js": root / "runtime" / "windows" / "access.js",
-        "scripts/dev.py": root / "scripts" / "dev.py",
-        "tests/": root / "tests",
-    }
-    missing = [name for name, path in required.items() if not path.exists()]
+def _readonly_catalog(package_dir: Path):
+    services = _read_json(package_dir / "services.json")
+    if isinstance(services, list):
+        rows = services
+    elif isinstance(services, dict) and isinstance(services.get("services"), list):
+        rows = services["services"]
+    else:
+        return _row(
+            "readonly-catalog",
+            "只读校园服务目录",
+            "readonly",
+            "fail",
+            "services.json 缺失或不是有效 JSON",
+            fix=FIX_SOURCE,
+            blocking=True,
+        )
+    return _row(
+        "readonly-catalog",
+        "只读校园服务目录",
+        "readonly",
+        "pass",
+        "静态服务目录可读（不证明登录、权限或业务成功）",
+        available_version=str(len(rows)),
+    )
+
+
+def _source_package(package_dir: Path, source):
+    manifest = path_resolver.resource_manifest(
+        package_root_value=package_dir, source_root_value=source
+    )
+    missing = [
+        row["relative_path"]
+        for row in manifest
+        if row["required"] and not row["available"] and row["scope"] == "source"
+    ]
+    if source is None:
+        return _row(
+            "source-package",
+            "源码包完整性",
+            "packaging",
+            "warning",
+            "当前是包安装布局；不含源码认证辅助与离线测试，不代表安装损坏",
+            fix=FIX_SOURCE,
+        )
     if missing:
         return _row(
             "source-package",
             "源码包完整性",
+            "packaging",
             "warning",
-            "当前检出缺少完整源码包内容：" + "、".join(missing),
-            FIX_SOURCE,
-            required=False,
+            "当前源码检出缺少：" + "、".join(str(item) for item in missing),
+            fix=FIX_SOURCE,
         )
     return _row(
         "source-package",
         "源码包完整性",
-        "ok",
+        "packaging",
+        "pass",
         "完整源码检出（含认证依赖、Windows 辅助与离线测试）",
     )
 
 
-def _windows_auth(root, platform_name, node_present):
+def _windows_auth(package_dir: Path, source, node_present: bool, platform_name: str):
     if platform_name != "nt":
         return _row(
             "windows-auth",
             "Windows 生产认证",
-            "limited",
+            "production-auth",
+            "not_applicable",
             "当前系统仅支持离线开发与测试；真实校园认证依赖 Windows DPAPI",
-            FIX_WINDOWS_AUTH,
-            required=False,
+            fix=FIX_WINDOWS_AUTH,
         )
-    helper = root / "runtime" / "windows" / "access.js"
-    vendor = root / "vendor" / "madmodel-proxy" / "package.json"
-    missing = []
-    if not helper.exists():
-        missing.append("runtime/windows/access.js")
-    if not vendor.exists():
-        missing.append("vendor/madmodel-proxy/package.json")
+    helper = path_resolver.resolve_resource(
+        "source.windows_auth",
+        package_root_value=package_dir,
+        source_root_value=source,
+    )
+    vendor = path_resolver.resolve_resource(
+        "source.madmodel_proxy",
+        package_root_value=package_dir,
+        source_root_value=source,
+    )
     if not node_present:
         return _row(
             "windows-auth",
             "Windows 生产认证",
-            "missing",
+            "production-auth",
+            "fail",
             "Node.js 不可用，认证辅助无法启动",
-            FIX_NODE,
+            fix=FIX_NODE,
+            blocking=True,
         )
+    missing = [row.relative_path for row in (helper, vendor) if not row.available]
     if missing:
         return _row(
             "windows-auth",
             "Windows 生产认证",
-            "missing",
+            "production-auth",
+            "fail",
             "缺少 Windows 认证辅助：" + "、".join(missing),
-            FIX_SOURCE,
+            fix=FIX_SOURCE,
+            blocking=True,
         )
     return _row(
         "windows-auth",
         "Windows 生产认证",
-        "ok",
+        "production-auth",
+        "pass",
         "Windows 认证辅助已就位；真实登录使用当前 Windows 用户的 DPAPI",
     )
 
 
+def _config_row(config, config_error):
+    if config_error is not None:
+        return _row(
+            "configuration",
+            "统一配置",
+            "config",
+            "fail",
+            "配置无效：" + config_error.item + "（" + config_error.code + "）",
+            fix=FIX_CONFIG,
+            blocking=True,
+        )
+    return _row(
+        "configuration",
+        "统一配置",
+        "config",
+        "pass",
+        "配置有效（来源：" + config.public_dict()["config_file"] + "）",
+    )
+
+
+def _storage_row(config, config_error):
+    if config_error is not None:
+        return _row(
+            "storage-paths",
+            "私有目录边界",
+            "config",
+            "not_applicable",
+            "配置无效，未使用其中的目录",
+        )
+    return _row(
+        "storage-paths",
+        "私有目录边界",
+        "config",
+        "pass",
+        "状态、下载、临时与日志目录已通过范围和目录类型检查",
+    )
+
+
 def collect(
-    root=ROOT,
+    root=None,
     *,
     platform_name=None,
     which=None,
@@ -234,39 +413,74 @@ def collect(
     python_version=None,
     python_environment=None,
     command_version=None,
+    config=None,
+    config_error=None,
+    config_file=None,
+    env=None,
 ):
-    """Collect a public-safe diagnostic report for ``root``.
+    """Collect a public-safe diagnostic report.
 
-    All probes are injectable so the missing-dependency and normal-state
-    contracts can be tested without touching the host installation.
+    Probes and the configuration object are injectable so synthetic tests can
+    exercise missing packages, private command output and Windows layouts
+    without touching the host.
     """
-    root = Path(root)
     platform_name = platform_name or os.name
+    if root is None:
+        root = path_resolver.source_root() or path_resolver.package_root()
+    root = Path(root)
     which = which or shutil.which
     distribution_version = distribution_version or _distribution_version
     browser_available = browser_available or _browser_available
     command_version = command_version or _command_version
+
+    if config is None and config_error is None:
+        try:
+            config = configuration_module.load_config(
+                config_file=config_file, env=env, platform_name=platform_name
+            )
+        except configuration_module.ConfigurationError as error:
+            config_error = error
+
+    package_dir = (
+        Path(config.resources.root)
+        if config is not None
+        else root / "src" / "thu_assistant"
+        if (root / "src" / "thu_assistant").is_dir()
+        else root
+    )
+    source = (
+        root
+        if (root / "src" / "thu_assistant").is_dir()
+        or (root / "runtime").is_dir()
+        or (root / "vendor").is_dir()
+        else None
+    )
+
+    checks = []
+
     if python_version is None:
         python_version = sys.version_info[:3]
     elif isinstance(python_version, str):
-        python_version = _version_tuple(python_version)
+        parsed = _version_tuple(python_version)
+        python_version = parsed if parsed else (0, 0, 0)
     else:
         python_version = tuple(python_version)[:3]
     python_environment = python_environment or (
         "虚拟环境" if sys.prefix != sys.base_prefix else "系统 Python"
     )
-
-    checks = []
-
     python_text = ".".join(str(part) for part in python_version[:3])
-    if python_version[:2] < MIN_PYTHON:
+    minimum = _declared_python(root)
+    if python_version[:2] < minimum:
         checks.append(
             _row(
                 "python",
                 "Python",
-                "outdated",
-                "Python " + python_text + "（" + python_environment + "）；最低要求 3.10",
-                FIX_PYTHON,
+                "development",
+                "fail",
+                "Python " + python_text + "；项目要求 " + ".".join(map(str, minimum)) + "+",
+                available_version=python_text,
+                fix=FIX_PYTHON,
+                blocking=True,
             )
         )
     elif python_version[:2] < VALIDATED_PYTHON:
@@ -274,9 +488,21 @@ def collect(
             _row(
                 "python",
                 "Python",
+                "development",
                 "warning",
-                "Python " + python_text + "（" + python_environment + "）；低于已验证的 3.12",
-                "建议使用 Python 3.12；当前版本可以继续尝试。",
+                "Python " + python_text + "；项目要求 " + ".".join(map(str, minimum)) + "+，已验证 3.12",
+                available_version=python_text,
+            )
+        )
+    elif python_environment != "虚拟环境":
+        checks.append(
+            _row(
+                "python",
+                "Python",
+                "development",
+                "warning",
+                "Python " + python_text + "（系统 Python）；可用，但建议使用虚拟环境隔离",
+                available_version=python_text,
             )
         )
     else:
@@ -284,8 +510,10 @@ def collect(
             _row(
                 "python",
                 "Python",
-                "ok",
-                "Python " + python_text + "（" + python_environment + "）",
+                "development",
+                "pass",
+                "Python " + python_text + "（虚拟环境；项目要求 " + ".".join(map(str, minimum)) + "+）",
+                available_version=python_text,
             )
         )
 
@@ -296,9 +524,11 @@ def collect(
             _row(
                 "python-deps",
                 "Python 开发依赖",
-                "missing",
+                "development",
+                "fail",
                 "缺少：" + "、".join(missing_packages),
-                FIX_PYTHON_DEPS,
+                fix=FIX_PYTHON_DEPS,
+                blocking=True,
             )
         )
     else:
@@ -306,50 +536,106 @@ def collect(
             _row(
                 "python-deps",
                 "Python 开发依赖",
-                "ok",
+                "development",
+                "pass",
                 "pytest、requests、playwright、build、openthu 已安装",
+                available_version=str(len(DEV_PACKAGES)) + "/" + str(len(DEV_PACKAGES)),
             )
         )
 
     node_path = which("node")
     if not node_path:
-        checks.append(_row("node", "Node.js", "missing", "未找到 node 命令", FIX_NODE))
+        checks.append(
+            _row(
+                "node",
+                "Node.js",
+                "development",
+                "fail",
+                "未找到 node 命令",
+                fix=FIX_NODE,
+                blocking=True,
+            )
+        )
         node_text = None
     else:
-        node_text = command_version(node_path)
+        node_text = _safe_version(command_version(node_path))
         node_version = _version_tuple(node_text) if node_text else ()
         if not node_version or node_version[0] < MIN_NODE:
             checks.append(
                 _row(
                     "node",
                     "Node.js",
-                    "outdated",
+                    "development",
+                    "fail",
                     "Node " + (node_text or "版本未知") + "；需要 24+",
-                    FIX_NODE,
+                    available_version=node_text,
+                    fix=FIX_NODE,
+                    blocking=True,
                 )
             )
         else:
-            checks.append(_row("node", "Node.js", "ok", "Node " + node_text))
+            checks.append(
+                _row(
+                    "node",
+                    "Node.js",
+                    "development",
+                    "pass",
+                    "Node " + node_text,
+                    available_version=node_text,
+                )
+            )
 
     if platform_name == "nt":
         npm_path = which("npm.cmd") or which("npm")
     else:
         npm_path = which("npm")
     if not npm_path:
-        checks.append(_row("npm", "npm", "missing", "未找到 npm 命令", FIX_NODE))
-    else:
         checks.append(
-            _row("npm", "npm", "ok", "npm " + (command_version(npm_path) or "版本未知"))
+            _row(
+                "npm",
+                "npm",
+                "development",
+                "fail",
+                "未找到 npm 命令",
+                fix=FIX_NODE,
+                blocking=True,
+            )
         )
+    else:
+        npm_text = _safe_version(command_version(npm_path))
+        if npm_text:
+            checks.append(
+                _row(
+                    "npm",
+                    "npm",
+                    "development",
+                    "pass",
+                    "npm " + npm_text,
+                    available_version=npm_text,
+                )
+            )
+        else:
+            checks.append(
+                _row(
+                    "npm",
+                    "npm",
+                    "development",
+                    "warning",
+                    "npm 已找到，但版本输出无法识别；请检查 npm --version",
+                    fix=FIX_NODE,
+                )
+            )
 
-    checks.append(_node_runtime(root))
+    checks.append(_node_runtime(package_dir))
+    checks.append(_readonly_catalog(package_dir))
 
     if browser_available():
         checks.append(
             _row(
                 "playwright-browser",
                 "Playwright Chromium",
-                "ok",
+                "browser",
+                "pass",
                 "Chromium 已安装（浏览器相关测试可用）",
             )
         )
@@ -358,52 +644,68 @@ def collect(
             _row(
                 "playwright-browser",
                 "Playwright Chromium",
-                "missing",
-                "未找到可执行的 Chromium；浏览器相关测试无法运行",
-                FIX_PLAYWRIGHT if platform_name == "nt" else FIX_PLAYWRIGHT_LINUX,
+                "browser",
+                "warning",
+                "未找到可执行的 Chromium；浏览器相关测试不可用，离线开发仍可继续",
+                fix=FIX_PLAYWRIGHT if platform_name == "nt" else FIX_PLAYWRIGHT_LINUX,
             )
         )
 
-    checks.append(_windows_auth(root, platform_name, bool(node_path)))
-    checks.append(_source_package(root))
+    checks.append(_windows_auth(package_dir, source, bool(node_path), platform_name))
+    checks.append(_source_package(package_dir, source))
+    checks.append(_config_row(config, config_error))
+    checks.append(_storage_row(config, config_error))
 
-    blocked = [
-        row
-        for row in checks
-        if row["status"] in ("missing", "outdated") and row.get("required", True)
+    blocking_failures = [
+        row for row in checks if row["status"] == "fail" and row["blocking"]
     ]
-    warnings = [row for row in checks if row["status"] in ("warning", "limited")]
-    passed = [row for row in checks if row["status"] == "ok"]
+    warnings = [row for row in checks if row["status"] == "warning"]
+    failed = [row for row in checks if row["status"] == "fail"]
+    not_applicable = [row for row in checks if row["status"] == "not_applicable"]
+    passed = [row for row in checks if row["status"] == "pass"]
     return {
-        "ok": not blocked,
+        "ok": not blocking_failures,
         "mode": "offline-development",
         "summary": {
             "checks": len(checks),
             "passed": len(passed),
             "warnings": len(warnings),
-            "blocked": len(blocked),
+            "failed": len(failed),
+            "not_applicable": len(not_applicable),
+            "blocking": len(blocking_failures),
         },
         "checks": checks,
         "note": (
-            "报告只含仓库相对名称、版本、状态和修复命令，不含绝对路径、主机名、"
-            "账号或凭据；可直接用于公开求助。"
+            "报告只含逻辑检查项、状态、脱敏版本、仓库相对资源名和修复命令，"
+            "不含绝对路径、主机名、账号、凭据或命令原始输出；可直接用于公开求助。"
         ),
     }
 
 
 def format_report(report):
     icons = {
-        "ok": "通过",
-        "missing": "缺失",
-        "outdated": "过旧",
-        "warning": "提醒",
-        "limited": "限制",
+        "pass": "通过",
+        "warning": "警告",
+        "fail": "失败",
+        "not_applicable": "不适用",
     }
     lines = ["Openthu 开发环境诊断（离线开发模式）", ""]
     for row in report["checks"]:
+        version = (
+            "（" + row["available_version"] + "）"
+            if row.get("available_version")
+            else ""
+        )
         lines.append(
-            "[" + icons.get(row["status"], row["status"]) + "] "
-            + row["label"] + "：" + row["detail"]
+            "["
+            + icons.get(row["status"], row["status"])
+            + "] "
+            + row["label"]
+            + " ["
+            + row["capability"]
+            + "]："
+            + row["reason"]
+            + version
         )
         if row.get("fix"):
             lines.append("       修复：" + row["fix"])
@@ -411,13 +713,19 @@ def format_report(report):
     lines.append("")
     if report["ok"]:
         lines.append(
-            "结论：环境可用（共 " + str(summary["checks"]) + " 项，"
-            + str(summary["warnings"]) + " 项提醒/限制）。"
-            "可以运行 python scripts/dev.py check 与 test。"
+            "结论：环境可用（共 "
+            + str(summary["checks"])
+            + " 项，"
+            + str(summary["warnings"])
+            + " 项警告，"
+            + str(summary["not_applicable"])
+            + " 项不适用）。可以运行 python scripts/dev.py check 与 test。"
         )
     else:
         lines.append(
-            "结论：" + str(summary["blocked"]) + " 项阻止开始，请先执行上面的修复命令。"
+            "结论："
+            + str(summary["blocking"])
+            + " 项阻止开始，请先执行上面的修复命令。"
         )
     lines.append(report["note"])
     return "\n".join(lines)
@@ -426,8 +734,9 @@ def format_report(report):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="输出机器可读 JSON")
+    parser.add_argument("--config", metavar="PATH", help="显式配置文件")
     args = parser.parse_args(argv)
-    report = collect()
+    report = collect(config_file=args.config)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:

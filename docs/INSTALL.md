@@ -12,19 +12,37 @@ python scripts/dev.py doctor
 
 | 检查项 | 内容与修复入口 |
 |---|---|
-| Python | 版本（最低 3.10，已验证 3.12）与是否在虚拟环境 |
+| Python | 版本（最低版本读取 `pyproject.toml`，当前为 3.10）与虚拟环境提示 |
 | Python 开发依赖 | `requirements-dev.txt` 与可编辑安装的 `openthu` |
 | Node.js / npm | Node.js 24+ 与 npm 是否可执行 |
 | 锁文件运行依赖 | `package-lock.json` 固定的 tough-cookie 是否已由 `setup-node` 安装且版本一致 |
-| Playwright Chromium | 浏览器相关测试所需的 Chromium 是否可执行 |
-| Windows 生产认证 | Windows 上检查 `runtime/windows/access.js` 与认证依赖；Linux 上明确标为限制 |
+| 只读校园服务目录 | `services.json` 是否可读；只证明静态目录存在，不证明登录或权限 |
+| Playwright Chromium | 浏览器相关测试所需的 Chromium 是否可执行；缺少时为警告 |
+| Windows 生产认证 | Windows 上检查 `runtime/windows/access.js` 与认证依赖；Linux 上为“不适用” |
 | 源码包完整性 | 当前检出是否包含 `vendor/`、`runtime/windows/`、`scripts/` 与 `tests/` |
+| 统一配置 | 配置来源、类型、未知/重复键、秘密字段与路径范围 |
+| 私有目录边界 | 状态、下载、临时、日志目录是否在程序资源和密钥目录之外 |
 
-每项缺失都会给出修复命令。退出码 0 表示没有阻塞项，1 表示需要先处理。`python scripts/dev.py doctor --json` 输出机器可读 JSON。
+条目状态为“通过 / 警告 / 失败 / 不适用”，失败条目仅在阻塞时影响退出码。`python scripts/dev.py doctor --json` 输出机器可读 JSON；`--config PATH` 指定显式配置文件。退出码 0 表示没有阻塞项，1 表示需要先处理。
 
-默认报告只含仓库相对名称、版本、状态和修复命令，不含绝对路径、主机名、账号或凭据，可直接用于公开 Issue。诊断不登录校园账户、不读取凭据、不发起模型请求。
+默认报告只含逻辑检查项、脱敏版本、仓库相对资源名、状态和修复命令，不含绝对路径、主机名、账号、凭据或命令原始输出，可直接用于公开 Issue。诊断不登录校园账户、不读取凭据、不发起模型请求。
 
 `python scripts/dev.py check` 会先运行同一诊断；未通过时直接打印修复提示并退出。
+
+## 配置来源与路径规则
+
+配置按以下顺序覆盖，前一层优先：
+
+1. 命令行明确参数（当前提供 `--config PATH`，配置对象 API 也接受显式字段）。
+2. `OPENTHU_*` 项目环境变量；`THU_ASSISTANT_STATE_DIR`、`THU_NODE`、`THU_PYTHON` 作为兼容别名。
+3. 本机 JSON 配置文件。默认位置为 Windows `%APPDATA%\Openthu\config.json`，Linux `$XDG_CONFIG_HOME/openthu/config.json`；可用 `OPENTHU_CONFIG_FILE` 覆盖。
+4. 安全默认值。
+
+示例文件见 [`configs/openthu.example.json`](../configs/openthu.example.json)。配置分为 `resources`、`storage`、`runtime`、`network`、`ui` 五组；未知键、重复键、非法类型、超出范围和不可读文件都会返回稳定错误，错误只显示相对配置项名称，不回显值或绝对路径。显式配置无效时不会悄悄切换旧目录或另一账号。
+
+秘密不属于配置文件：需要秘密的模块只能通过 `Configuration.read_secret("<name>")` 读取 `OPENTHU_SECRET_<NAME>`，不会从文件、命令行或公开摘要中合并。`network.listen_host` 只接受回环地址；`network.npm_registry` 拒绝嵌入用户名/密码。
+
+`storage.state_dir`、`download_dir`、`temp_dir`、`log_dir` 必须是绝对路径，支持 `~` 展开并会规范化。它们不能位于源码包、安装包资源、`.git` 或状态目录的 `keys/`、`keyrings/`、`secrets/`、`credentials/` 之下；相对路径会被拒绝。默认状态目录在代码库之外；迁移只提供旧位置到新位置的预览，本模块不搬移真实会话或凭据。旧 Windows DPAPI 记录仍由后续认证模块按原格式读取，不因路径变更自动迁移。
 
 ## 安装来源与能力边界
 

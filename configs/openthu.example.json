@@ -1,0 +1,22 @@
+{
+  "storage": {
+    "state_dir": "~/openthu-state",
+    "download_dir": "~/openthu-downloads",
+    "temp_dir": "~/openthu-temp",
+    "log_dir": "~/openthu-logs"
+  },
+  "runtime": {
+    "command_timeout_seconds": 300,
+    "max_output_bytes": 65536
+  },
+  "network": {
+    "npm_registry": "https://registry.npmjs.org",
+    "listen_host": "127.0.0.1",
+    "listen_port": 8765,
+    "request_timeout_seconds": 240
+  },
+  "ui": {
+    "page_size": 50,
+    "refresh_seconds": 30
+  }
+}

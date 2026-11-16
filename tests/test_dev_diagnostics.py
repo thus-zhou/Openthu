@@ -1,7 +1,10 @@
 """First-run diagnostics: complete and missing synthetic environments."""
+from __future__ import annotations
+
 import importlib.util
 import json
 from pathlib import Path
+from types import SimpleNamespace
 import subprocess
 import sys
 
@@ -17,6 +20,14 @@ def load_diagnostics():
     return module
 
 
+def synthetic_config(package_dir: Path):
+    """A valid, path-free configuration facade for isolated diagnostics."""
+    return SimpleNamespace(
+        resources=SimpleNamespace(root=package_dir),
+        public_dict=lambda: {"config_file": "defaults"},
+    )
+
+
 def complete_checkout(tmp_path, *, installed="6.0.0", with_node_modules=True, with_windows=True):
     root = tmp_path / "checkout"
     package = root / "src" / "thu_assistant"
@@ -29,6 +40,9 @@ def complete_checkout(tmp_path, *, installed="6.0.0", with_node_modules=True, wi
         "packages": {"node_modules/tough-cookie": {"version": "6.0.0"}},
     }
     (package / "package-lock.json").write_text(json.dumps(lock), encoding="utf-8")
+    (package / "services.json").write_text(
+        json.dumps([{"id": "synthetic-service", "name": "Synthetic"}]), encoding="utf-8"
+    )
     if with_node_modules:
         installed_dir = package / "node_modules" / "tough-cookie"
         installed_dir.mkdir(parents=True)
@@ -58,8 +72,10 @@ def healthy_kwargs(root, *, platform_name="posix", node="v24.18.0", npm="11.16.0
         "npm": "/synthetic/bin/npm",
         "npm.cmd": "/synthetic/bin/npm.cmd",
     }
+    package = root / "src" / "thu_assistant"
     return {
         "root": root,
+        "config": synthetic_config(package),
         "platform_name": platform_name,
         "which": lambda name: bins.get(name),
         "distribution_version": lambda name: versions.get(name),
@@ -76,15 +92,21 @@ def test_complete_checkout_is_ready_and_contains_no_private_paths(tmp_path):
     report = module.collect(**healthy_kwargs(root))
     assert report["ok"] is True
     rows = {row["id"]: row for row in report["checks"]}
-    assert rows["python"]["status"] == "ok"
-    assert rows["python-deps"]["status"] == "ok"
-    assert rows["node"]["status"] == "ok"
-    assert rows["npm"]["status"] == "ok"
-    assert rows["node-runtime"]["status"] == "ok"
-    assert rows["playwright-browser"]["status"] == "ok"
-    assert rows["source-package"]["status"] == "ok"
-    assert rows["windows-auth"]["status"] == "limited"
-    assert rows["windows-auth"]["required"] is False
+    for check_id in (
+        "python",
+        "python-deps",
+        "node",
+        "npm",
+        "node-runtime",
+        "readonly-catalog",
+        "playwright-browser",
+        "source-package",
+        "configuration",
+        "storage-paths",
+    ):
+        assert rows[check_id]["status"] == "pass"
+    assert rows["windows-auth"]["status"] == "not_applicable"
+    assert rows["windows-auth"]["blocking"] is False
     text = json.dumps(report, ensure_ascii=False)
     assert str(root) not in text
     assert str(tmp_path) not in text
@@ -94,8 +116,10 @@ def test_missing_dependencies_block_with_actionable_fixes(tmp_path):
     module = load_diagnostics()
     root = tmp_path / "empty"
     root.mkdir()
+    package = root / "src" / "thu_assistant"
     report = module.collect(
         root=root,
+        config=synthetic_config(package),
         platform_name="posix",
         which=lambda name: None,
         distribution_version=lambda name: None,
@@ -112,13 +136,15 @@ def test_missing_dependencies_block_with_actionable_fixes(tmp_path):
         "node",
         "npm",
         "node-runtime",
-        "playwright-browser",
+        "readonly-catalog",
     ):
-        assert rows[check_id]["status"] in ("missing", "outdated")
+        assert rows[check_id]["status"] == "fail"
+        assert rows[check_id]["blocking"] is True
         assert rows[check_id].get("fix")
+    assert rows["playwright-browser"]["status"] == "warning"
+    assert rows["playwright-browser"]["blocking"] is False
     assert rows["source-package"]["status"] == "warning"
-    assert rows["source-package"]["required"] is False
-    assert report["summary"]["blocked"] >= 6
+    assert report["summary"]["blocking"] >= 6
 
 
 def test_lockfile_mismatch_points_to_setup_node(tmp_path):
@@ -126,7 +152,7 @@ def test_lockfile_mismatch_points_to_setup_node(tmp_path):
     root = complete_checkout(tmp_path, installed="5.0.0")
     report = module.collect(**healthy_kwargs(root))
     rows = {row["id"]: row for row in report["checks"]}
-    assert rows["node-runtime"]["status"] == "outdated"
+    assert rows["node-runtime"]["status"] == "fail"
     assert "setup-node" in rows["node-runtime"]["fix"]
     assert report["ok"] is False
 
@@ -136,33 +162,82 @@ def test_windows_checkout_requires_complete_auth_helper(tmp_path):
     root = complete_checkout(tmp_path, with_windows=False)
     report = module.collect(**healthy_kwargs(root, platform_name="nt"))
     rows = {row["id"]: row for row in report["checks"]}
-    assert rows["windows-auth"]["status"] == "missing"
+    assert rows["windows-auth"]["status"] == "fail"
+    assert rows["windows-auth"]["blocking"] is True
     assert "完整源码包" in rows["windows-auth"]["fix"]
     assert report["ok"] is False
 
 
-def test_public_report_omits_host_account_and_absolute_paths(tmp_path):
+def test_public_report_omits_host_account_absolute_paths_and_command_output(tmp_path):
     module = load_diagnostics()
     root = tmp_path / "Users" / "synthetic-person" / "Openthu"
     root.mkdir(parents=True)
+    malicious = "/home/synthetic-private/secret token=do-not-echo\n" + "x" * 10000
     report = module.collect(
         root=root,
+        config=synthetic_config(root / "src" / "thu_assistant"),
         platform_name="posix",
-        which=lambda name: None,
+        which=lambda name: "/synthetic/bin/" + name,
         distribution_version=lambda name: None,
         browser_available=lambda: False,
-        python_version=(3, 9, 18),
-        python_environment="系统 Python",
-        command_version=lambda path: None,
+        python_version=(3, 12, 3),
+        python_environment="虚拟环境",
+        command_version=lambda path: malicious,
     )
     text = json.dumps(report, ensure_ascii=False)
     assert str(root) not in text
     assert str(Path.home()) not in text
-    for key in ("hostname", "account_id", "password", "secret", "access_token"):
+    assert "synthetic-private" not in text
+    assert "do-not-echo" not in text
+    assert "x" * 100 not in text
+    for key in ("hostname", "account_id", "password", "access_token"):
         assert key not in text.lower()
 
 
-def test_dev_entry_advertises_doctor_without_importing_site_packages():
+def test_invalid_configuration_is_reported_by_relative_item_only(tmp_path):
+    module = load_diagnostics()
+    root = complete_checkout(tmp_path)
+    error = module.configuration_module.ConfigurationError(
+        "CONFIG_INVALID_TYPE", "ui.page_size"
+    )
+    kwargs = healthy_kwargs(root)
+    kwargs["config"] = None
+    kwargs["config_error"] = error
+    report = module.collect(**kwargs)
+    rows = {row["id"]: row for row in report["checks"]}
+    assert rows["configuration"]["status"] == "fail"
+    assert rows["configuration"]["blocking"] is True
+    assert "ui.page_size" in rows["configuration"]["reason"]
+    assert "CONFIG_INVALID_TYPE" in rows["configuration"]["reason"]
+    assert rows["storage-paths"]["status"] == "not_applicable"
+    assert report["ok"] is False
+
+
+def test_doctor_json_exposes_categories_and_stable_exit():
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "dev.py"), "doctor", "--json"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode in (0, 1)
+    payload = json.loads(result.stdout)
+    assert set(payload) >= {"ok", "summary", "checks", "note"}
+    capabilities = {row["capability"] for row in payload["checks"]}
+    assert {
+        "development",
+        "readonly",
+        "browser",
+        "production-auth",
+        "packaging",
+        "config",
+    } <= capabilities
+    statuses = {row["status"] for row in payload["checks"]}
+    assert statuses <= {"pass", "warning", "fail", "not_applicable"}
+    assert (result.returncode == 0) == payload["ok"]
+
+
+def test_dev_entry_advertises_doctor_and_config_without_site_packages():
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "dev.py"), "--help"],
         capture_output=True,
@@ -170,3 +245,4 @@ def test_dev_entry_advertises_doctor_without_importing_site_packages():
         check=True,
     )
     assert "doctor" in result.stdout
+    assert "--config" in result.stdout
