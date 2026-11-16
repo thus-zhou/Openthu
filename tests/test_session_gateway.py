@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 import pytest
 
@@ -25,12 +26,20 @@ ACCOUNT = "synthetic-user"
 ACCOUNT_HASH = hashlib.sha256(ACCOUNT.encode()).hexdigest()
 
 
+_SESSION_KEY: Path | None = None
+
+
 def make_key(tmp_path: Path) -> Path:
-    key = tmp_path / "keys" / "master.key"
-    # Let create_key_file create and harden the parent; pre-creating an
-    # inherited Windows ACL makes the owner-only check fail.
-    create_key_file(key)
-    return key
+    """Create one module-level key; Windows DPAPI/ACL setup is expensive."""
+    global _SESSION_KEY
+    if _SESSION_KEY is None:
+        base = Path(tempfile.mkdtemp(prefix="openthu-session-key-"))
+        key = base / "keys" / "master.key"
+        # Let create_key_file create and harden the parent; pre-creating an
+        # inherited Windows ACL makes the owner-only check fail.
+        create_key_file(key)
+        _SESSION_KEY = key
+    return _SESSION_KEY
 
 
 def gateway_env(tmp_path: Path, *, key: Path | None = None, allow_legacy: bool = False) -> dict[str, str]:
