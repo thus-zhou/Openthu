@@ -1,0 +1,11 @@
+{
+  "synthetic": true,
+  "description": "Synthetic time values covering date-only, platform-local, offset-aware, epoch and unknown input.",
+  "values": {
+    "date_only": "2026-11-20",
+    "platform_local": "2026-11-20T08:00",
+    "offset_aware": "2026-11-20T00:00:00Z",
+    "epoch_milliseconds": "1763600000000",
+    "unknown": "not-a-timestamp"
+  }
+}
