@@ -139,3 +139,21 @@ try:
     print("manual_load_ok", len(manual_material.secret))
 except Exception as exc:
     print("manual_load_error", type(exc).__name__, getattr(exc, "detail", ""))
+
+for index in range(12):
+    loop_key = root / "keys" / f"loop-{index}.key"
+    try:
+        keys.create_key_file(loop_key, "windows-dpapi")
+        loop_raw = loop_key.read_bytes()
+        loop_payload = loop_raw[len(keys.DPAPI_KEY_MAGIC) :]
+        loop_restored = keys._dpapi("unprotect", loop_payload)
+        print(
+            "loop",
+            index,
+            len(loop_raw),
+            len(loop_payload),
+            loop_restored is not None,
+            len(loop_restored or b""),
+        )
+    except Exception as exc:
+        print("loop_error", index, type(exc).__name__, getattr(exc, "detail", ""))
