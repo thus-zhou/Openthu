@@ -6,7 +6,7 @@
   "status": "accepted",
   "baseline_commit": "4d60e8bbca91d771dc6c4db478de4863922a2b07",
   "integration_parent_commit": "d897ccc7d1e6b4b75e344a28aaa6b4adcb392eef",
-  "delivery_commit": "6972ef84b46cce5507ce63c24fc818fe4f787dee",
+  "delivery_commit": "b0ecc64c803b144a6050816764cc6eb5232224ee",
   "code_commits": [
     "24ecdb7",
     "e81ceb9",
@@ -17,7 +17,9 @@
     "0784367",
     "6930dde",
     "b4bcecb",
-    "6972ef8"
+    "6972ef8",
+    "1cc0d1a",
+    "b0ecc64"
   ],
   "branch": "hermes/1-install-diagnostics",
   "version_pr": 2,
@@ -199,7 +201,7 @@
     "module_tests": {
       "python_passed": 14,
       "node_v3_passed": 7,
-      "node_crypto_passed": 4,
+      "node_crypto_passed": 5,
       "failed": 0,
       "commands": [
         "python -m pytest -o addopts='' -q tests/test_session_gateway.py",
@@ -213,7 +215,7 @@
       "python_passed": 645,
       "python_skipped": 7,
       "python_failed": 0,
-      "node_passed": 65,
+      "node_passed": 66,
       "node_failed": 0,
       "check_files": 402,
       "check_findings": 0,
@@ -227,7 +229,7 @@
       "python_passed": 641,
       "python_skipped": 11,
       "python_failed": 0,
-      "node_passed": 65,
+      "node_passed": 66,
       "node_failed": 0,
       "check_files": 402,
       "check_findings": 0
@@ -238,12 +240,12 @@
       "source_validator": "ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures"
     },
     "github_actions": {
-      "head_sha": "6972ef84b46cce5507ce63c24fc818fe4f787dee",
-      "run_id": 43951528116,
+      "head_sha": "b0ecc64c803b144a6050816764cc6eb5232224ee",
+      "run_id": 43956001264,
       "ubuntu_24_04": "success",
       "windows_2025": "success",
-      "ubuntu_result": "645 passed, 7 skipped, 0 failed; Node 65 passed",
-      "windows_result": "641 passed, 11 skipped, 0 failed; Node 65 passed"
+      "ubuntu_result": "645 passed, 7 skipped, 0 failed; Node 66 passed",
+      "windows_result": "641 passed, 11 skipped, 0 failed; Node 66 passed"
     },
     "live_campus_calls": 0,
     "model_calls": 0,

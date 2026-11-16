@@ -229,8 +229,8 @@
         "Session migration: legacy campus-v2.dpapi retained and copied to .before-v3 before a verified campus-v3.secure write.",
         "Linux missing key: protected session operations fail with SECURE_KEY_NOT_CONFIGURED; public read and static catalog still work.",
         "Browser state sealed through the gateway; gateway stdout contains no cookie plaintext.",
-        "14 Python (2 Linux skips; 16 pass on Windows) + 7 Node v3 + 4 Node crypto module tests; shared tree Python 645/7, Node 65/0, check 402/0 on Linux and Python 641/11, Node 65/0 on Windows.",
-        "GitHub Actions run 43951528116 at 6972ef8: ubuntu-24.04 and windows-2025 both successful."
+        "14 Python (2 Linux skips; 16 pass on Windows) + 7 Node v3 + 5 Node crypto module tests; shared tree Python 645/7, Node 66/0, check 402/0 on Linux and Python 641/11, Node 66/0 on Windows.",
+        "GitHub Actions run 43956001264 at b0ecc64: ubuntu-24.04 and windows-2025 both successful."
       ]
     },
     {

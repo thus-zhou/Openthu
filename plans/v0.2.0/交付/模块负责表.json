@@ -209,10 +209,10 @@
       "integration_order": 5,
       "status": "accepted",
       "accepted_at": "2026-11-17",
-      "delivery_commit": "6972ef84b46cce5507ce63c24fc818fe4f787dee",
+      "delivery_commit": "b0ecc64c803b144a6050816764cc6eb5232224ee",
       "evidence": [
-        "Module tests: 14 Python (2 Linux skips; 16 Windows pass) + 7 Node v3 + 4 Node crypto; shared-tree check 402 files/0 findings; Linux 645/7, Node 65/0; Windows 641/11, Node 65/0.",
-        "GitHub Actions run 43951528116 at 6972ef8: ubuntu-24.04 and windows-2025 both successful.",
+        "Module tests: 14 Python (2 Linux skips; 16 Windows pass) + 7 Node v3 + 5 Node crypto; shared-tree check 402 files/0 findings; Linux 645/7, Node 66/0; Windows 641/11, Node 66/0.",
+        "GitHub Actions run 43956001264 at b0ecc64: ubuntu-24.04 and windows-2025 both successful.",
         "Linux without a key fails protected session operations with SECURE_KEY_NOT_CONFIGURED; public reads and the static catalog remain available.",
         "Browser state is sealed through the owned gateway; gateway stdout contains ciphertext only, never a cookie value.",
         "learn_assistant/auth.py writes session.secure with scope learn-session; captured _dpapi_protect/_dpapi_unprotect references in action_store and todos reach the new provider.",
