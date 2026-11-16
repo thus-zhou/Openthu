@@ -101,3 +101,24 @@ for label, call in (
             print("after_sddl", clean(str(after[1])))
     except Exception as exc:
         print(label, "error", type(exc).__name__, getattr(exc, "detail", ""))
+
+secret = b"s" * 32
+protected = keys._dpapi("protect", secret)
+print("dpapi_protect", bool(protected), len(protected or b""))
+restored = keys._dpapi("unprotect", protected or b"")
+print("dpapi_roundtrip", restored == secret, len(restored or b""))
+
+key = root / "keys" / "dpapi.key"
+try:
+    keys.create_key_file(key, "windows-dpapi")
+    raw = key.read_bytes()
+    print("key_size", len(raw))
+    print("key_magic", raw[: len(keys.DPAPI_KEY_MAGIC)] == keys.DPAPI_KEY_MAGIC)
+    payload = raw[len(keys.DPAPI_KEY_MAGIC) :]
+    print("payload_size", len(payload))
+    restored = keys._dpapi("unprotect", payload)
+    print("payload_unprotect", restored is not None, len(restored or b""))
+    material = keys.load_key_file(key, "windows-dpapi")
+    print("load_key_ok", material.backend, len(material.secret))
+except Exception as exc:
+    print("key_error", type(exc).__name__, getattr(exc, "detail", ""))

@@ -30,7 +30,6 @@ FILE_KEY_MAGIC = b"THU-KEY-1\0"
 DPAPI_KEY_MAGIC = b"THU-DPAPI-KEY-1\0"
 KEY_BYTES = 32
 MAX_KEY_FILE_BYTES = 4096
-_SID = re.compile(r"S-1-[0-9-]+")
 
 
 @dataclass(frozen=True)
