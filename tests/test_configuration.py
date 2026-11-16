@@ -233,8 +233,9 @@ def test_path_normalization_rejects_relative_and_root_targets(tmp_path):
     assert paths.normalize_path(str(tmp_path / "a" / ".." / "b"), item="x") == (
         tmp_path / "b"
     ).resolve()
+    root_target = Path(tmp_path.anchor)
     with pytest.raises(paths.PathError) as caught:
-        paths.normalize_path("/", item="storage.state_dir")
+        paths.normalize_path(str(root_target), item="storage.state_dir")
     assert caught.value.code == "PATH_ROOT"
 
 
