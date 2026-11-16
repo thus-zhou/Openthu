@@ -135,5 +135,9 @@
     "The release/packaging module 6.3 still owns the final runtime dependency manifest and lock; cryptography is now declared for the package dependency while 6.3 can adjust the lock."
   ],
   "rollback": "Stop new writes, keep the previous records directory and key, set THU_SECURE_RETIRED_KEY_FILES to the previous key path(s), verify old records, then rollback() switches store.json back. No old ciphertext or key is deleted automatically.",
-  "next": "2.2 audit P1 fixes are complete; keep batch 2 accepted at this fix commit and batch 3 ready. Do not start 3.1 in this 2.2 task; the next batch executor should begin when assigned."
+  "next": "2.2 audit P1 fixes are complete; keep batch 2 accepted at this fix commit and batch 3 ready. Do not start 3.1 in this 2.2 task; the next batch executor should begin when assigned.",
+  "cross_module_requests": [
+    "contracts/v0.2/storage-header.schema.json: additive optional record_id under secure-storage-header-v1; 1.1 owner review required before release.",
+    "pyproject.toml: cryptography==50.0.2 runtime dependency; 6.3 remains owner of the final lock and packaging layout."
+  ]
 }
