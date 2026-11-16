@@ -1,0 +1,97 @@
+{
+  "module": "2.2",
+  "title": "跨平台加密存储与密钥生命周期",
+  "batch": 2,
+  "owner": "Hermes",
+  "status": "accepted",
+  "baseline_commit": "970cb0d",
+  "integration_parent_commit": "8b2ecb9",
+  "delivery_commit": "b910498",
+  "branch": "hermes/1-install-diagnostics",
+  "version_pr": 2,
+  "paths": [
+    "src/thu_assistant/secure_store/",
+    "tests/test_secure_store.py",
+    "requirements-dev.txt"
+  ],
+  "contracts": [
+    "secure-storage-header-v1",
+    "result-envelope-v1"
+  ],
+  "security_summary": {
+    "cipher": "AES-256-GCM via cryptography 50.0.2",
+    "key_backends": [
+      "Windows current-user DPAPI wrapping a random 32-byte key",
+      "POSIX owner-only random key file outside the data directory"
+    ],
+    "key_checks": [
+      "absolute path",
+      "regular file, no symlink",
+      "current-user ownership",
+      "owner-only permissions/ACL",
+      "parent directory not writable by others on POSIX",
+      "random namespace key protected by the active provider"
+    ],
+    "aad": "canonical JSON binds format, purpose, account/service domains, opaque account reference and revision",
+    "nonce": "12 random bytes per seal; unique per operation",
+    "account_reference": "HKDF-separated HMAC-SHA256 pseudonym, stable across data-key rotation",
+    "legacy": "LA-DPAPI-1, THU-ACTION-1 and THU-TODOS-1 are recognized read-only and never rewritten automatically",
+    "node_boundary": "fixed actions, 2 MiB request and 1 MiB plaintext limits, minimal subprocess environment",
+    "plaintext_fallback": "none; missing key refuses production storage"
+  },
+  "checks": {
+    "module_tests_linux": {
+      "passed": 22,
+      "skipped": 3,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_secure_store.py"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 465,
+      "python_skipped": 5,
+      "python_failed": 0,
+      "node_passed": 54,
+      "node_failed": 0,
+      "check_files": 333,
+      "check_findings": 0,
+      "commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "worktree": "clean checkout of delivery commit b910498"
+    },
+    "contracts": {
+      "plan_validator": "ok",
+      "contract_validator": "ok",
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0
+  },
+  "accepted_cases": [
+    "different ciphertext and nonce on repeated sealing; same provider recovers plaintext",
+    "nonce, ciphertext, service domain and account domain tampering fail closed without partial plaintext",
+    "missing key, broad permissions and symlinks are rejected",
+    "write, fsync and pointer-switch failures preserve the previous valid record or pointer",
+    "half-failed rotation leaves the old pointer/key readable; retry completes",
+    "rotation preserves the account reference and is readable after restart and rollback",
+    "cross-account, cross-purpose and cross-service reads are denied",
+    "concurrent writers cannot both advance the same revision",
+    "stored data and temporary files contain no synthetic plaintext",
+    "production entry refuses a missing key and does not import a test codec",
+    "header validates against JSON Schema Draft 2020-12",
+    "legacy DPAPI format is recognized; cross-platform read returns a re-authentication error"
+  ],
+  "blocked": [],
+  "limits": [
+    "Windows DPAPI and ACL behavior is covered by Windows-only tests; the cloud Linux host cannot execute them locally.",
+    "No anti-rollback claim: revision detects ordinary concurrent writers, not an attacker replacing both data and pointer.",
+    "No automatic cross-machine key migration or secure deletion.",
+    "The release/packaging module 6.3 owns the final runtime dependency manifest and lock."
+  ],
+  "rollback": "Stop new writes, keep the previous records directory and key, verify old records, then switch store.json back to the previous pointer. No old ciphertext or key is deleted automatically.",
+  "next": "Reconnect 2.1, 2.2 and 2.3 to one batch integration commit; run batch-level check and full offline regression before unlocking batch 3."
+}
