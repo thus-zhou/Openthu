@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -193,6 +194,9 @@ def test_network_values_reject_credentials_and_non_loopback_binding(tmp_path):
     assert caught.value.code == "CONFIG_NOT_LOOPBACK"
 
 
+@pytest.mark.skipif(
+    os.name == "nt", reason="POSIX permission bits; Windows ACLs are covered by secure_store"
+)
 def test_parent_directory_permission_is_checked(tmp_path):
     env = isolated_env(tmp_path)
     parent = tmp_path / "readonly-parent"
