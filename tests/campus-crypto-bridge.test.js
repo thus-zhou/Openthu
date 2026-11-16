@@ -68,10 +68,14 @@ test('timeout and cancellation kill the child without replaying the request', as
 test('configuration discovers the shared default key file', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'thu-default-key-'));
   t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
-  const key = path.join(dir, '.config', 'openthu', 'keys', 'master.key');
+  const env = {HOME: dir};
+  if (process.platform === 'win32') env.APPDATA = dir;
+  const key = process.platform === 'win32'
+    ? path.join(dir, 'Openthu', 'keys', 'master.key')
+    : path.join(dir, '.config', 'openthu', 'keys', 'master.key');
   fs.mkdirSync(path.dirname(key), {recursive: true});
   fs.writeFileSync(key, 'synthetic');
-  const config = resolveCryptoConfig({HOME: dir}, '/state');
+  const config = resolveCryptoConfig(env, '/state');
   assert.equal(config.enabled, true);
   assert.equal(config.keyFile, key);
 });
