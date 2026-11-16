@@ -7,6 +7,7 @@ there is no test mode that disables encryption.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import shutil
@@ -30,11 +31,16 @@ from thu_assistant.secure_store import (
     SecureKeyPermissionError,
     SecureLegacyUnavailable,
     SecurePurposeMismatch,
+    SecureRecordMismatch,
     SecureRevisionConflict,
+    SecureRollbackUnavailable,
     SecureRotationIncomplete,
     SecureServiceMismatch,
     SecureStore,
+    SecureStoreBusy,
+    SecureStoreCorrupt,
     SecureWriteError,
+    StorageContext,
     create_key_file,
     handle_request,
     load_provider,
@@ -112,6 +118,7 @@ def test_header_matches_frozen_schema_and_round_trips(secure):
     assert header["magic"] == "THU-SECURE-1\0"
     assert header["format_version"] == 1
     assert header["cipher_suite"] == "AES-256-GCM"
+    assert header["record_id"] == "session-1"
     assert header["backend"] == key_backend()
     assert read_session(store) == b"synthetic-session"
 
@@ -256,9 +263,9 @@ def test_key_must_live_outside_the_data_directory(tmp_path):
     data = tmp_path / "data"
     data.mkdir(mode=0o700)
     key = data / "master.key"
-    create_key_file(key, key_backend())
-    provider = load_provider(key)
-    with pytest.raises(SecureKeyLocationError):
+    with pytest.raises((SecureKeyLocationError, SecureKeyPermissionError)):
+        create_key_file(key, key_backend())
+        provider = load_provider(key)
         SecureStore(provider, data)
 
 
@@ -615,3 +622,188 @@ def test_windows_legacy_record_is_readable_without_rewrite(tmp_path):
     assert record.format == "SESSION"
     assert record.plaintext == payload
     assert path.read_bytes() == before
+
+
+def test_record_identity_is_bound_to_its_path(secure):
+    _, _, store, _ = secure
+    write_session(store, "a", b"A-secret")
+    write_session(store, "b", b"B-secret")
+    (store.records_dir / "b.secure").write_bytes(
+        (store.records_dir / "a.secure").read_bytes()
+    )
+    with pytest.raises(SecureRecordMismatch):
+        read_session(store, "b")
+    assert read_session(store, "a") == b"A-secret"
+
+
+def test_legacy_unbound_store_still_reads_old_records(tmp_path):
+    key = tmp_path / "keys" / "master.key"
+    create_key_file(key, key_backend())
+    provider = load_provider(key)
+    data = tmp_path / "data"
+    store = SecureStore(provider, data)
+    assert write_session(store, "bound") == 1
+    context = StorageContext(
+        purpose=PURPOSE,
+        account_domain=ACCOUNT_DOMAIN,
+        service_domain=SERVICE_DOMAIN,
+        account_ref=provider.account_reference(
+            ACCOUNT,
+            purpose=PURPOSE,
+            account_domain=ACCOUNT_DOMAIN,
+            service_domain=SERVICE_DOMAIN,
+            namespace_key=store._namespace_key,
+        ),
+        revision=1,
+    )
+    (store.records_dir / "legacy.secure").write_bytes(
+        provider.seal(b"legacy-value", context)
+    )
+    pointer_path = data / "store.json"
+    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+    pointer.pop("record_binding", None)
+    pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
+
+    reopened = SecureStore(provider, data)
+    assert read_session(reopened, "legacy") == b"legacy-value"
+    assert read_session(reopened, "bound") == b"synthetic-session"
+
+
+def test_rotation_after_restart_can_rollback_with_retired_key(tmp_path):
+    old_key = tmp_path / "keys" / "old.key"
+    new_key = tmp_path / "keys" / "new.key"
+    create_key_file(old_key, key_backend())
+    create_key_file(new_key, key_backend())
+    old_provider = load_provider(old_key)
+    new_provider = load_provider(new_key)
+    store = SecureStore(old_provider, tmp_path / "data")
+    write_session(store, "r1", b"one")
+    store.rotate(new_provider)
+
+    env = {
+        "THU_SECURE_KEY_FILE": str(new_key),
+        "THU_SECURE_DATA_DIR": str(tmp_path / "data"),
+        "THU_SECURE_RETIRED_KEY_FILES": json.dumps([str(old_key)]),
+    }
+    restarted = open_store_from_environment(env)
+    assert restarted.rollback()["active_key_id"] == old_provider.key_id
+    assert read_session(restarted, "r1") == b"one"
+
+
+def test_rotation_does_not_accept_a_key_inside_data(secure):
+    _, provider, store, data = secure
+    inside = data / "new.key"
+    create_key_file(inside, "file-key")
+    new_provider = load_provider(inside)
+    with pytest.raises(SecureKeyLocationError):
+        store.rotate(new_provider)
+    assert store.provider.key_id == provider.key_id
+
+
+def test_health_and_preview_do_not_leak_paths_or_raise_raw_permission_errors(
+    secure, tmp_path, monkeypatch
+):
+    if os.name == "nt":
+        pytest.skip("POSIX chmod semantics")
+    _, _, store, _ = secure
+    write_session(store, "r1")
+    new_key = tmp_path / "keys" / "new.key"
+    create_key_file(new_key, "file-key")
+    new_provider = load_provider(new_key)
+    record = store.records_dir / "r1.secure"
+    record.chmod(0)
+    try:
+        health = store.health()
+        assert health["ok"] is False
+        assert health["corrupt_records"] == 1
+        assert str(store.data_dir) not in json.dumps(health)
+        with pytest.raises(SecureStoreCorrupt):
+            store.preview_rotation(new_provider)
+    finally:
+        record.chmod(0o600)
+
+
+def test_health_authenticates_ciphertext_not_only_header_digest(secure):
+    _, _, store, _ = secure
+    write_session(store, "r1", b"secret-value")
+    path = store.records_dir / "r1.secure"
+    envelope = parse_envelope(path.read_bytes())
+    broken = bytearray(envelope.ciphertext)
+    broken[0] ^= 1
+    header = dict(envelope.header)
+    header["ciphertext_sha256"] = hashlib.sha256(bytes(broken)).hexdigest()
+    path.write_bytes(pack_envelope(header, bytes(broken)))
+    assert store.health()["ok"] is False
+    assert store.health()["corrupt_records"] == 1
+
+
+def test_first_pointer_failure_can_be_recovered(tmp_path, monkeypatch):
+    key = tmp_path / "keys" / "master.key"
+    create_key_file(key, key_backend())
+    provider = load_provider(key)
+    data = tmp_path / "data"
+    original = store_module._atomic_write
+
+    def fail_pointer(path, payload):
+        if path.name == "store.json":
+            raise SecureWriteError("synthetic initial pointer failure")
+        return original(path, payload)
+
+    monkeypatch.setattr(store_module, "_atomic_write", fail_pointer)
+    with pytest.raises(SecureWriteError):
+        SecureStore(provider, data)
+    monkeypatch.setattr(store_module, "_atomic_write", original)
+    recovered = SecureStore(provider, data)
+    assert recovered.health()["ok"] is True
+    assert recovered.health()["records"] == 0
+
+
+def test_rollback_refuses_a_corrupt_previous_directory(tmp_path):
+    old_key = tmp_path / "keys" / "old.key"
+    new_key = tmp_path / "keys" / "new.key"
+    create_key_file(old_key, key_backend())
+    create_key_file(new_key, key_backend())
+    old_provider = load_provider(old_key)
+    new_provider = load_provider(new_key)
+    store = SecureStore(old_provider, tmp_path / "data")
+    write_session(store, "r1", b"one")
+    old_dir = store.records_dir
+    store.rotate(new_provider)
+    (old_dir / "r1.secure").write_bytes(b"not-an-envelope")
+    with pytest.raises(SecureRollbackUnavailable):
+        store.rollback()
+    assert store._pointer["active_key_id"] == new_provider.key_id
+
+
+def test_rotation_preserves_underlying_error_code(tmp_path):
+    old_key = tmp_path / "keys" / "old.key"
+    new_key = tmp_path / "keys" / "new.key"
+    create_key_file(old_key, key_backend())
+    create_key_file(new_key, key_backend())
+    store = SecureStore(load_provider(old_key), tmp_path / "data")
+    write_session(store, "r1")
+    new_provider = load_provider(new_key)
+    new_provider.seal = lambda *args, **kwargs: (_ for _ in ()).throw(
+        RuntimeError("synthetic rotation failure")
+    )
+    with pytest.raises(SecureRotationIncomplete) as exc:
+        store.rotate(new_provider)
+    assert exc.value.cause_code == "RuntimeError"
+
+
+def test_record_reads_are_bounded(secure, monkeypatch):
+    _, _, store, _ = secure
+    write_session(store, "r1")
+    monkeypatch.setattr(store_module, "MAX_ENVELOPE_BYTES", 8)
+    with pytest.raises(SecureStoreCorrupt):
+        store.read(
+            "r1",
+            purpose=PURPOSE,
+            account_domain=ACCOUNT_DOMAIN,
+            service_domain=SERVICE_DOMAIN,
+            account=ACCOUNT,
+        )
+
+
+def test_busy_error_is_retryable():
+    assert SecureStoreBusy().retryable is True

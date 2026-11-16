@@ -10,9 +10,11 @@ cursors.  It does not change the existing Windows DPAPI records in place.
 - **Envelope:** 13-byte magic `THU-SECURE-1\0`, a 4-byte big-endian header
   length, a UTF-8 JSON header, then ciphertext plus the GCM tag.
 - **AAD:** canonical JSON containing `format_version`, `purpose`,
-  `account_domain`, `service_domain`, an opaque `account_ref` and the record
-  `revision`.  The header must agree with this AAD, so changing a field without
-  re-authenticating the ciphertext fails closed.
+  `account_domain`, `service_domain`, an opaque `account_ref`, the record
+  `revision`, and, for new records, the opaque `record_id`.  The header must
+  agree with this AAD, so changing a field without re-authenticating the
+  ciphertext fails closed.  Records written before the optional `record_id`
+  binding omit it and remain readable only through a legacy store pointer.
 - **Nonce:** 12 random bytes per seal operation.  A record sealed twice has two
   different envelopes.  Keys are split by purpose through HKDF.
 - **Account reference:** an HMAC-SHA256 pseudonym scoped by purpose, account
@@ -25,9 +27,10 @@ cursors.  It does not change the existing Windows DPAPI records in place.
 
 `WindowsDpapiKeyProvider` reads a random 32-byte key from a file whose payload
 is wrapped by `CryptProtectData` with `CurrentUser` scope.  The key file must be
-a regular file, not a symbolic link, and its ACL must allow only the current
-user (and the local SYSTEM account).  New files are created with inheritance
-removed and an explicit current-user grant.
+a regular file, not a symbolic link or reparse point, and its ACL must allow only
+the current user (plus local SYSTEM/Administrators as OS administrative
+principals).  New files are created only after the parent key directory is
+checked/hardened, with inheritance removed and an explicit current-user grant.
 
 This preserves the existing platform boundary: a key wrapped by one Windows
 user cannot be read by another user, and no Windows credential is imported into
@@ -73,8 +76,17 @@ newer record.
 A failure before step 5 leaves the old pointer active; a partial new directory
 is not read and contains ciphertext only.  The previous directory and key are
 retained, so `rollback()` can switch the pointer back after an operator verifies
-the old records.  No automatic cleanup deletes old key material; cleanup is a
-manual action after all reads have been verified.
+the old records.  `open_store_from_environment()` can load explicit previous key
+files from `THU_SECURE_RETIRED_KEY_FILES` (a JSON list of absolute paths) so a
+new process can roll back without relying on an in-memory provider.  Rollback
+verifies every previous record before switching the pointer; a corrupt previous
+directory is refused.  No automatic cleanup deletes old key material; cleanup is
+a manual action after all reads have been verified.
+
+`rotate(new_provider)` also requires a verifiable key location.  A provider whose
+`key_path` is missing or inside the data directory is rejected before any target
+record is written, so the key/data separation invariant cannot be bypassed by a
+rotation.
 
 ## Node private-child boundary
 
@@ -89,9 +101,13 @@ results.  The bridge limits request size to 2 MiB and plaintext to 1 MiB.
 ## Errors and limits
 
 Missing key, permission failure, unreadable key, malformed envelope, failed
-authentication, scope mismatch, revision conflict, missing record and rotation
-failure have separate stable codes.  Errors never include paths, account names,
-ciphertext or key material.
+authentication, scope mismatch, record mismatch, revision conflict, missing
+record and rotation failure have separate stable codes.  Errors never include
+paths, account names, ciphertext or key material.  `health()` authenticates each
+record with its provider and counts unreadable/corrupt records instead of
+trusting the unkeyed header digest alone; `inspect()` is a header-only view and
+must not be used as tamper evidence.  Record reads are bounded by
+`MAX_ENVELOPE_BYTES`.
 
 This module does **not** claim:
 

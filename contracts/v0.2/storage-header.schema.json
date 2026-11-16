@@ -6,7 +6,8 @@
   "x-contract-version": "secure-storage-header-v1",
   "x-owner": "1.1/Hermes",
   "x-status": "frozen",
-  "x-semantics": "Purpose, account domain and service domain are internal storage scopes. They are not school account types or school field names.",
+  "x-semantics": "Purpose, account domain and service domain are internal storage scopes. They are not school account types or school field names. When record_id is present, it is an opaque local record identity and is bound into the AAD; records created before this optional binding omit it for read-only compatibility.",
+  "x-record-id-binding": "New SecureStore records include an opaque record_id in the header and canonical AAD. Existing v1 records without this optional field remain readable only in a legacy store pointer; copying a bound record to another record path fails with SECURE_RECORD_MISMATCH.",
   "x-binary-layout": [
     {"field": "magic", "bytes": 13, "encoding": "ascii", "value": "THU-SECURE-1\\0"},
     {"field": "header_length", "bytes": 4, "encoding": "uint32-big-endian", "maximum": 4096},
@@ -79,6 +80,11 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{8,64}$",
       "description": "Opaque key identifier. Never a path, host name or account identifier."
+    },
+    "record_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "description": "Optional opaque local record identity bound into the AAD for new records. Legacy records may omit it; never a path or account identifier."
     },
     "nonce": {
       "type": "string",

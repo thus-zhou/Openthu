@@ -20,7 +20,9 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .envelope import (
+    MAX_ENVELOPE_BYTES,
     MAX_PLAINTEXT_BYTES,
+    RECORD_ID_PATTERN,
     StorageContext,
     inspect_envelope,
     parse_envelope,
@@ -32,10 +34,12 @@ from .errors import (
     SecureEnvelopeCorrupt,
     SecureInputError,
     SecureInvalidRecordId,
+    SecureKeyFormatError,
     SecureKeyLocationError,
     SecureKeyMismatch,
     SecureKeyNotConfigured,
     SecureKeyUnavailable,
+    SecureKeyUnreadable,
     SecureLegacyFormat,
     SecureLegacyUnavailable,
     SecurePayloadInvalid,
@@ -51,7 +55,7 @@ from .errors import (
 )
 from .providers import AeadProvider, load_provider, provider_from_environment
 
-_RECORD_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_RECORD_ID = re.compile(RECORD_ID_PATTERN)
 _RECORDS_DIR = re.compile(r"^records-[A-Za-z0-9_-]{1,120}$")
 _KEY_ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 _MAX_POINTER_BYTES = 64 * 1024
@@ -135,6 +139,33 @@ def _atomic_write(path: Path, data: bytes) -> None:
                 temporary.unlink()
             except OSError:
                 pass
+
+
+def _read_record_bytes(path: Path) -> bytes:
+    """Read one bounded record without leaking absolute paths in errors."""
+    if path.is_symlink():
+        raise SecureStoreCorrupt("record cannot be a link")
+    if path.exists() and not path.is_file():
+        raise SecureStoreCorrupt("record is not a regular file")
+    try:
+        size = path.stat().st_size
+    except FileNotFoundError:
+        raise SecureRecordNotFound("record is missing") from None
+    except OSError:
+        raise SecureStoreCorrupt("record cannot be read") from None
+    if size > MAX_ENVELOPE_BYTES:
+        raise SecureStoreCorrupt("record is too large")
+    try:
+        return path.read_bytes()
+    except OSError:
+        raise SecureStoreCorrupt("record cannot be read") from None
+
+
+def _empty_directory(path: Path) -> bool:
+    try:
+        return path.is_dir() and not path.is_symlink() and next(path.iterdir(), None) is None
+    except OSError:
+        return False
 
 
 class _Lock:
@@ -255,14 +286,24 @@ class SecureStore:
         if not self.data_dir.is_absolute():
             raise SecureDataDirError("data directory must be absolute")
         key_path = getattr(provider, "key_path", None)
-        if key_path is not None:
-            validate_key_separation(Path(key_path), self.data_dir)
+        if key_path is None:
+            raise SecureKeyLocationError("provider key location cannot be verified")
+        validate_key_separation(Path(key_path), self.data_dir)
         self._providers: dict[str, AeadProvider] = {provider.key_id: provider}
         for retired in retired_providers:
+            retired_key_path = getattr(retired, "key_path", None)
+            if retired_key_path is None:
+                raise SecureKeyLocationError(
+                    "retired provider key location cannot be verified"
+                )
+            validate_key_separation(Path(retired_key_path), self.data_dir)
             self._providers.setdefault(retired.key_id, retired)
         self._prepare_data_dir()
         self._pointer_path = self.data_dir / "store.json"
         self._pointer = self._load_or_create_pointer()
+        self._require_record_binding = (
+            self._pointer.get("record_binding") == "record-id"
+        )
 
     @property
     def records_dir(self) -> Path:
@@ -284,11 +325,33 @@ class SecureStore:
             raise SecureDataDirError("data directory cannot be inspected") from None
         if not stat.S_ISDIR(info.st_mode):
             raise SecureDataDirError("data directory is not a directory")
+        from .keys import _is_reparse_point, _harden_windows_acl, _windows_acl_owner_only
+
+        if _is_reparse_point(info):
+            raise SecureDataDirError("data directory is a reparse point")
         if os.name != "nt":
             if info.st_uid != os.geteuid():
                 raise SecureDirPermissionError("data directory owner is wrong")
             if info.st_mode & 0o022:
                 raise SecureDirPermissionError("data directory is writable by others")
+        else:
+            try:
+                if not _windows_acl_owner_only(self.data_dir):
+                    _harden_windows_acl(self.data_dir, directory=True)
+                if not _windows_acl_owner_only(self.data_dir):
+                    raise SecureDirPermissionError(
+                        "data directory ACL is not limited to the current user"
+                    )
+            except SecureDirPermissionError:
+                raise
+            except SecureStoreError:
+                raise SecureDirPermissionError(
+                    "data directory ACL cannot be enforced"
+                ) from None
+            except OSError:
+                raise SecureDirPermissionError(
+                    "data directory ACL cannot be inspected"
+                ) from None
 
     def _load_or_create_pointer(self) -> dict[str, Any]:
         if self._pointer_path.is_symlink():
@@ -311,7 +374,20 @@ class SecureStore:
             self._namespace_key = self._open_namespace(pointer)
             return pointer
         if list(self.data_dir.glob("records-*")):
-            raise SecureStoreCorrupt("records exist without a pointer")
+            existing = list(self.data_dir.glob("records-*"))
+            # A crash during first initialization can leave empty records
+            # directories before store.json exists.  Only empty, real
+            # directories are safe to reclaim; anything else is corruption.
+            if all(_empty_directory(path) for path in existing):
+                for path in existing:
+                    try:
+                        path.rmdir()
+                    except OSError:
+                        raise SecureStoreCorrupt(
+                            "empty records directory cannot be reclaimed"
+                        ) from None
+            else:
+                raise SecureStoreCorrupt("records exist without a pointer")
         directory = self.data_dir / (
             f"records-{self.provider.key_id}-{_stamp()}-{uuid.uuid4().hex[:8]}"
         )
@@ -325,6 +401,7 @@ class SecureStore:
             "format_version": 1,
             "active_key_id": self.provider.key_id,
             "records_dir": directory.name,
+            "record_binding": "record-id",
             "namespace_b64": base64.b64encode(namespace).decode("ascii"),
             "previous": None,
             "updated_at": _utc_now(),
@@ -364,6 +441,9 @@ class SecureStore:
         namespace = pointer.get("namespace_b64")
         if not isinstance(namespace, str) or not namespace:
             raise SecureStoreCorrupt("store pointer namespace is missing")
+        binding = pointer.get("record_binding")
+        if binding is not None and binding != "record-id":
+            raise SecureStoreCorrupt("store pointer record binding is invalid")
         try:
             base64.b64decode(namespace, validate=True)
         except (ValueError, TypeError):
@@ -422,12 +502,7 @@ class SecureStore:
     def inspect(self, record_id: str) -> dict[str, Any]:
         path = self._record_path(record_id)
         self._check_record_file(path)
-        try:
-            raw = path.read_bytes()
-        except FileNotFoundError:
-            raise SecureRecordNotFound("record is missing") from None
-        except OSError:
-            raise SecureStoreCorrupt("record cannot be read") from None
+        raw = _read_record_bytes(path)
         result = inspect_envelope(raw)
         result["record_id"] = record_id
         return result
@@ -457,7 +532,9 @@ class SecureStore:
             previous_revision = 0
             if path.exists():
                 try:
-                    existing = parse_envelope(path.read_bytes())
+                    existing = parse_envelope(_read_record_bytes(path))
+                except SecureStoreError:
+                    raise
                 except OSError:
                     raise SecureStoreCorrupt("existing record cannot be read") from None
                 previous_revision = existing.context.revision
@@ -481,6 +558,7 @@ class SecureStore:
                 service_domain=service_domain,
                 account_ref=account_ref,
                 revision=previous_revision + 1,
+                record_id=record_id,
             )
             sealed = self.provider.seal(plaintext, context)
             _atomic_write(path, sealed)
@@ -498,12 +576,7 @@ class SecureStore:
     ) -> bytes:
         path = self._record_path(record_id)
         self._check_record_file(path)
-        try:
-            raw = path.read_bytes()
-        except FileNotFoundError:
-            raise SecureRecordNotFound("record is missing") from None
-        except OSError:
-            raise SecureStoreCorrupt("record cannot be read") from None
+        raw = _read_record_bytes(path)
         envelope = parse_envelope(raw)
         provider = self._providers.get(envelope.header.get("key_id"))
         if provider is None:
@@ -515,12 +588,19 @@ class SecureStore:
             service_domain=service_domain,
             namespace_key=self._namespace_key,
         )
+        expected_record_id = record_id
+        if not self._require_record_binding and envelope.context.record_id is None:
+            # Legacy stores may still contain records written before record
+            # identity was bound.  Newly written records in the same store are
+            # still checked because they carry a record_id.
+            expected_record_id = None
         expected = StorageContext(
             purpose=purpose,
             account_domain=account_domain,
             service_domain=service_domain,
             account_ref=account_ref,
             revision=envelope.context.revision,
+            record_id=expected_record_id,
         )
         return provider.unseal(
             raw, expected, expected_revision=expected_revision
@@ -584,7 +664,7 @@ class SecureStore:
         count = 0
         with _Lock(self._lock_path()):
             for path in sorted(self.records_dir.glob("*.secure")):
-                raw = path.read_bytes()
+                raw = _read_record_bytes(path)
                 envelope = parse_envelope(raw)
                 purposes[envelope.context.purpose] = (
                     purposes.get(envelope.context.purpose, 0) + 1
@@ -600,9 +680,16 @@ class SecureStore:
             "requires_rewrite": count,
         }
 
+    def _validate_rotation_provider(self, new_provider: AeadProvider) -> None:
+        key_path = getattr(new_provider, "key_path", None)
+        if key_path is None:
+            raise SecureKeyLocationError("rotation provider key location cannot be verified")
+        validate_key_separation(Path(key_path), self.data_dir)
+
     def rotate(self, new_provider: AeadProvider) -> dict[str, Any]:
         if new_provider.key_id == self._pointer["active_key_id"]:
             raise SecureRotationNoop("new provider is already active")
+        self._validate_rotation_provider(new_provider)
         with _Lock(self._lock_path()):
             current = dict(self._pointer)
             source_dir = self.records_dir
@@ -618,7 +705,7 @@ class SecureStore:
             migrated = 0
             try:
                 for source in files:
-                    raw = source.read_bytes()
+                    raw = _read_record_bytes(source)
                     envelope = parse_envelope(raw)
                     old_provider = self._providers.get(
                         envelope.header.get("key_id")
@@ -632,6 +719,7 @@ class SecureStore:
                         service_domain=envelope.context.service_domain,
                         account_ref=envelope.context.account_ref,
                         revision=envelope.context.revision,
+                        record_id=envelope.context.record_id,
                     )
                     sealed = new_provider.seal(plaintext, context)
                     verified = new_provider.unseal(sealed, expected=context)
@@ -654,9 +742,17 @@ class SecureStore:
                     },
                     "updated_at": _utc_now(),
                 }
+                if current.get("record_binding"):
+                    pointer["record_binding"] = current["record_binding"]
                 self._write_pointer(pointer)
-            except Exception:
-                raise SecureRotationIncomplete(migrated, total) from None
+            except SecureStoreError as exc:
+                raise SecureRotationIncomplete(
+                    migrated, total, cause_code=exc.code
+                ) from None
+            except Exception as exc:
+                raise SecureRotationIncomplete(
+                    migrated, total, cause_code=type(exc).__name__
+                ) from None
             self._providers.setdefault(new_provider.key_id, new_provider)
             self.provider = new_provider
             self._pointer = pointer
@@ -678,6 +774,29 @@ class SecureStore:
             provider = self._providers.get(previous["key_id"])
             if provider is None:
                 raise SecureRollbackUnavailable("previous key is not available")
+            for path in sorted(directory.glob("*.secure")):
+                try:
+                    raw = _read_record_bytes(path)
+                    envelope = parse_envelope(raw)
+                    record_provider = self._providers.get(
+                        envelope.header.get("key_id")
+                    )
+                    if record_provider is None:
+                        raise SecureKeyUnavailable("previous record key is unavailable")
+                    record_provider.unseal(raw)
+                except (SecureStoreError, OSError):
+                    raise SecureRollbackUnavailable(
+                        "previous records failed verification"
+                    ) from None
+            try:
+                namespace_raw = base64.b64decode(
+                    previous["namespace_b64"], validate=True
+                )
+                provider.unseal(namespace_raw, _NAMESPACE_CONTEXT)
+            except (SecureStoreError, ValueError, TypeError):
+                raise SecureRollbackUnavailable(
+                    "previous namespace failed verification"
+                ) from None
             pointer = {
                 "format_version": 1,
                 "active_key_id": previous["key_id"],
@@ -686,6 +805,8 @@ class SecureStore:
                 "previous": None,
                 "updated_at": _utc_now(),
             }
+            if current.get("record_binding"):
+                pointer["record_binding"] = current["record_binding"]
             self._write_pointer(pointer)
             self.provider = provider
             self._namespace_key = self._open_namespace(pointer)
@@ -698,16 +819,25 @@ class SecureStore:
         for path in sorted(self.records_dir.glob("*.secure")):
             count += 1
             try:
-                parse_envelope(path.read_bytes())
-            except SecureStoreError:
+                raw = _read_record_bytes(path)
+                envelope = parse_envelope(raw)
+                provider = self._providers.get(envelope.header.get("key_id"))
+                if provider is None:
+                    raise SecureKeyUnavailable("record key is not available")
+                provider.unseal(raw)
+            except (SecureStoreError, OSError):
                 corrupt += 1
+        active_key_matches = (
+            self._pointer["active_key_id"] == self.provider.key_id
+        )
         return {
-            "ok": corrupt == 0,
+            "ok": corrupt == 0 and active_key_matches,
             "backend": self.provider.backend,
             "format_version": self.provider.format_version,
             "cipher_suite": self.provider.cipher_suite,
             "active_key_id": self._pointer["active_key_id"],
             "provider_key_id": self.provider.key_id,
+            "active_key_matches": active_key_matches,
             "records": count,
             "corrupt_records": corrupt,
         }
@@ -757,6 +887,33 @@ class LegacyDpapiReader:
         raise SecureLegacyFormat("legacy record format is unknown")
 
 
+def _retired_providers_from_environment(
+    source: dict[str, str],
+) -> tuple[AeadProvider, ...]:
+    raw = source.get("THU_SECURE_RETIRED_KEY_FILES")
+    if not raw:
+        return ()
+    try:
+        paths = json.loads(raw)
+    except ValueError:
+        raise SecureKeyFormatError("retired key configuration is invalid") from None
+    if (
+        not isinstance(paths, list)
+        or not paths
+        or not all(isinstance(item, str) and item for item in paths)
+    ):
+        raise SecureKeyFormatError("retired key configuration is invalid")
+    providers: list[AeadProvider] = []
+    try:
+        for key_path in paths:
+            providers.append(load_provider(key_path))
+    except SecureStoreError:
+        raise
+    except OSError:
+        raise SecureKeyUnreadable("retired key cannot be read") from None
+    return tuple(providers)
+
+
 def open_store_from_environment(
     env: dict[str, str] | None = None,
 ) -> SecureStore:
@@ -768,7 +925,11 @@ def open_store_from_environment(
             "THU_SECURE_KEY_FILE and THU_SECURE_DATA_DIR must be configured"
         )
     provider = provider_from_environment(source)
-    return SecureStore(provider, data_dir)
+    return SecureStore(
+        provider,
+        data_dir,
+        retired_providers=_retired_providers_from_environment(source),
+    )
 
 
 __all__ = [

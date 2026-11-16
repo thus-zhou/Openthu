@@ -9,7 +9,7 @@ description = "Openthu：开放的清华校园服务、网络学堂与图书馆�
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
-dependencies = []
+dependencies = ["cryptography==50.0.2"]
 
 [project.optional-dependencies]
 web = ["requests>=2.31", "playwright>=1.40"]

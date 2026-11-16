@@ -24,6 +24,7 @@ from .errors import (
     SecureEnvelopeCorrupt,
     SecureInputError,
     SecurePurposeMismatch,
+    SecureRecordMismatch,
     SecureServiceMismatch,
 )
 
@@ -34,6 +35,8 @@ MAX_HEADER_BYTES = 4096
 MAX_PLAINTEXT_BYTES = 128 * 1024 * 1024
 MAX_NONCE_BYTES = 12
 MIN_CIPHERTEXT_BYTES = 16  # GCM authentication tag
+MAX_ENVELOPE_BYTES = len(MAGIC) + 4 + MAX_HEADER_BYTES + MAX_PLAINTEXT_BYTES + MIN_CIPHERTEXT_BYTES
+RECORD_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 
 PURPOSES = frozenset(
     {"CREDENTIAL", "SESSION", "ACTION", "INDEX", "MEDIA", "EVENT_CURSOR"}
@@ -45,6 +48,7 @@ SERVICE_DOMAINS = frozenset(
 BACKENDS = frozenset({"windows-dpapi", "file-key"})
 
 _KEY_ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+_RECORD_ID = re.compile(RECORD_ID_PATTERN)
 _ACCOUNT_REF = re.compile(r"^(?:none|acct_[A-Za-z0-9_-]{16,64})$")
 _B64URL = re.compile(r"^[A-Za-z0-9_-]+$")
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
@@ -78,6 +82,7 @@ class StorageContext:
     service_domain: str
     account_ref: str = "none"
     revision: int = 0
+    record_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.purpose not in PURPOSES:
@@ -90,6 +95,11 @@ class StorageContext:
             self.account_ref
         ):
             raise SecureInputError("invalid account reference")
+        if self.record_id is not None:
+            if not isinstance(self.record_id, str) or not _RECORD_ID.fullmatch(
+                self.record_id
+            ):
+                raise SecureInputError("invalid record identifier")
         if (
             not isinstance(self.revision, int)
             or isinstance(self.revision, bool)
@@ -123,6 +133,10 @@ def canonical_aad(context: StorageContext) -> bytes:
         "revision": context.revision,
         "service_domain": context.service_domain,
     }
+    if context.record_id is not None:
+        # Record identity is authenticated for new records.  Records written
+        # before this binding existed have no record_id and keep their old AAD.
+        payload["record_id"] = context.record_id
     return json.dumps(
         payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")
     ).encode("ascii")
@@ -172,6 +186,12 @@ def _validate_header(header: Any) -> tuple[StorageContext, bytes]:
     if header.get("backend") is not None and header["backend"] not in BACKENDS:
         raise SecureEnvelopeCorrupt("storage backend is unknown")
 
+    record_id = header.get("record_id")
+    if record_id is not None and (
+        not isinstance(record_id, str) or not _RECORD_ID.fullmatch(record_id)
+    ):
+        raise SecureEnvelopeCorrupt("record identifier is invalid")
+
     nonce = b64url_decode(header.get("nonce"), maximum=MAX_NONCE_BYTES)
     if len(nonce) != MAX_NONCE_BYTES:
         raise SecureEnvelopeCorrupt("nonce length is invalid")
@@ -190,6 +210,7 @@ def _validate_header(header: Any) -> tuple[StorageContext, bytes]:
             service_domain=aad_payload["service_domain"],
             account_ref=aad_payload["account_ref"],
             revision=aad_payload["revision"],
+            record_id=record_id,
         )
     except (KeyError, TypeError, SecureInputError):
         raise SecureEnvelopeCorrupt("aad scope is invalid") from None
@@ -274,6 +295,7 @@ def public_header(header: dict[str, Any]) -> dict[str, Any]:
         "key_id",
         "revision",
         "account_ref",
+        "record_id",
         "plaintext_length",
         "created_at",
         "key_created_at",
@@ -314,6 +336,8 @@ def check_expected(
             raise SecureServiceMismatch("service domain differs")
         if actual.account_ref != expected.account_ref:
             raise SecureAccountMismatch("account reference differs")
+        if expected.record_id is not None and actual.record_id != expected.record_id:
+            raise SecureRecordMismatch("record identifier differs")
     if expected_revision is not None and actual.revision != expected_revision:
         # Local import avoids an import cycle with errors at module load.
         from .errors import SecureRevisionConflict

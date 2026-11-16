@@ -114,6 +114,13 @@ def _read_posix(path: Path) -> bytes:
         os.close(fd)
 
 
+def _is_reparse_point(info: os.stat_result) -> bool:
+    return bool(
+        getattr(info, "st_file_attributes", 0)
+        & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    )
+
+
 def _read_windows(path: Path) -> bytes:
     try:
         info = path.lstat()
@@ -121,14 +128,31 @@ def _read_windows(path: Path) -> bytes:
         raise SecureKeyNotConfigured("key file is missing") from None
     if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
         raise SecureKeyPermissionError("key is not a regular file")
+    if _is_reparse_point(info):
+        raise SecureKeyPermissionError("key is a reparse point")
+    try:
+        parent_info = path.parent.lstat()
+    except OSError:
+        raise SecureKeyPermissionError("key directory cannot be inspected") from None
+    if _is_reparse_point(parent_info):
+        raise SecureKeyPermissionError("key directory is a reparse point")
     if info.st_size > MAX_KEY_FILE_BYTES:
         raise SecureKeyFormatError("key file is too large")
+    if not _windows_acl_owner_only(path.parent):
+        raise SecureKeyPermissionError("key parent ACL is not limited to the current user")
     if not _windows_acl_owner_only(path):
         raise SecureKeyPermissionError("key ACL is not limited to the current user")
     try:
-        return path.read_bytes()
+        raw = path.read_bytes()
     except OSError:
         raise SecureKeyUnreadable("key file cannot be read") from None
+    try:
+        after = path.lstat()
+    except OSError:
+        raise SecureKeyUnreadable("key file disappeared while reading") from None
+    if (after.st_dev, after.st_ino) != (info.st_dev, info.st_ino):
+        raise SecureKeyPermissionError("key file changed while reading")
+    return raw
 
 
 def _read_key_bytes(path: Path) -> bytes:
@@ -243,12 +267,13 @@ def _windows_acl_owner_only(path: Path) -> bool:
     return current_ace
 
 
-def _harden_windows_acl(path: Path) -> None:
+def _harden_windows_acl(path: Path, *, directory: bool = False) -> None:
     try:
         current, _ = _windows_acl_snapshot(path)
     except SecureKeyPermissionError:
         raise
     env = _minimal_windows_env()
+    grant = f"*{current}:(OI)(CI)F" if directory else f"*{current}:F"
     try:
         first = subprocess.run(
             ["icacls", str(path), "/inheritance:r"],
@@ -260,7 +285,7 @@ def _harden_windows_acl(path: Path) -> None:
             stdin=subprocess.DEVNULL,
         )
         second = subprocess.run(
-            ["icacls", str(path), "/grant:r", f"*{current}:F"],
+            ["icacls", str(path), "/grant:r", grant],
             capture_output=True,
             text=True,
             timeout=20,
@@ -308,6 +333,7 @@ def create_key_file(
         _check_posix_parent(target) if target.parent.exists() else None
     if target.exists() or target.is_symlink():
         raise SecureKeyExists("key file already exists")
+    parent_existed = target.parent.exists()
     try:
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     except OSError:
@@ -318,6 +344,24 @@ def create_key_file(
             os.chmod(target.parent, 0o700)
         except OSError:
             raise SecureKeyPermissionError("key directory permissions cannot be set") from None
+    else:
+        try:
+            parent_info = target.parent.lstat()
+        except OSError:
+            raise SecureKeyPermissionError("key directory cannot be inspected") from None
+        if _is_reparse_point(parent_info):
+            raise SecureKeyPermissionError("key directory is a reparse point")
+        try:
+            if parent_existed and not _windows_acl_owner_only(target.parent):
+                raise SecureKeyPermissionError(
+                    "key directory ACL is not limited to the current user"
+                )
+            if not parent_existed:
+                _harden_windows_acl(target.parent, directory=True)
+        except SecureKeyPermissionError:
+            raise
+        except OSError:
+            raise SecureKeyPermissionError("key directory ACL cannot be inspected") from None
 
     secret = os.urandom(KEY_BYTES)
     if chosen == "windows-dpapi":

@@ -8,10 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from .envelope import (
+    ACCOUNT_DOMAINS,
     CIPHER_SUITE,
     FORMAT_VERSION,
     MAX_NONCE_BYTES,
     MAX_PLAINTEXT_BYTES,
+    PURPOSES,
+    SERVICE_DOMAINS,
     StorageContext,
     Unsealed,
     b64url,
@@ -101,11 +104,11 @@ class AeadProvider:
         ``namespace_key`` is the store's protected account namespace.  It stays
         stable across data-key rotation; without it the provider key is used.
         """
-        if purpose not in {"CREDENTIAL", "SESSION", "ACTION", "INDEX", "MEDIA", "EVENT_CURSOR"}:
+        if purpose not in PURPOSES:
             raise SecureInputError("unknown storage purpose")
-        if account_domain not in {"CAMPUS", "MODEL", "LOCAL", "SYSTEM", "UNKNOWN"}:
+        if account_domain not in ACCOUNT_DOMAINS:
             raise SecureInputError("unknown account domain")
-        if service_domain not in {"INFO", "LEARN", "LIBRARY", "SPORTS", "MADMODEL", "LOCAL", "UNKNOWN"}:
+        if service_domain not in SERVICE_DOMAINS:
             raise SecureInputError("unknown service domain")
         raw = _account_bytes(account)
         if not raw:
@@ -158,6 +161,8 @@ class AeadProvider:
             "plaintext_length": len(plaintext),
             "created_at": _now(),
         }
+        if context.record_id is not None:
+            header["record_id"] = context.record_id
         if self.key_created_at:
             header["key_created_at"] = self.key_created_at
         return pack_envelope(header, ciphertext)

@@ -58,6 +58,7 @@ def _context(request: dict[str, Any], account_ref: str) -> StorageContext:
         service_domain=request.get("service_domain"),
         account_ref=account_ref,
         revision=request.get("revision", 0),
+        record_id=request.get("record_id"),
     )
 
 

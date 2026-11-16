@@ -123,6 +123,12 @@ class SecureServiceMismatch(SecureStoreError):
     user_action = "FIX_INPUT"
 
 
+class SecureRecordMismatch(SecureStoreError):
+    code = "SECURE_RECORD_MISMATCH"
+    category = "CONFLICT"
+    user_action = "FIX_INPUT"
+
+
 class SecureRevisionConflict(SecureStoreError):
     code = "SECURE_REVISION_CONFLICT"
     category = "CONFLICT"
@@ -140,6 +146,7 @@ class SecureStoreCorrupt(SecureStoreError):
 class SecureStoreBusy(SecureStoreError):
     code = "SECURE_STORE_BUSY"
     category = "CONFLICT"
+    retryable = True
     user_action = "WAIT"
 
 
@@ -150,9 +157,10 @@ class SecureWriteError(SecureStoreError):
 class SecureRotationIncomplete(SecureStoreError):
     code = "SECURE_ROTATION_INCOMPLETE"
 
-    def __init__(self, migrated: int = 0, total: int = 0) -> None:
+    def __init__(self, migrated: int = 0, total: int = 0, *, cause_code: str = "") -> None:
         self.migrated = migrated
         self.total = total
+        self.cause_code = cause_code
         super().__init__("rotation did not reach the pointer switch")
 
 
