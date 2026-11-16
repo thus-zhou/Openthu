@@ -233,7 +233,8 @@
         "src/thu_assistant/domain_models.py",
         "src/thu_assistant/source_state.py",
         "src/thu_assistant/cache_policy.py",
-        "tests/test_query_contracts.py"
+        "tests/test_query_contracts.py",
+        "tests/fixtures/query/"
       ],
       "input_contracts": [
         "result-envelope-v1",
