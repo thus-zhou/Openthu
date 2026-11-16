@@ -321,6 +321,9 @@ class TempArea:
         now = _now()
         for entry in entries:
             name = entry.name
+            if name == LOCK_NAME:
+                # The owner marker is not a derived file and has no count.
+                continue
             if not NAME_PATTERN.fullmatch(name):
                 # Not ours: never delete something a user put here.
                 kept += 1

@@ -858,6 +858,7 @@ def test_cleanup_never_deletes_foreign_files(assets, sources):
     foreign.write_text("user file", encoding="utf-8")
     report = assets.cleanup()
     assert report.removed == 0
+    assert report.kept == 1          # the foreign file; the lock marker is not a file count
     assert foreign.exists()
 
 
