@@ -4,6 +4,7 @@
   "title": "Openthu v0.2 business facade",
   "description": "Frozen call shapes for the single business facade. MCP, CLI and the local read dashboard consume this facade rather than reimplementing state checks. Query and health are read-only; prepare writes only an encrypted local plan; execute is the only campus-write path and requires trusted host authorization; result reconciles without resending; cancel is request cancellation only.",
   "x-contract-version": "business-facade-v1",
+  "x-owner": "1.1/Hermes",
   "x-status": "frozen",
   "x-semantics": "Internal operation names and states. They do not assert a school API or permission model.",
   "x-read-write": {
@@ -41,6 +42,12 @@
   },
   "x-legacy-tool-count": 29,
   "x-legacy-tool-baseline": "contracts/v0.2/compatibility-baseline.json",
+  "x-registered-action-operations": [
+    "create_reservation",
+    "cancel_reservation",
+    "create_seat_reservation",
+    "create_room_reservation"
+  ],
   "methods": {
     "query": {
       "request_required": ["service_id", "operation", "parameters"],

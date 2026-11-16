@@ -4,6 +4,7 @@
   "title": "Openthu v0.2 local read-only API",
   "description": "Frozen local dashboard read API. It exposes business reads only, binds loopback by default, has no write/execute/payment/model/config endpoint, and uses the same result envelope and pagination as the business facade.",
   "x-contract-version": "local-read-api-v1",
+  "x-owner": "1.1/Hermes",
   "x-status": "frozen",
   "x-semantics": "Internal HTTP paths and engineering limits, not school endpoints or school rules.",
   "x-read-only": true,

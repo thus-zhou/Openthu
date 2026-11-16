@@ -16,7 +16,9 @@
       "exclusive_paths": [
         "plans/v0.2.0/",
         "contracts/v0.2/",
-        "plans/v0.2.0/VERSION_MANIFEST.json"
+        "plans/v0.2.0/VERSION_MANIFEST.json",
+        "tests/test_v020_contracts.py",
+        "requirements-dev.txt"
       ],
       "input_contracts": [
         "result-envelope-v1",
@@ -32,10 +34,12 @@
       "parallel_peers": [],
       "parallel_eligible": false,
       "outputs": [
-        "冻结的版本基线、八类契约、模块负责表、批次门禁和总体验收映射"
+        "冻结的版本基线、八类契约 + 兼容基线、模块负责表、批次门禁和总体验收映射",
+        "JSON Schema 实例校验与可执行拒绝样例"
       ],
       "integration_order": 1,
-      "status": "accepted"
+      "status": "accepted",
+      "audit_fix": "1.1-audit-20261116 P0/P1/P2"
     },
     {
       "id": "2.1",

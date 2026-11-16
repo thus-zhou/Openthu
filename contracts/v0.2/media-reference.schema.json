@@ -4,6 +4,7 @@
   "title": "Openthu v0.2 media reference",
   "description": "A reference to locally validated image or attachment bytes. The reference never contains a local absolute path, data URL or unvalidated bytes. Image limits are checked before storage, encoding or model transfer.",
   "x-contract-version": "media-reference-v1",
+  "x-owner": "1.1/Hermes",
   "x-status": "frozen",
   "x-semantics": "Internal media metadata. MIME types are standard IANA types; image limits are Openthu engineering limits, not school rules.",
   "x-image-limits": {
@@ -69,6 +70,7 @@
     },
     "synthetic": {"type": "boolean", "default": true}
   },
+  "additionalProperties": false,
   "allOf": [
     {
       "if": {"properties": {"kind": {"const": "IMAGE"}}, "required": ["kind"]},

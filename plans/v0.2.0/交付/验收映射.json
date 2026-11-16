@@ -4,10 +4,11 @@
   "target_version": "0.2.0",
   "overall": {
     "commands": [
-      "python scripts/dev.py check",
-      "python scripts/dev.py test",
+      "python plans/v0.2.0/工具/validate_plan.py",
       "python contracts/v0.2/validate.py",
-      "python plans/v0.2.0/工具/validate_plan.py"
+      "python -m pytest tests/test_v020_contracts.py",
+      "python scripts/dev.py check",
+      "python scripts/dev.py test"
     ],
     "offline": true,
     "live_campus_calls": 0,
@@ -20,7 +21,10 @@
       "id": "1.1",
       "title": "版本基线、架构契约与调度冻结",
       "batch": 1,
-      "code_paths": [],
+      "code_paths": [
+        "contracts/v0.2/validate.py",
+        "tests/test_v020_contracts.py"
+      ],
       "contracts": [
         "result-envelope-v1",
         "error-classification-v1",
@@ -32,7 +36,9 @@
         "local-read-api-v1"
       ],
       "tests": [
-        "contracts/v0.2/validate.py"
+        "contracts/v0.2/validate.py",
+        "tests/test_v020_contracts.py",
+        "plans/v0.2.0/工具/validate_plan.py"
       ],
       "docs": [
         "contracts/v0.2/README.md",
@@ -41,16 +47,18 @@
       ],
       "install_assets": [
         "plans/v0.2.0/",
-        "contracts/v0.2/"
+        "contracts/v0.2/",
+        "requirements-dev.txt"
       ],
       "acceptance_commands": [
         "python scripts/dev.py check",
         "python scripts/dev.py test"
       ],
-      "completion_standard": "冻结的版本基线、八类契约、模块负责表、批次门禁和总体验收映射",
+      "completion_standard": "冻结的版本基线、八类契约 + 兼容基线、模块负责表、批次门禁和总体验收映射",
       "evidence": [
-        "baseline recorded in 交付/基线记录.md",
-        "contracts validator pass"
+        "Baseline 2fcc0a6: 315 files, 0 privacy findings; Python 428 passed/2 skipped; Node 54 passed; ubuntu-24.04 and windows-2025 CI passed.",
+        "Contract validator: 8 contracts + 1 compatibility baseline; 9 compatibility samples; 35 rejection samples rejected; 8 extra fixtures.",
+        "Audit-fix tree: 320 files, 0 privacy findings; Python 429 passed/2 skipped; Node 54 passed; 9 schema samples, 35 rejection samples, 8 extra fixtures."
       ]
     },
     {

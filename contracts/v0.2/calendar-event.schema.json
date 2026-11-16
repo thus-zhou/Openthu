@@ -4,10 +4,16 @@
   "title": "Openthu v0.2 calendar event",
   "description": "Frozen calendar event contract. Date-only and date-time values are separate shapes; a date-only value is never padded to midnight. Identity comes from account, service, source record and occurrence, never from the title or array position.",
   "x-contract-version": "calendar-event-v1",
+  "x-owner": "1.1/Hermes",
   "x-status": "frozen",
   "x-semantics": "Internal event model. Dates and times are display/business values, not a claim that a school endpoint uses these names.",
-  "x-identity-rule": "event_uid must be derived from account_domain, source.service_domain, source.kind, source.record_id and a stable occurrence discriminator. Title, course name, room name, array index and display order are display-only and must not participate.",
+  "x-identity-rule": "event_uid must be derived from account_domain, source.service_domain, source.kind, source.record_id and a stable occurrence discriminator. Title, course name, room name, array index and display order are display-only and must not participate. Timezone offsets such as +08:00 are allowed in the stable identifier.",
   "x-timezone-default": "Asia/Shanghai",
+  "x-semantic-rules": [
+    "A date-only value must use time.kind=DATE and must never be padded to midnight.",
+    "For time.kind=DATE_TIME, end must be null or greater than or equal to start.",
+    "A title or array position must never be used as event_uid or stable_resource_uid."
+  ],
   "x-unknown-values": {
     "status": "UNKNOWN",
     "end": null,
@@ -30,7 +36,7 @@
   "properties": {
     "event_uid": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9_.:-]{1,240}$"
+      "pattern": "^[A-Za-z0-9_.:+-]{1,240}$"
     },
     "account_domain": {
       "type": "string",
@@ -43,7 +49,7 @@
         "service_domain": {"type": "string", "enum": ["INFO", "LEARN", "LIBRARY", "SPORTS", "MADMODEL", "LOCAL", "UNKNOWN"]},
         "kind": {"type": "string", "enum": ["COURSE", "ASSIGNMENT", "EXAM", "LIBRARY_LOAN", "SPACE_RESERVATION", "SPORTS_ORDER", "CUSTOM"]},
         "record_id": {"type": "string", "minLength": 1, "maxLength": 240},
-        "stable_resource_uid": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,240}$"}
+        "stable_resource_uid": {"type": "string", "pattern": "^[A-Za-z0-9_.:+-]{1,240}$"}
       },
       "additionalProperties": false
     },
@@ -134,13 +140,13 @@
       }
     },
     {
-      "why": "a date-only value must not be silently padded to midnight",
+      "why": "a date-only value must use kind=DATE, not a DATE_TIME object padded to midnight",
       "value": {
         "event_uid": "campus:learn:EXAM:SYNTHETIC-EXAM-1",
         "account_domain": "CAMPUS",
         "source": {"service_domain": "LEARN", "kind": "EXAM", "record_id": "SYNTHETIC-EXAM-1", "stable_resource_uid": "learn:EXAM:SYNTHETIC-EXAM-1"},
         "title": "合成考试",
-        "time": {"kind": "DATE_TIME", "start": "2026-11-20T00:00:00+08:00", "end": null, "timezone": "Asia/Shanghai"},
+        "time": {"kind": "DATE_TIME", "date": "2026-11-20", "timezone": "Asia/Shanghai"},
         "status": "UNKNOWN",
         "sequence": 0,
         "last_modified": "2026-11-16T12:00:00+00:00",

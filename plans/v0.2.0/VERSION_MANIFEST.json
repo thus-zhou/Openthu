@@ -64,9 +64,16 @@
       "tough-cookie": {
         "lockfile": "6.0.0",
         "package_lock_sha256": "0f8f72de59ef08f9f689c8298109a37b8c49f7def1e845d698f1f8f61078d9d5"
+      },
+      "jsonschema": {
+        "version": "4.26.0",
+        "purpose": "Draft 2020-12 instance validation in contract validator and pytest wrapper"
       }
     },
-    "policy": "No module chooses latest independently. Dependency changes require an impact record and a lock refresh owned by 6.3."
+    "policy": "No module chooses latest independently. Dependency changes require an impact record and a lock refresh owned by 6.3.",
+    "dev_tools": {
+      "jsonschema": "4.26.0"
+    }
   },
   "contracts": {
     "directory": "contracts/v0.2",
@@ -82,7 +89,11 @@
       "compatibility-baseline-v1"
     ],
     "frozen": true,
-    "validator": "contracts/v0.2/validate.py"
+    "validator": "contracts/v0.2/validate.py",
+    "schema_samples": 9,
+    "rejection_samples": 35,
+    "extra_samples": 8,
+    "validator_test": "tests/test_v020_contracts.py"
   },
   "modules": {
     "total": 24,
@@ -110,14 +121,58 @@
       "next_cursor",
       "missing_pages",
       "warnings",
+      "data",
+      "error",
       "verification_level"
     ],
-    "baseline_file": "contracts/v0.2/compatibility-baseline.json"
+    "baseline_file": "contracts/v0.2/compatibility-baseline.json",
+    "legacy_error_sample": "contracts/v0.2/compatibility-baseline.json#legacy_error_sample"
   },
   "release_rules": {
     "hermes_scope": "batches 1 through 8; candidate preparation only",
     "codex_scope": "batch 9 independent review, merge, tag and Release",
     "no_early_tag": true,
     "no_early_release": true
+  },
+  "post_delivery_checks": {
+    "commit": "2fcc0a6252653f484aa21a2b5a96967375c48e6d",
+    "dev_check_files": 315,
+    "dev_check_findings": 0,
+    "python_passed": 428,
+    "python_skipped": 2,
+    "node_passed": 54,
+    "github_actions": {
+      "ubuntu-24.04": "success",
+      "windows-2025": "success"
+    },
+    "note": "This is the 1.1 delivery tree, not the pre-1.1 baseline. The audit-fix tree adds one pytest wrapper and contract fixtures; see the current run."
+  },
+  "audit_fix": {
+    "report": "1.1-audit-20261116",
+    "fixed": [
+      "P0-1 calendar regex/sample",
+      "P1-1 legacy data/error shape",
+      "P1-2 315-file acceptance evidence",
+      "P1-3 contract validator in pytest/CI"
+    ],
+    "fixtures_added": [
+      "source failure/empty/partial",
+      "blocked source",
+      "same-title stable identities",
+      "legacy error sample"
+    ],
+    "remaining": "P2 semantic rejection samples are explicitly checked where JSON Schema cannot express the rule; P3 wording is aligned.",
+    "dev_check_files": 320,
+    "dev_check_findings": 0,
+    "python_passed": 429,
+    "python_skipped": 2,
+    "node_passed": 54,
+    "node_failed": 0,
+    "contract_samples": {
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8
+    },
+    "commit_note": "current audit-fix commit; see PR #2 head"
   }
 }

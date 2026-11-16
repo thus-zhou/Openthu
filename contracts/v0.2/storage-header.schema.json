@@ -4,6 +4,7 @@
   "title": "Openthu v0.2 encrypted storage header",
   "description": "Frozen logical header for new cross-platform authenticated-encryption files. The binary layout wraps a UTF-8 JSON header and ciphertext. Windows DPAPI files keep their existing magic and are never rewritten automatically.",
   "x-contract-version": "secure-storage-header-v1",
+  "x-owner": "1.1/Hermes",
   "x-status": "frozen",
   "x-semantics": "Purpose, account domain and service domain are internal storage scopes. They are not school account types or school field names.",
   "x-binary-layout": [

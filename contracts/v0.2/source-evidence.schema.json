@@ -4,6 +4,7 @@
   "title": "Openthu v0.2 source evidence",
   "description": "Evidence attached to a query or action result. It records what source was read, how far it was read, and what remains unknown. Raw pages, cookies, headers and private data never enter this contract.",
   "x-contract-version": "source-evidence-v1",
+  "x-owner": "1.1/Hermes",
   "x-status": "frozen",
   "x-semantics": "State names describe Openthu internal evidence. They do not assert a school status value.",
   "x-unknown-values": {
@@ -126,6 +127,43 @@
       "description": "This contract never carries raw HTML, headers, cookies or authenticated response bodies."
     }
   },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {"auth_state": {"enum": ["EXPIRED", "FORBIDDEN"]}},
+        "required": ["auth_state"]
+      },
+      "then": {
+        "properties": {
+          "state": {"not": {"enum": ["EMPTY", "OK"]}},
+          "complete": {"const": false},
+          "source_complete": {"const": false}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"state": {"enum": ["AUTH_REQUIRED", "FORBIDDEN", "RATE_LIMITED", "MAINTENANCE", "NETWORK_ERROR", "UPSTREAM_ERROR", "UNKNOWN"]}},
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "complete": {"const": false},
+          "source_complete": {"const": false}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"warnings": {"contains": {"const": "UPSTREAM_TOTAL_UNKNOWN"}}},
+        "required": ["warnings"]
+      },
+      "then": {
+        "properties": {"upstream_total": {"type": "null"}}
+      }
+    }
+  ],
   "x-compatibility-sample": {
     "source_id": "learn.assignments",
     "service_domain": "LEARN",

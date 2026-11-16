@@ -1,0 +1,28 @@
+{
+  "x-owner": "1.1/Hermes",
+  "x-contract-version": "stable-identity-samples-v1",
+  "description": "Same-title resources with different source identifiers. Stable identifiers must differ even when display titles match.",
+  "pairs": [
+    {
+      "kind": "COURSE",
+      "items": [
+        {"title": "同名课程", "source_record_id": "SYNTHETIC-COURSE-A", "stable_resource_uid": "learn:COURSE:SYNTHETIC-COURSE-A"},
+        {"title": "同名课程", "source_record_id": "SYNTHETIC-COURSE-B", "stable_resource_uid": "learn:COURSE:SYNTHETIC-COURSE-B"}
+      ]
+    },
+    {
+      "kind": "RESOURCE",
+      "items": [
+        {"title": "同名资料", "source_record_id": "SYNTHETIC-RESOURCE-A", "stable_resource_uid": "learn:FILE:SYNTHETIC-RESOURCE-A"},
+        {"title": "同名资料", "source_record_id": "SYNTHETIC-RESOURCE-B", "stable_resource_uid": "learn:FILE:SYNTHETIC-RESOURCE-B"}
+      ]
+    },
+    {
+      "kind": "ORDER",
+      "items": [
+        {"title": "同名订单", "source_record_id": "SYNTHETIC-ORDER-A", "stable_resource_uid": "sports:SPORTS_ORDER:SYNTHETIC-ORDER-A"},
+        {"title": "同名订单", "source_record_id": "SYNTHETIC-ORDER-B", "stable_resource_uid": "sports:SPORTS_ORDER:SYNTHETIC-ORDER-B"}
+      ]
+    }
+  ]
+}

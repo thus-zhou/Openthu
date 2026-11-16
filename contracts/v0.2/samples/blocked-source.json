@@ -1,0 +1,31 @@
+{
+  "x-owner": "1.1/Hermes",
+  "x-contract-version": "blocked-source-sample-v1",
+  "description": "A synthetic unknown-source fixture. It records a blocked capability and must never be counted as implemented or as a real empty result.",
+  "envelope": {
+    "status": "UNKNOWN",
+    "source": {
+      "service_id": "academics.exams",
+      "operation": "exams",
+      "adapter_version": "academics-read-v1"
+    },
+    "checked_at": "2026-11-16T12:00:00+00:00",
+    "verification_level": "NONE",
+    "source_complete": false,
+    "complete": false,
+    "next_cursor": null,
+    "warnings": ["SOURCE_CONTRACT_BLOCKED"],
+    "implementation_state": "BLOCKED",
+    "runtime_availability": "UNAVAILABLE",
+    "evidence_level": "NONE",
+    "data": null,
+    "error": {
+      "code": "ADAPTER_REQUIRED",
+      "category": "NOT_IMPLEMENTED",
+      "message": "来源契约尚未核对，未实现考试查询",
+      "retryable": false,
+      "automatic_replay_allowed": false,
+      "user_action": "CONTACT_SUPPORT"
+    }
+  }
+}

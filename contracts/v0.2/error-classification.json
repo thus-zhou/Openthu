@@ -4,6 +4,7 @@
   "title": "Openthu v0.2 error classification",
   "description": "Stable internal error categories and retry semantics. New module-local codes must be registered here before they cross the business facade.",
   "x-contract-version": "error-classification-v1",
+  "x-owner": "1.1/Hermes",
   "x-status": "frozen",
   "x-semantics": "Categories describe Openthu behavior, not school error codes. The original upstream status is retained in source evidence.",
   "required_error_fields": [

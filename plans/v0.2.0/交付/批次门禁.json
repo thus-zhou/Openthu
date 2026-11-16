@@ -36,7 +36,31 @@
       "integration_commit": "the commit containing this accepted record",
       "accepted_at": "2026-11-16",
       "entry_condition": "baseline and contracts frozen",
-      "exit_condition": "all modules accepted; contracts connected; check and full offline suite pass"
+      "exit_condition": "all modules accepted; contracts connected; check and full offline suite pass",
+      "delivery_commit": "2fcc0a6252653f484aa21a2b5a96967375c48e6d",
+      "checks": [
+        "plan validator",
+        "contract validator with JSON Schema samples",
+        "pytest wrapper tests/test_v020_contracts.py",
+        "scripts/dev.py check",
+        "scripts/dev.py test",
+        "ubuntu-24.04 and windows-2025 CI"
+      ],
+      "audit_fix": {
+        "report": "1.1-audit-20261116",
+        "fixed": [
+          "P0-1",
+          "P1-1",
+          "P1-2",
+          "P1-3"
+        ],
+        "fixtures_added": [
+          "P2-2 source states",
+          "P2-2 blocked source",
+          "P2-2 stable identity"
+        ],
+        "owner_fields": "P2-3"
+      }
     },
     {
       "batch": 2,

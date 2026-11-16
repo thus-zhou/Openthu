@@ -4,8 +4,16 @@
   "title": "Openthu v0.2 legacy compatibility baseline",
   "description": "Frozen compatibility baseline for the v0.1 public surface that v0.2 must keep usable. New optional fields are allowed; existing tool names, entry points, result-field meanings and import paths are not removed or repurposed.",
   "x-contract-version": "compatibility-baseline-v1",
+  "x-owner": "1.1/Hermes",
   "x-status": "frozen",
   "x-semantics": "Compatibility is about Openthu's public surface, not a claim that the underlying school services are stable.",
+  "x-unknown-values": {
+    "missing_pages": "optional in v0.1; defaults to []",
+    "next_cursor": null,
+    "data": null,
+    "error": null,
+    "null_meaning": "unknown or not applicable; never success"
+  },
   "mcp_tool_count": 29,
   "mcp_tools": [
     "list_courses",
@@ -59,8 +67,34 @@
     "next_cursor",
     "missing_pages",
     "warnings",
+    "data",
+    "error",
     "verification_level"
   ],
+  "legacy_field_defaults": {
+    "next_cursor": null,
+    "missing_pages": [],
+    "data": null,
+    "error": null,
+    "note": "missing_pages is optional in v0.1 and defaults to an empty array; next_cursor, data and error default to null. Null never means success."
+  },
+  "legacy_error_shape": {
+    "required": ["code", "message"],
+    "optional": ["category", "retryable", "automatic_replay_allowed", "user_action", "retry_after_ms"],
+    "normalization": "Keep code and message; enrich the four classified fields from error-classification-v1 at the MCP/CLI boundary. New facade code emits the classified error shape."
+  },
+  "legacy_error_sample": {
+    "status": "AUTH_REQUIRED",
+    "source": {"service_id": "learn", "operation": "assignments", "adapter_version": "learn-read-v1"},
+    "checked_at": "2026-11-16T12:00:00+00:00",
+    "verification_level": "NONE",
+    "source_complete": false,
+    "complete": false,
+    "next_cursor": null,
+    "warnings": [],
+    "data": null,
+    "error": {"code": "AUTH_REQUIRED", "message": "需要重新认证"}
+  },
   "legacy_action_states": [
     "NEEDS_USER_ACTION",
     "PREPARED",
