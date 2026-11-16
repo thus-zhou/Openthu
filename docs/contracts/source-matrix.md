@@ -34,7 +34,7 @@
 | `sports.booking` | 体育官方前端 | 已实现专用适配 | `SYNTHETIC_TRANSPORT` | 签名 URL 绑定一次派发；付款以结算页为准 |
 | `sports.cancel` | 体育官方前端 | 已实现专用适配 | `SYNTHETIC_TRANSPORT` | 取消、退款、审批分别核对 |
 
-## 计划中但阻塞
+## 计划中或执行阻塞
 
 | 来源 | 目标模块 | 当前结论 | 原因 |
 |---|---:|---|---|
