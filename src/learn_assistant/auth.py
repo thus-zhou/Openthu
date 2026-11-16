@@ -221,18 +221,12 @@ def _secure_unprotect_session(raw: bytes) -> bytes | None:
         return None
 
 
-def _dpapi_protect(raw: bytes) -> bytes | None:
-    """Compatibility wrapper: secure store first, Windows DPAPI second.
+def _dpapi_protect_legacy(raw: bytes) -> bytes | None:
+    """Pure Windows DPAPI protect primitive used by the key backend.
 
-    ``ActionStore`` and the todo cache bind this function object at import
-    time.  Keeping the same name and signature means those captured references
-    receive the new backend without editing their modules.
+    ``secure_store.keys`` must not re-enter the secure provider while it is
+    creating or unwrapping the provider's own DPAPI-wrapped master key.
     """
-    protected = _secure_protect(raw, purpose="ACTION", service_domain="LOCAL", record_id=None)
-    if protected is not None:
-        return protected
-    if _secure_key_path():
-        return None  # A configured secure key must fail closed, not downgrade.
     if os.name != "nt":
         return None
     crypt32 = ctypes.windll.crypt32
@@ -248,11 +242,8 @@ def _dpapi_protect(raw: bytes) -> bytes | None:
         kernel32.LocalFree(out_blob.pbData)
 
 
-def _dpapi_unprotect(raw: bytes) -> bytes | None:
-    """Compatibility wrapper that also reads new secure-store envelopes."""
-    secure = _secure_unprotect(raw)
-    if secure is not None:
-        return secure
+def _dpapi_unprotect_legacy(raw: bytes) -> bytes | None:
+    """Pure Windows DPAPI unprotect primitive used by the key backend."""
     if os.name != "nt":
         return None
     crypt32 = ctypes.windll.crypt32
@@ -266,6 +257,29 @@ def _dpapi_unprotect(raw: bytes) -> bytes | None:
         return ctypes.string_at(out_blob.pbData, out_blob.cbData)
     finally:
         kernel32.LocalFree(out_blob.pbData)
+
+
+def _dpapi_protect(raw: bytes) -> bytes | None:
+    """Compatibility wrapper: secure store first, Windows DPAPI second.
+
+    ``ActionStore`` and the todo cache bind this function object at import
+    time.  Keeping the same name and signature means those captured references
+    receive the new backend without editing their modules.
+    """
+    protected = _secure_protect(raw, purpose="ACTION", service_domain="LOCAL", record_id=None)
+    if protected is not None:
+        return protected
+    if _secure_key_path():
+        return None  # A configured secure key must fail closed, not downgrade.
+    return _dpapi_protect_legacy(raw)
+
+
+def _dpapi_unprotect(raw: bytes) -> bytes | None:
+    """Compatibility wrapper that also reads new secure-store envelopes."""
+    secure = _secure_unprotect(raw)
+    if secure is not None:
+        return secure
+    return _dpapi_unprotect_legacy(raw)
 
 
 class SecureSessionStore:

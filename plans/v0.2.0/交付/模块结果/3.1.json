@@ -185,6 +185,7 @@
   "rollback": "Stop new session writes, keep campus-v3.secure, session.secure, .before-v3 and campus-v2.dpapi, and switch to the compatibility wrapper. Do not roll back a runtime that cannot read a pending new-format transaction; require explicit re-authentication instead of deleting state.",
   "next": "Batch integration must reconnect 3.1 with the accepted 3.2 and 3.3 commits, run the batch check and full offline suite, and record Ubuntu/Windows CI. The batch gate remains ready until that integration commit is recorded.",
   "cross_module_requests": [
+    "src/thu_assistant/secure_store/keys.py (2.2 owner): the private DPAPI backend now calls _dpapi_protect_legacy/_dpapi_unprotect_legacy from learn_assistant.auth so creating or unwrapping the provider master key cannot re-enter the secure provider. The primitive behavior is unchanged; owner review requested.",
     "error-classification.json owner (1.1): register SECURE_KEY_NOT_CONFIGURED, SECURE_LEGACY_UNAVAILABLE, SECURE_KEY_LOCATION and related storage codes before the facade exposes them as classified errors.",
     "learn_assistant/providers/web.py (6.1/7.3): replace the hard-coded Windows DPAPI message with SecureSessionStore.protection.",
     "4.4: give action_store records a stable record_id and migrate the outer THU-ACTION-1 container; the compatibility wrapper already routes captured protect/unprotect references to the secure provider.",

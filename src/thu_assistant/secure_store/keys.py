@@ -484,12 +484,15 @@ def load_key_file(
 def _dpapi(mode: str, raw: bytes) -> bytes | None:
     if os.name != "nt":
         return None
-    from learn_assistant.auth import _dpapi_protect, _dpapi_unprotect
+    # The key backend must use the pure DPAPI primitive, not the 3.1 session
+    # compatibility wrapper: while creating or unwrapping this provider's own
+    # key, re-entering the secure provider would be circular.
+    from learn_assistant.auth import _dpapi_protect_legacy, _dpapi_unprotect_legacy
 
     try:
         if mode == "protect":
-            return _dpapi_protect(raw)
-        return _dpapi_unprotect(raw)
+            return _dpapi_protect_legacy(raw)
+        return _dpapi_unprotect_legacy(raw)
     except Exception:
         return None
 
