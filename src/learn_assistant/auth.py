@@ -358,6 +358,9 @@ class SecureSessionStore:
 
     def save(self, session: BrowserSession) -> bool:
         raw = self._payload(session)
+        if self.secure_path.exists() and not _secure_key_path():
+            self.last_error = "SECURE_KEY_NOT_CONFIGURED"
+            return False
         protected = _secure_protect(
             raw, purpose="SESSION", service_domain="LEARN", record_id="learn-session"
         )

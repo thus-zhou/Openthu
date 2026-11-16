@@ -126,8 +126,10 @@ class Pending:
 
 class GatewayClient:
     def __init__(self, argv=None, env=None):
-        self.argv = argv or [os.environ.get('THU_NODE', 'node'), str(Path(__file__).with_name('gateway.js')), '--stdio']
-        self.env = gateway_environment() if env is None else env
+        resolved = gateway_environment() if env is None else env
+        self.argv = argv or [resolved.get('THU_NODE') or os.environ.get('THU_NODE', 'node'),
+                             str(Path(__file__).with_name('gateway.js')), '--stdio']
+        self.env = resolved
         self.lock = threading.RLock()
         self.process = None
         self.pending = {}
