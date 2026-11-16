@@ -209,15 +209,13 @@
       "integration_order": 5,
       "status": "accepted",
       "accepted_at": "2026-11-17",
-      "delivery_commit": "48954044efb1a40904f004be22a1a9f87847145c",
+      "delivery_commit": "0784367d6e355c26b4dcf2feb6114e96b1fc67bb",
       "evidence": [
-        "crypto-bridge.js and crypto_service.py: fixed four actions, request ids, 2 MiB request / 2 MiB + 64 KiB response limits, timeout and cancellation, minimal child environment; no request-selected program or path.",
-        "SessionStore reads legacy campus-v2.dpapi, copies it to .before-v3, writes a verified campus-v3.secure envelope and retains the old ciphertext.",
+        "Module tests: 9 Python (8 pass + 1 Linux skip; 9 pass on Windows) + 6 Node v3 + 4 Node crypto; shared-tree check 402 files/0 findings; Python 622/6, Node 64/0 on Linux; Windows 617/11, Node 64/0.",
+        "GitHub Actions run 43941862411 at 0784367: ubuntu-24.04 and windows-2025 both successful.",
         "Linux without a key fails protected session operations with SECURE_KEY_NOT_CONFIGURED; public reads and the static catalog remain available.",
         "Browser state is sealed through the owned gateway; gateway stdout contains ciphertext only, never a cookie value.",
-        "learn_assistant/auth.py writes session.secure with scope learn-session; captured _dpapi_protect/_dpapi_unprotect references in action_store and todos reach the new provider.",
-        "Module tests: 8 Python + 6 Node v3 + 4 Node crypto; shared-tree check 402 files/0 findings; Python 609/5, Node 64/0 on Linux; Windows 603/11, Node 64/0.",
-        "GitHub Actions run 43937664679 at 4895404: ubuntu-24.04 and windows-2025 both successful."
+        "learn_assistant/auth.py writes session.secure with scope learn-session; captured _dpapi_protect/_dpapi_unprotect references in action_store and todos reach the new provider."
       ]
     },
     {

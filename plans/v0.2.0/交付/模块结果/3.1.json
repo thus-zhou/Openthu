@@ -6,14 +6,15 @@
   "status": "accepted",
   "baseline_commit": "4d60e8bbca91d771dc6c4db478de4863922a2b07",
   "integration_parent_commit": "d897ccc7d1e6b4b75e344a28aaa6b4adcb392eef",
-  "delivery_commit": "48954044efb1a40904f004be22a1a9f87847145c",
+  "delivery_commit": "0784367d6e355c26b4dcf2feb6114e96b1fc67bb",
   "code_commits": [
     "24ecdb7",
     "e81ceb9",
     "19f68e9",
     "4528b0a",
     "feb3a79",
-    "4895404"
+    "4895404",
+    "0784367"
   ],
   "branch": "hermes/1-install-diagnostics",
   "version_pr": 2,
@@ -44,43 +45,70 @@
   "read_write_inventory": [
     {
       "location": "vendor/madmodel-proxy/platform/credentials",
-      "operations": ["readAccount", "writeAccount", "readToken", "writeToken"],
+      "operations": [
+        "readAccount",
+        "writeAccount",
+        "readToken",
+        "writeToken"
+      ],
       "legacy": "Windows DPAPI or Linux machine-bound AES",
       "change": "not modified; project wrapper remains a 4.4/6.1 handoff"
     },
     {
       "location": "runtime/windows/access.js",
-      "operations": ["restoreSession", "saveSession"],
+      "operations": [
+        "restoreSession",
+        "saveSession"
+      ],
       "legacy": "THUAccess/session.dpapi",
       "change": "session-store.py prefers secure store; DPAPI only without a configured key"
     },
     {
       "location": "src/thu_assistant/gateway.js",
-      "operations": ["SessionStore.load", "SessionStore.commit", "sealBrowser", "learningSignature"],
+      "operations": [
+        "SessionStore.load",
+        "SessionStore.commit",
+        "sealBrowser",
+        "learningSignature"
+      ],
       "legacy": "campus-v2.dpapi and Windows DPAPI",
       "change": "campus-v3.secure plus legacy read-only"
     },
     {
       "location": "src/thu_assistant/browser.py",
-      "operations": ["browser_state", "unseal_browser_state", "import_browser_state"],
+      "operations": [
+        "browser_state",
+        "unseal_browser_state",
+        "import_browser_state"
+      ],
       "legacy": "direct Python DPAPI protect/unprotect",
       "change": "owned gateway seals/opens state; no plaintext on disk"
     },
     {
       "location": "src/learn_assistant/auth.py",
-      "operations": ["SecureSessionStore.load", "SecureSessionStore.save", "_dpapi_protect", "_dpapi_unprotect"],
+      "operations": [
+        "SecureSessionStore.load",
+        "SecureSessionStore.save",
+        "_dpapi_protect",
+        "_dpapi_unprotect"
+      ],
       "legacy": "LA-DPAPI-1 session.dpapi",
       "change": "session.secure preferred; legacy readable, never rewritten automatically"
     },
     {
       "location": "src/thu_assistant/action_store.py",
-      "operations": ["default protect=_dpapi_protect", "default unprotect=_dpapi_unprotect"],
+      "operations": [
+        "default protect=_dpapi_protect",
+        "default unprotect=_dpapi_unprotect"
+      ],
       "legacy": "THU-ACTION-1 plus DPAPI",
       "change": "captured wrapper reference now reaches the secure provider; outer container and business logic remain 4.4"
     },
     {
       "location": "src/thu_assistant/todos.py",
-      "operations": ["TodoCache protect/unprotect"],
+      "operations": [
+        "TodoCache protect/unprotect"
+      ],
       "legacy": "THU-TODOS-1 plus DPAPI",
       "change": "captured wrapper reference now reaches the secure provider; business logic remains 5.4"
     }
@@ -112,19 +140,52 @@
       "unseal the written bytes and compare the exact plaintext",
       "retain the legacy ciphertext"
     ],
-    "result_fields": ["source", "target", "legacyPresent", "legacyReadable", "saved", "verified", "legacyRetained"],
-    "failure_codes": ["STATE_DECRYPT_FAILED", "STATE_CORRUPT", "SECURE_LEGACY_UNAVAILABLE", "SECURE_KEY_NOT_CONFIGURED", "SECURE_KEY_LOCATION", "SECURE_KEY_UNREADABLE", "STATE_ENCRYPT_FAILED", "STATE_WRITE_FAILED"]
+    "result_fields": [
+      "source",
+      "target",
+      "legacyPresent",
+      "legacyReadable",
+      "saved",
+      "verified",
+      "legacyRetained"
+    ],
+    "failure_codes": [
+      "STATE_DECRYPT_FAILED",
+      "STATE_CORRUPT",
+      "SECURE_LEGACY_UNAVAILABLE",
+      "SECURE_KEY_NOT_CONFIGURED",
+      "SECURE_KEY_LOCATION",
+      "SECURE_KEY_UNREADABLE",
+      "STATE_ENCRYPT_FAILED",
+      "STATE_WRITE_FAILED"
+    ]
   },
   "controlled_protocol": {
     "transport": "one owned Node child to one private Python line service",
-    "actions": ["health", "inspect", "seal", "unseal"],
+    "actions": [
+      "health",
+      "inspect",
+      "seal",
+      "unseal"
+    ],
     "request_id": "opaque string, echoed by the service, matched before use",
     "request_limit_bytes": 2097152,
     "response_limit_bytes": 2162688,
     "timeout_default_ms": 15000,
     "cancel": "abort kills the current child; the next call starts a new child",
     "replay": "never",
-    "forbidden_request_fields": ["program", "argv", "python", "path", "key_file", "key_path", "data_dir", "env", "module", "executable"],
+    "forbidden_request_fields": [
+      "program",
+      "argv",
+      "python",
+      "path",
+      "key_file",
+      "key_path",
+      "data_dir",
+      "env",
+      "module",
+      "executable"
+    ],
     "child_environment": "minimal OS variables plus THU_SECURE_KEY_FILE, THU_SECURE_DATA_DIR and optional THU_SECURE_BACKEND",
     "plaintext_boundary": "private pipe and process memory only; never an MCP result or log"
   },
@@ -138,21 +199,26 @@
         "python -m pytest -o addopts='' -q tests/test_session_gateway.py",
         "node --test tests/campus-session-v3.test.js",
         "node --test tests/campus-crypto-bridge.test.js"
-      ]
+      ],
+      "python_skipped": 1,
+      "python_windows_passed": 9
     },
     "full_offline_suite_linux": {
-      "python_passed": 609,
-      "python_skipped": 5,
+      "python_passed": 622,
+      "python_skipped": 6,
       "python_failed": 0,
       "node_passed": 64,
       "node_failed": 0,
       "check_files": 402,
       "check_findings": 0,
-      "commands": ["python scripts/dev.py check", "python scripts/dev.py test"],
+      "commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
       "note": "Shared tree includes the accepted 3.2 and 3.3 modules; these are not 3.1-only counts."
     },
     "full_offline_suite_windows": {
-      "python_passed": 603,
+      "python_passed": 617,
       "python_skipped": 11,
       "python_failed": 0,
       "node_passed": 64,
@@ -166,12 +232,12 @@
       "source_validator": "ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures"
     },
     "github_actions": {
-      "head_sha": "48954044efb1a40904f004be22a1a9f87847145c",
-      "run_id": 43937664679,
+      "head_sha": "0784367d6e355c26b4dcf2feb6114e96b1fc67bb",
+      "run_id": 43941862411,
       "ubuntu_24_04": "success",
       "windows_2025": "success",
-      "ubuntu_result": "609 passed, 5 skipped, 0 failed; Node 64 passed",
-      "windows_result": "603 passed, 11 skipped, 0 failed; Node 64 passed"
+      "ubuntu_result": "622 passed, 6 skipped, 0 failed; Node 64 passed",
+      "windows_result": "617 passed, 11 skipped, 0 failed; Node 64 passed"
     },
     "live_campus_calls": 0,
     "model_calls": 0,
