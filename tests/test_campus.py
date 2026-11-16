@@ -53,7 +53,8 @@ class Page:
 
 def plans(tmp_path):
     from thu_assistant.actions import ActionEngine,ActionStore
-    manager=BrowserManager(ActionEngine(ActionStore(tmp_path),account_provider=lambda:'synthetic-account'));element=Element()
+    from synthetic_store import make_action_store
+    manager=BrowserManager(ActionEngine(make_action_store(tmp_path),account_provider=lambda:'synthetic-account'));element=Element()
     manager.sessions['test']={'revision':1,'refs':{'submit':element},'page':Page(),'secrets':[],'account_id':'synthetic-account'}
     state={'digest':'one'}
     manager._form_state=lambda s,e:({'url':Page.url,'label':'确认预约','fields':[{'name':'date','value':'synthetic-date','type':'text'}]},state['digest'])

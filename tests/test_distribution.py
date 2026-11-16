@@ -6,8 +6,18 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import pytest
 
 ROOT=Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.skipif(os.name=='nt',reason='Non-Windows production encryption failure contract')
+def test_production_store_still_rejects_missing_dpapi(tmp_path):
+    from thu_assistant.action_store import ActionStore
+    from thu_assistant.bridge import CampusError
+    with pytest.raises(CampusError,match='ACTION_LOG_ENCRYPT_FAILED'):
+        ActionStore(tmp_path).write({'operation_id':'a'*32,'value':'synthetic'})
+    assert not list(tmp_path.glob('*.dpapi'))
 
 
 def load(name):

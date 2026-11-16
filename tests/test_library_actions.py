@@ -9,6 +9,7 @@ import pytest
 from thu_assistant import spaces as s, library_actions as a, library_wire as w, library_contracts as c
 from thu_assistant.actions import ActionEngine, RequestGate, NotDispatched
 from thu_assistant.action_store import ActionStore
+from synthetic_store import make_action_store
 from thu_assistant.bridge import CampusError
 from thu_assistant.browser import read_request
 from thu_assistant.queries import describe
@@ -42,7 +43,7 @@ def world(monkeypatch,tmp_path):
     obj=SimpleNamespace(seat=deepcopy(SEAT_AV),map=deepcopy(MAP),room=deepcopy(ROOM_AV),
                         seat_rows=[],room_rows=[],restrictions=0,verification='0',form_limit=0,
                         disabled=False,unresolved=set(),incomplete=set(),seat_detail_error=None,sent=0,lost=False,
-                        delayed=False,path=None,body=None,after=None,store=ActionStore(tmp_path))
+                        delayed=False,path=None,body=None,after=None,store=make_action_store(tmp_path))
     class Reader:
         sid='session'
         def __init__(self,browsers,system):self.system=system;self.page=SimpleNamespace(evaluate=lambda *_:['当前取消规则'])

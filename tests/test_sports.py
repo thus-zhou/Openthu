@@ -10,6 +10,7 @@ import pytest
 from thu_assistant import sports as s, sports_actions as a, sports_transport as net
 from thu_assistant.actions import ActionEngine, RequestGate, RequestSpec
 from thu_assistant.action_store import ActionStore
+from synthetic_store import make_action_store
 from thu_assistant.bridge import CampusError
 from thu_assistant.queries import describe
 from thu_assistant.todos import normalize
@@ -206,7 +207,7 @@ def make_engine(tmp_path,monkeypatch,f,op='create_reservation'):
     def consent(r):
         return {'plan_id':r['operation_id'],'account':r['account'],'digest':r['digest'],'adapter_version':r['adapter_version'],
                 'source':'human','reference':'synthetic-local-human','expires_at':r['expires_at']}
-    engine=ActionEngine(store=ActionStore(tmp_path),adapters={('sports',op):adapter},
+    engine=ActionEngine(store=make_action_store(tmp_path),adapters={('sports',op):adapter},
                         account_provider=lambda:'test-account',consent_verifier=consent)
     return engine,adapter
 

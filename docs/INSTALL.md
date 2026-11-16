@@ -6,6 +6,8 @@
 
 Node 依赖默认从官方 npm registry 安装，版本和完整性哈希由锁文件固定。网络环境确有需要时，可显式设置 `OPENTHU_NPM_REGISTRY` 使用自行选定的镜像；不要把个人 npm 认证配置提交到仓库。
 
+事务测试在 Windows 使用真实 DPAPI；Linux 的合成用例显式注入测试专用可逆编码器，以验证事务和并发逻辑。该编码器只在 tests/，不进入生产程序。另有测试确保 Linux 的生产默认仍拒绝无法加密的写入。
+
 `python scripts/dev.py smoke` 验证 MCP 初始化、29 个工具和静态目录。它不验证登录、权限或真实业务。云端 Hermes 在此目录工作即可，不需要读取任何人的私有配置。
 
 ## Windows 真实运行

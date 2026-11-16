@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from thu_assistant.actions import ActionEngine,RequestGate,RequestSpec,NotDispatched,CHECKS,process_alive
 from thu_assistant.action_store import ActionStore
+from synthetic_store import make_action_store
 from thu_assistant.bridge import CampusError
 from thu_assistant.browser import BrowserManager
 
@@ -42,14 +43,14 @@ class Adapter:
         return {'records':[row,row] if self.mode=='duplicate' else [row], 'complete':self.mode!='partial'}
 
 def setup_engine(tmp_path,**kwargs):
-    store=ActionStore(tmp_path) # Real Windows user DPAPI even for synthetic fixtures.
+    store=make_action_store(tmp_path) # Real DPAPI on Windows; explicit test codec elsewhere.
     adapter=Adapter(store)
     engine=ActionEngine(store,account_provider=lambda:'synthetic-account',adapters={('sports','create'):adapter},consent_verifier=consent,**kwargs)
     return engine,adapter
 
 def plan(engine):return engine.prepare('sports','create',BUSINESS)['plan_id']
 
-def test_dpapi_atomic_journal_and_safe_public_result(tmp_path):
+def test_atomic_journal_and_safe_public_result(tmp_path):
     e,a=setup_engine(tmp_path);pid=plan(e)
     raw=e.store.path(pid).read_bytes()
     assert b'synthetic-private' not in raw and b'synthetic-account' not in raw
