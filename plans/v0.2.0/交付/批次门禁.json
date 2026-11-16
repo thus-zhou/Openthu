@@ -72,13 +72,18 @@
       ],
       "module_status": {
         "2.1": "pending",
-        "2.2": "pending",
+        "2.2": "accepted",
         "2.3": "accepted"
       },
       "status": "ready",
       "integration_commit": null,
       "accepted_at": null,
       "module_acceptance": {
+        "2.2": {
+          "accepted_at": "2026-11-16",
+          "delivery_commit": "713e527",
+          "evidence": "AES-256-GCM + Windows DPAPI/POSIX key backends; 22 Linux module tests + 3 Windows-only; clean delivery tree check 335/0, Python 467/5, Node 54; plan and contract validators ok"
+        },
         "2.3": {
           "accepted_at": "2026-11-16",
           "delivery_commit": "the commit containing this record",

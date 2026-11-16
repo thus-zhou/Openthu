@@ -97,8 +97,8 @@
   },
   "modules": {
     "total": 24,
-    "accepted": 2,
-    "pending": 22,
+    "accepted": 3,
+    "pending": 21,
     "ownership_file": "交付/模块负责表.json",
     "acceptance_file": "交付/验收映射.json"
   },
@@ -120,7 +120,7 @@
     "total": 9,
     "current": 2,
     "current_status": "ready",
-    "module_status_note": "2.1 implemented; 2.3 accepted; 2.2 pending",
+    "module_status_note": "2.1 implemented; 2.2 and 2.3 accepted",
     "next": 3,
     "gate_file": "交付/批次门禁.json"
   },
