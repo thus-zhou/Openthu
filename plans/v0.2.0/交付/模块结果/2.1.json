@@ -61,7 +61,7 @@
     },
     "windows": {
       "module_failures": 0,
-      "note": "Latest CI run 43887681034 at a273d0e had no failures in tests/test_configuration.py or tests/test_dev_diagnostics.py; the overall job remained failed in 2.2 tests/test_secure_store.py."
+      "note": "Windows CI run 43893326711 at 7b8e925: 481 passed/4 skipped/1 failed; tests/test_configuration.py and tests/test_dev_diagnostics.py had no failures. The only failure is 2.2 tests/test_secure_store.py::test_bridge_subprocess_has_a_single_json_response."
     },
     "live_campus_calls": 0,
     "model_calls": 0,
