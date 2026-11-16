@@ -216,8 +216,8 @@
         "Linux without a key fails protected session operations with SECURE_KEY_NOT_CONFIGURED; public reads and the static catalog remain available.",
         "Browser state is sealed through the owned gateway; gateway stdout contains ciphertext only, never a cookie value.",
         "learn_assistant/auth.py writes session.secure with scope learn-session; captured _dpapi_protect/_dpapi_unprotect references in action_store and todos reach the new provider.",
-        "Module tests: 8 Python + 6 Node v3 + 4 Node crypto; shared-tree check 392 files/0 findings; Python 608/5, Node 64/0 on Linux.",
-        "Ubuntu/Windows CI status is recorded after the branch push; the cloud host cannot run DPAPI locally."
+        "Module tests: 8 Python + 6 Node v3 + 4 Node crypto; shared-tree check 402 files/0 findings; Python 609/5, Node 64/0 on Linux; Windows 603/11, Node 64/0.",
+        "GitHub Actions run 43937664679 at 4895404: ubuntu-24.04 and windows-2025 both successful."
       ]
     },
     {
