@@ -33,6 +33,7 @@ python scripts/dev.py test
 - [完整开发交接](docs/HANDOVER.md)：架构、代码入口、接口契约和已知限制。
 - [能力与验证状态](docs/CAPABILITIES.md)：区分实现、模拟测试、历史实测和真实写入。
 - [人工接力](docs/MANUAL_RELAY.md)：Hermes 与 Codex 使用 Issue、分支和 PR 交接。
+- [完整升级批次](docs/BATCH_UPGRADES.md)：Hermes 连续完成整套升级或版本，再交 Codex 整体审查和发布。
 - [Hermes 接手入口](docs/HERMES_START.md)：云端 AI 的阅读顺序与工作步骤。
 - [维护与发布](docs/MAINTENANCE.md)：更新、Release、问题管理、回滚及职责。
 - [开发计划](docs/ROADMAP.md)、[贡献指南](CONTRIBUTING.md)、[隐私与安全](SECURITY.md)。
