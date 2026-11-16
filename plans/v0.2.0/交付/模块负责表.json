@@ -79,7 +79,8 @@
         "31 module tests passed on delivery commit 690cbab",
         "clean-tree full offline suite: Python 479 passed/5 skipped, Node 54 passed; check 367 files/0 findings",
         "plan and contract validators ok; no live campus/model calls",
-        "Windows CI a273d0e: 2.1 test files have no failures; overall job blocked by 2.2 test_secure_store.py"
+        "Windows CI a273d0e: 2.1 test files have no failures; the job was then blocked by 2.2, which is fixed in later commits",
+        "batch-2 record head 34c463d: ubuntu-24.04 and windows-2025 both successful; 2.1 tests included"
       ]
     },
     {
@@ -111,6 +112,7 @@
       "status": "accepted",
       "accepted_at": "2026-11-16",
       "delivery_commit": "a6b54bb6502947e401999d4c14fa70c92ee4b268",
+      "audit_fix": "2.2-audit-20261116 P1/P2/P3 via 6e99d3d and a6b54bb; P2-5 TOCTOU and P2-6 wiring retained as documented limits",
       "evidence": [
         "AES-256-GCM envelope, Windows DPAPI and POSIX owner-only key backends",
         "record_id bound into AAD; record substitution rejected; legacy unbound stores read-only",
@@ -118,7 +120,12 @@
         "health authenticates ciphertext; unreadable records counted without path leakage",
         "33 Linux module tests passed; Windows secure-store failures 0",
         "final audit-fix tree: Python 497/5 Linux and 497/5 Windows; Node 54; check 369/0",
-        "CI ubuntu-24.04 and windows-2025 successful at a6b54bb"
+        "CI ubuntu-24.04 and windows-2025 successful at a6b54bb and at the batch-2 record head 34c463d"
+      ],
+      "cross_module_handoffs": [
+        "contracts/v0.2/storage-header.schema.json (owned by 1.1): additive optional record_id under secure-storage-header-v1; old records stay readable, so the contract version is unchanged. Owner review is recorded in the batch gate.",
+        "requirements-dev.txt (owned by 1.1, later 6.3): added jsonschema and cryptography development pins.",
+        "pyproject.toml (owned by 6.3): added cryptography==50.0.2 as a runtime dependency; 6.3 keeps the final lock and packaging layout."
       ]
     },
     {
@@ -151,11 +158,14 @@
       "status": "accepted",
       "accepted_at": "2026-11-16",
       "delivery_commit": "f7fe6408ad3e9e16bdee2ca041cb648a2fc2b2ab",
+      "audit_fix": "2.3-audit-20261116 P1/P2/P3 via d4a2f03",
+      "audit_fix_commit": "d4a2f03d7395c41ad71569aa1520d0214abffd92",
       "evidence": [
         "29 source rows, 10 domain models, 8 source tasks, 14 adapter-readiness rows, 7 synthetic fixtures",
         "contracts/v0.2/sources/validate.py: ok=true; 9 schema samples, 24 rejection samples",
-        "tests/test_source_contracts.py: 5 passed",
-        "shared-tree check: 367 files, 0 findings; test: 481 Python passed/5 skipped, 54 Node passed; no failures"
+        "tests/test_source_contracts.py: 6 passed",
+        "shared-tree check: 369 files, 0 findings; test: 497 Python passed/5 skipped, 54 Node passed; no failures",
+        "results mirrored at plans/v0.2.0/交付/模块结果/2.3.json and contracts/v0.2/sources/module-result.json"
       ]
     },
     {

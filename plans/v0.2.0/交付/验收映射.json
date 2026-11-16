@@ -99,7 +99,8 @@
         "dev.py check: 367 files, 0 findings; dev.py test: Python 479 passed/5 skipped, Node 54 passed",
         "plan validator ok (24 modules/9 batches); contract validator ok (9/35/8 samples)",
         "audit report P1/P2/P3 2.1 items fixed; cross-module legacy path items recorded for 4.2/6.3",
-        "Windows CI a273d0e: 2.1 test files 0 failures; 2.2 secure_store remains the batch blocker"
+        "Windows CI a273d0e: 2.1 test files 0 failures; the then-failing 2.2 secure_store was fixed later and the batch is accepted at 4519117",
+        "re-verified head 34c463d: both platforms green; 2.1 tests included; check 369/0"
       ]
     },
     {
@@ -176,7 +177,9 @@
         "Source registry: 29 sources, 8 source tasks, 14 adapter-readiness rows.",
         "Domain model manifest: 10 models; event reuses calendar-event-v1.",
         "Validator: 9 schema samples, 24 rejection samples, 7 fixtures, ok=true.",
-        "Tests: tests/test_source_contracts.py passed; no live campus, model, payment or submission calls."
+        "Tests: tests/test_source_contracts.py 6 passed; no live campus, model, payment or submission calls.",
+        "Result mirrored at plans/v0.2.0/交付/模块结果/2.3.json; audit fix d4a2f03 recorded.",
+        "Batch 2 accepted at 4519117; both platforms green at the re-verified head 34c463d."
       ]
     },
     {

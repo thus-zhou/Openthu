@@ -10,7 +10,9 @@
   "version_pr": 2,
   "baseline_commit": "970cb0d266ef814a1372d3756ea7faf85e472233",
   "delivery_commit": "f7fe6408ad3e9e16bdee2ca041cb648a2fc2b2ab",
-  "checked_at": "2026-11-16",
+  "audit_fix_commit": "d4a2f03d7395c41ad71569aa1520d0214abffd92",
+  "checked_at": "2026-11-17",
+  "mirror": "plans/v0.2.0/交付/模块结果/2.3.json",
   "paths": {
     "source_contracts": "contracts/v0.2/sources/",
     "docs": "docs/contracts/",
@@ -19,13 +21,19 @@
   },
   "checks": {
     "plan_validator": "ok: 24 modules, 9 batches",
-    "contract_validator": "ok: 9 schema samples, 35 rejection samples, 8 extra fixtures",
+    "contract_validator": "ok: 8 contracts + 1 compatibility baseline, 9 schema samples, 35 rejection samples, 8 extra fixtures",
     "source_validator": "ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures, 9 schema samples, 24 rejection samples",
-    "source_tests": "5 passed",
-    "dev_check": "ok: 367 files, 0 privacy findings, 29 MCP tools",
-    "dev_test_shared_tree": "481 Python passed, 5 skipped, 0 failed; 54 Node passed; shared tree also contains the committed 2.1/2.2 modules, so this is not a 2.3-only count",
-    "ci_ubuntu": "success for 3b848d3, 173922e, a273d0e and d4a2f03",
-    "ci_windows": "failure for 3b848d3, a273d0e and d4a2f03; d4a2f03: 480 passed / 3 skipped / 3 failed; failures are 2.1 configuration parent-directory and configured-node-path, plus 2.2 secure_store bridge; 2.3 tests pass",
+    "source_tests": "6 passed",
+    "dev_check": "ok: 369 files, 0 privacy findings, 29 MCP tools",
+    "dev_test_shared_tree": "Python 497 passed, 5 skipped, 0 failed; Node 54 passed; shared tree also contains the committed 2.1/2.2 modules, so this is not a 2.3-only count",
+    "ci_ubuntu": "success for the batch-2 integration commit and every later head, including 4519117 and 34c463d",
+    "ci_windows": "success for the batch-2 integration commit and every later head, including 4519117 and 34c463d; the earlier 3b848d3/a273d0e/d4a2f03 failures were 2.1 configuration and 2.2 secure-store defects, not 2.3",
+    "post_delivery_ci": {
+      "verified_head": "34c463d97fe15ff25a2054506b5aa5e47c70aa5e",
+      "ubuntu": "success",
+      "windows": "success",
+      "note": "Snapshots before d4a2f03 are historical; the source contract has no failing platform test."
+    },
     "live_campus_calls": 0,
     "model_calls": 0,
     "business_submissions": 0
@@ -52,7 +60,13 @@
       "status": "BLOCKED_SOURCE_EVIDENCE"
     }
   ],
-  "next_action": "2.3 is accepted. 2.1 is accepted at 690cbab and 2.2 at 713e527; Windows CI on d4a2f03 still fails 2.1 configuration/dev-diagnostics tests and the 2.2 secure-store bridge, so batch 2 remains blocked. After those owners fix their tests and the three modules pass both-platform CI, reconnect them and unlock batch 3.",
+  "retained_limits": [
+    "Offline source evidence only: no real campus login, read, booking or submission proves these mappings.",
+    "4.1, 4.5, 5.1 and 5.3 stay BLOCKED_SOURCE_EVIDENCE until a downstream module records real evidence.",
+    "The registry records existing code fields as DERIVED or RETAINED_SOURCE_ONLY; it does not make the runtime normalisation already implemented.",
+    "library.renewal eligibility reading is PARTIAL/LIMITED; only renewal execution is blocked."
+  ],
+  "next_action": "2.3 is accepted and mirrored in plans/v0.2.0/交付/模块结果/2.3.json. Batch 2 is accepted at the integration record; batch 3 is ready. Downstream modules must keep the BLOCKED_SOURCE_EVIDENCE conclusions and must not treat this offline package as real campus evidence.",
   "privacy": {
     "raw_payload_included": false,
     "personal_records_included": false,

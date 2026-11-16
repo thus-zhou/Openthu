@@ -77,7 +77,11 @@
         "2.3": "accepted"
       },
       "status": "accepted",
-      "integration_commit": "a6b54bb6502947e401999d4c14fa70c92ee4b268",
+      "integration_commit": "4519117e6508f47adcd1664af50f86ec432d1764",
+      "acceptance_record": "the commit containing this accepted record",
+      "reverified_heads": [
+        "34c463d97fe15ff25a2054506b5aa5e47c70aa5e"
+      ],
       "accepted_at": "2026-11-16",
       "module_acceptance": {
         "2.2": {
@@ -88,12 +92,12 @@
         "2.3": {
           "accepted_at": "2026-11-16",
           "delivery_commit": "f7fe6408ad3e9e16bdee2ca041cb648a2fc2b2ab",
-          "evidence": "29 sources; 10 models; 8 tasks; 14 readiness rows; 7 fixtures; 9 schema samples; 24 rejection samples; 5 tests; validator ok=true; no live campus calls"
+          "evidence": "29 sources; 10 models; 8 tasks; 14 readiness rows; 7 fixtures; 9 schema samples; 24 rejection samples; 6 tests; validator ok=true; no live campus calls"
         },
         "2.1": {
           "accepted_at": "2026-11-16",
           "delivery_commit": "690cbab",
-          "evidence": "31 module tests; check 367/0; Python 479/5, Node 54; plan/contract ok; Windows 2.1 test files no failures"
+          "evidence": "31 module tests; check 367/0 at delivery, 369/0 in the shared batch tree; Python 479/5 at delivery, 497/5 in the shared tree; Node 54; plan/contract ok; Windows tests green at 4519117 and 34c463d"
         }
       },
       "checks": [
@@ -103,9 +107,9 @@
         "scripts/dev.py check: 369 files, 0 findings, 29 MCP tools",
         "Python: 497 passed/5 skipped Linux; 497 passed/5 skipped Windows",
         "Node: 54 passed/0 failed",
-        "GitHub Actions: ubuntu-24.04 and windows-2025 successful at a6b54bb"
+        "GitHub Actions: ubuntu-24.04 and windows-2025 successful at 4519117 and at the re-verified head 34c463d"
       ],
-      "gate_note": "2.1, 2.2 and 2.3 accepted and reconnected through the 2.2 audit-fix commit a6b54bb; batch 3 remains ready, not started.",
+      "gate_note": "2.1, 2.2 and 2.3 accepted and reconnected at 4519117; later 2.2 audit fixes on top of that commit are included in the accepted tree. Batch 3 is ready, not started.",
       "entry_condition": "all batch 1 modules accepted and integrated",
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     },

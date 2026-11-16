@@ -111,5 +111,29 @@
     "Legacy learn_assistant/configure_mcp path construction remains a cross-module follow-up."
   ],
   "rollback": "Revert the 2.1 code/test commits and keep the new configuration sample disabled. Do not delete user state directories or reuse credentials across machines. Re-run dev.py check and the full offline suite after rollback.",
-  "next": "Keep batch 2 ready until 2.2 Windows secure_store is green and 2.1/2.2/2.3 are reconnected to one integration commit; then run batch-level check/tests and unlock batch 3."
+  "next": "Batch 2 is accepted at 4519117 and re-verified at 34c463d; batch 3 is ready. The next batch executor owns 3.1-3.3.",
+  "reaudit": {
+    "date": "2026-11-17",
+    "scope": "batch-2 integration re-audit",
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0,
+    "fixes": [
+      "dev.py converts a non-spawnable runtime.python or runtime.node into a stable error and exit 1 instead of a traceback; test_dev_cli_reports_an_unusable_configured_python added.",
+      "configuration duplicate-group error now reports the full config.<group> item path."
+    ],
+    "module_tests": {
+      "passed": 32,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_configuration.py tests/test_dev_diagnostics.py"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 504,
+      "python_skipped": 5,
+      "python_failed": 0,
+      "node_passed": 54,
+      "check_files": 369,
+      "check_findings": 0
+    }
+  }
 }

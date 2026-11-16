@@ -135,9 +135,37 @@
     "The release/packaging module 6.3 still owns the final runtime dependency manifest and lock; cryptography is now declared for the package dependency while 6.3 can adjust the lock."
   ],
   "rollback": "Stop new writes, keep the previous records directory and key, set THU_SECURE_RETIRED_KEY_FILES to the previous key path(s), verify old records, then rollback() switches store.json back. No old ciphertext or key is deleted automatically.",
-  "next": "2.2 audit P1 fixes are complete; keep batch 2 accepted at this fix commit and batch 3 ready. Do not start 3.1 in this 2.2 task; the next batch executor should begin when assigned.",
+  "next": "P1 fixes and the 2026-11-17 re-audit are complete. Batch 2 stays accepted at 4519117 and is re-verified at 34c463d; batch 3 is ready. Do not start 3.1 in this 2.2 task; the next batch executor begins when assigned.",
   "cross_module_requests": [
     "contracts/v0.2/storage-header.schema.json: additive optional record_id under secure-storage-header-v1; 1.1 owner review required before release.",
     "pyproject.toml: cryptography==50.0.2 runtime dependency; 6.3 remains owner of the final lock and packaging layout."
-  ]
+  ],
+  "reaudit": {
+    "date": "2026-11-17",
+    "scope": "batch-2 integration re-audit",
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0,
+    "fixes": [
+      "SDDL owner/ACE parsing now accepts concrete SIDs as well as alias tokens, and normalises well-known principals before comparison; four synthetic-SDDL tests run on Linux and Windows.",
+      "A failed rotation discards the unpublished target directory it created; the active records directory is untouched.",
+      "Record reads use a single O_NOFOLLOW open plus fstat and a bounded loop instead of a stat/read sequence; symlinks and non-files are still rejected.",
+      "validate_key_separation and record identity checks unchanged."
+    ],
+    "module_tests": {
+      "passed": 38,
+      "skipped": 3,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_secure_store.py"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 504,
+      "python_skipped": 5,
+      "python_failed": 0,
+      "node_passed": 54,
+      "check_files": 369,
+      "check_findings": 0
+    },
+    "windows_note": "The new SDDL tests are platform-independent; the existing real Windows DPAPI/ACL tests still exercise the runner path."
+  }
 }
