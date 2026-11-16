@@ -216,7 +216,7 @@
         "Linux without a key fails protected session operations with SECURE_KEY_NOT_CONFIGURED; public reads and the static catalog remain available.",
         "Browser state is sealed through the owned gateway; gateway stdout contains ciphertext only, never a cookie value.",
         "learn_assistant/auth.py writes session.secure with scope learn-session; captured _dpapi_protect/_dpapi_unprotect references in action_store and todos reach the new provider.",
-        "Audit remediation 6930dde/b4bcecb/6972ef8 adds Learn account binding, ACTION-only compatibility decrypt, fail-closed access helper, browser identity rejection, default-key discovery, verified temp-file writes and real Windows DPAPI migration coverage."
+        "Audit remediation 6930dde through b0ecc64 adds Learn account binding, ACTION-only compatibility decrypt, fail-closed access helper, browser identity rejection, default-key discovery, verified temp-file writes and real Windows DPAPI migration coverage."
       ]
     },
     {
