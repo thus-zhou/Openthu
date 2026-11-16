@@ -25,7 +25,7 @@
     "source_validator": "ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures, 9 schema samples, 24 rejection samples",
     "source_tests": "6 passed",
     "dev_check": "ok: 371 files, 0 privacy findings, 29 MCP tools",
-    "dev_test_shared_tree": "Python 497 passed, 5 skipped, 0 failed; Node 54 passed; shared tree also contains the committed 2.1/2.2 modules, so this is not a 2.3-only count",
+    "dev_test_shared_tree": "Python 505 passed, 5 skipped, 0 failed; Node 54 passed; shared tree also contains the committed 2.1/2.2 modules, so this is not a 2.3-only count",
     "ci_ubuntu": "success for the batch-2 integration commit and every later head, including 4519117 and 34c463d",
     "ci_windows": "success for the batch-2 integration commit and every later head, including 4519117 and 34c463d; the earlier 3b848d3/a273d0e/d4a2f03 failures were 2.1 configuration and 2.2 secure-store defects, not 2.3",
     "post_delivery_ci": {

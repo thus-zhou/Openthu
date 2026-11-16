@@ -118,9 +118,9 @@
         "record_id bound into AAD; record substitution rejected; legacy unbound stores read-only",
         "rotation rejects a key inside data; restarted rollback loads THU_SECURE_RETIRED_KEY_FILES",
         "health authenticates ciphertext; unreadable records counted without path leakage",
-        "33 Linux module tests passed; Windows secure-store failures 0",
-        "final audit-fix tree: Python 497/5 Linux and 497/5 Windows; Node 54; check 369/0",
-        "CI ubuntu-24.04 and windows-2025 successful at a6b54bb and at the batch-2 record head 34c463d"
+        "33 Linux module tests passed at a6b54bb, 39 after the 2026-11-17 re-audit; Windows secure-store failures 0",
+        "final tree: Python 505/5 Linux and 505/5 Windows; Node 54; check 371/0",
+        "CI ubuntu-24.04 and windows-2025 successful at a6b54bb, at the batch-2 record head 34c463d and at the final tree dcece7b"
       ],
       "cross_module_handoffs": [
         "contracts/v0.2/storage-header.schema.json (owned by 1.1): additive optional record_id under secure-storage-header-v1; old records stay readable, so the contract version is unchanged. Owner review is recorded in the batch gate.",
@@ -164,7 +164,7 @@
         "29 source rows, 10 domain models, 8 source tasks, 14 adapter-readiness rows, 7 synthetic fixtures",
         "contracts/v0.2/sources/validate.py: ok=true; 9 schema samples, 24 rejection samples",
         "tests/test_source_contracts.py: 6 passed",
-        "shared-tree check: 369 files, 0 findings; test: 497 Python passed/5 skipped, 54 Node passed; no failures",
+        "shared-tree check: 371 files, 0 findings; test: 505 Python passed/5 skipped, 54 Node passed; no failures",
         "results mirrored at plans/v0.2.0/交付/模块结果/2.3.json and contracts/v0.2/sources/module-result.json"
       ]
     },
