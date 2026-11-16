@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/storage-header.schema.json",
+  "title": "Openthu v0.2 encrypted storage header",
+  "description": "Frozen logical header for new cross-platform authenticated-encryption files. The binary layout wraps a UTF-8 JSON header and ciphertext. Windows DPAPI files keep their existing magic and are never rewritten automatically.",
+  "x-contract-version": "secure-storage-header-v1",
+  "x-status": "frozen",
+  "x-semantics": "Purpose, account domain and service domain are internal storage scopes. They are not school account types or school field names.",
+  "x-binary-layout": [
+    {"field": "magic", "bytes": 13, "encoding": "ascii", "value": "THU-SECURE-1\\0"},
+    {"field": "header_length", "bytes": 4, "encoding": "uint32-big-endian", "maximum": 4096},
+    {"field": "header_json", "bytes": "header_length", "encoding": "utf-8-json"},
+    {"field": "ciphertext", "bytes": "remaining", "encoding": "aead-ciphertext-with-tag"}
+  ],
+  "x-cipher-suite": "AES-256-GCM",
+  "x-key-policy": {
+    "master_key": "random 32-byte secret generated locally",
+    "key_location": "separate owner-only key file outside the data directory",
+    "posix_mode": "0600",
+    "windows_acl": "current user only",
+    "symlink": "reject",
+    "missing_key": "refuse production storage; never fall back to plaintext",
+    "nonce": "unique per key and purpose; never reused"
+  },
+  "x-purpose-values": {
+    "CREDENTIAL": "School or model credential material.",
+    "SESSION": "Authentication cookies, CSRF state and session metadata.",
+    "ACTION": "Transaction plans, authorization evidence and remote reconciliation state.",
+    "INDEX": "Local search or resource indexes.",
+    "MEDIA": "Validated image or attachment bytes and metadata.",
+    "EVENT_CURSOR": "Incremental event cursor and snapshot watermark."
+  },
+  "x-account-domains": ["CAMPUS", "MODEL", "LOCAL", "SYSTEM", "UNKNOWN"],
+  "x-service-domains": ["INFO", "LEARN", "LIBRARY", "SPORTS", "MADMODEL", "LOCAL", "UNKNOWN"],
+  "x-legacy": {
+    "action_magic": "THU-ACTION-1\\0",
+    "session_magic": "LA-DPAPI-1\\0",
+    "rule": "Legacy DPAPI records remain readable under their existing format. Do not import Windows credentials into a cloud checkout and do not silently rewrite legacy records into the new format."
+  },
+  "x-unknown-values": {
+    "purpose": "Do not write. Unknown purpose is rejected.",
+    "account_domain": "UNKNOWN",
+    "service_domain": "UNKNOWN",
+    "key_id": "Never null; missing key identity is a hard failure.",
+    "numeric": null
+  },
+  "type": "object",
+  "required": [
+    "magic",
+    "format_version",
+    "purpose",
+    "account_domain",
+    "service_domain",
+    "key_id",
+    "nonce",
+    "aad",
+    "cipher_suite",
+    "ciphertext_sha256",
+    "plaintext_length",
+    "created_at"
+  ],
+  "properties": {
+    "magic": {"const": "THU-SECURE-1\u0000"},
+    "format_version": {"const": 1},
+    "purpose": {
+      "type": "string",
+      "enum": ["CREDENTIAL", "SESSION", "ACTION", "INDEX", "MEDIA", "EVENT_CURSOR"]
+    },
+    "account_domain": {
+      "type": "string",
+      "enum": ["CAMPUS", "MODEL", "LOCAL", "SYSTEM", "UNKNOWN"]
+    },
+    "service_domain": {
+      "type": "string",
+      "enum": ["INFO", "LEARN", "LIBRARY", "SPORTS", "MADMODEL", "LOCAL", "UNKNOWN"]
+    },
+    "key_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{8,64}$",
+      "description": "Opaque key identifier. Never a path, host name or account identifier."
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{16,64}$",
+      "description": "Base64url nonce, unique per key and purpose."
+    },
+    "aad": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,2048}$",
+      "description": "Base64url canonical JSON bound to purpose, account, service and format version."
+    },
+    "cipher_suite": {"const": "AES-256-GCM"},
+    "ciphertext_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "plaintext_length": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 134217728
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "key_created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "x-compatibility-sample": {
+    "magic": "THU-SECURE-1\u0000",
+    "format_version": 1,
+    "purpose": "SESSION",
+    "account_domain": "CAMPUS",
+    "service_domain": "LEARN",
+    "key_id": "key_7f3a9c21",
+    "nonce": "c3ludGhldGljLW5vbmNl",
+    "aad": "eyJhY2NvdW50IjoiQ0FNUFVTIn0",
+    "cipher_suite": "AES-256-GCM",
+    "ciphertext_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "plaintext_length": 512,
+    "created_at": "2026-11-16T12:00:00+00:00"
+  },
+  "x-rejection-samples": [
+    {
+      "why": "PASSWORD is not a storage purpose",
+      "value": {
+        "magic": "THU-SECURE-1\u0000",
+        "format_version": 1,
+        "purpose": "PASSWORD",
+        "account_domain": "CAMPUS",
+        "service_domain": "LEARN",
+        "key_id": "key_7f3a9c21",
+        "nonce": "c3ludGhldGljLW5vbmNl",
+        "aad": "eyJhY2NvdW50IjoiQ0FNUFVTIn0",
+        "cipher_suite": "AES-256-GCM",
+        "ciphertext_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "plaintext_length": 512,
+        "created_at": "2026-11-16T12:00:00+00:00"
+      }
+    },
+    {
+      "why": "key_id must be an opaque identifier, not a filesystem path",
+      "value": {
+        "magic": "THU-SECURE-1\u0000",
+        "format_version": 1,
+        "purpose": "CREDENTIAL",
+        "account_domain": "CAMPUS",
+        "service_domain": "LEARN",
+        "key_id": "synthetic/secret.key",
+        "nonce": "c3ludGhldGljLW5vbmNl",
+        "aad": "eyJhY2NvdW50IjoiQ0FNUFVTIn0",
+        "cipher_suite": "AES-256-GCM",
+        "ciphertext_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "plaintext_length": 512,
+        "created_at": "2026-11-16T12:00:00+00:00"
+      }
+    },
+    {
+      "why": "an unauthenticated suite is not allowed",
+      "value": {
+        "magic": "THU-SECURE-1\u0000",
+        "format_version": 1,
+        "purpose": "ACTION",
+        "account_domain": "CAMPUS",
+        "service_domain": "LIBRARY",
+        "key_id": "key_7f3a9c21",
+        "nonce": "c3ludGhldGljLW5vbmNl",
+        "aad": "eyJhY2NvdW50IjoiQ0FNUFVTIn0",
+        "cipher_suite": "NONE",
+        "ciphertext_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "plaintext_length": 512,
+        "created_at": "2026-11-16T12:00:00+00:00"
+      }
+    },
+    {
+      "why": "a header without nonce cannot provide authenticated encryption",
+      "value": {
+        "magic": "THU-SECURE-1\u0000",
+        "format_version": 1,
+        "purpose": "INDEX",
+        "account_domain": "LOCAL",
+        "service_domain": "LOCAL",
+        "key_id": "key_7f3a9c21",
+        "aad": "eyJhY2NvdW50IjoiTE9DQUwifQ",
+        "cipher_suite": "AES-256-GCM",
+        "ciphertext_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "plaintext_length": 512,
+        "created_at": "2026-11-16T12:00:00+00:00"
+      }
+    }
+  ]
+}

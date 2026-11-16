@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/compatibility-baseline.json",
+  "title": "Openthu v0.2 legacy compatibility baseline",
+  "description": "Frozen compatibility baseline for the v0.1 public surface that v0.2 must keep usable. New optional fields are allowed; existing tool names, entry points, result-field meanings and import paths are not removed or repurposed.",
+  "x-contract-version": "compatibility-baseline-v1",
+  "x-status": "frozen",
+  "x-semantics": "Compatibility is about Openthu's public surface, not a claim that the underlying school services are stable.",
+  "mcp_tool_count": 29,
+  "mcp_tools": [
+    "list_courses",
+    "list_assignments",
+    "get_assignment",
+    "list_course_files",
+    "download_files",
+    "prepare_submission",
+    "login",
+    "get_login_status",
+    "list_services",
+    "refresh_service_directory",
+    "describe_service",
+    "query_service",
+    "prepare_service_action",
+    "execute_service_action",
+    "get_action_result",
+    "read_page",
+    "download_campus_file",
+    "get_service_status",
+    "list_models",
+    "get_todos",
+    "model_chat",
+    "browser_open",
+    "browser_snapshot",
+    "browser_scroll",
+    "browser_fill",
+    "browser_click",
+    "prepare_browser_action",
+    "execute_browser_action",
+    "browser_close"
+  ],
+  "entry_points": [
+    "openthu",
+    "openthu-mcp",
+    "learn-assistant",
+    "learn-assistant-mcp",
+    "tsinghua-assistant",
+    "tsinghua-assistant-mcp"
+  ],
+  "import_paths": [
+    "thu_assistant",
+    "learn_assistant"
+  ],
+  "legacy_result_fields": [
+    "status",
+    "source",
+    "checked_at",
+    "complete",
+    "source_complete",
+    "next_cursor",
+    "missing_pages",
+    "warnings",
+    "verification_level"
+  ],
+  "legacy_action_states": [
+    "NEEDS_USER_ACTION",
+    "PREPARED",
+    "AWAITING_OFFICIAL",
+    "DISPATCHING",
+    "UNKNOWN",
+    "PENDING_PAYMENT",
+    "PENDING_APPROVAL",
+    "SUCCEEDED",
+    "FAILED"
+  ],
+  "legacy_defaults": {
+    "query_page_size_default": 50,
+    "query_page_size_max": 200,
+    "cursor_ttl_seconds": 600,
+    "action_plan_ttl_seconds": 600,
+    "result_snapshot_max_bytes": 33554432,
+    "result_snapshot_max_entries": 64,
+    "action_lock_timeout_seconds": 3,
+    "gateway_default_timeout_seconds": 240,
+    "model_input_max_characters": 65536,
+    "model_max_messages": 40,
+    "model_max_source_refs": 20
+  },
+  "allowed_additions": [
+    "optional implementation_state",
+    "optional runtime_availability",
+    "optional evidence_level",
+    "new registered read operations inside existing tools",
+    "new optional result fields with documented defaults"
+  ],
+  "forbidden_changes": [
+    "rename or remove any of the 29 MCP tools",
+    "change the type or meaning of a legacy result field",
+    "repurpose status=OK as proof of business success",
+    "add write fields to query_service or read_page",
+    "remove the openthu, learn-assistant or tsinghua-assistant aliases",
+    "route a write through the read-only local API"
+  ],
+  "x-compatibility-sample": {
+    "tool": "list_courses",
+    "legacy_request": {},
+    "legacy_response_fields": ["status", "source", "checked_at", "complete", "source_complete", "warnings", "verification_level", "courses"],
+    "new_optional_fields_absent": true
+  },
+  "x-rejection-samples": [
+    {
+      "why": "renaming a public tool breaks old clients",
+      "value": {"rename": {"list_courses": "courses_list"}}
+    },
+    {
+      "why": "removing a legacy result field breaks old parsers",
+      "value": {"remove_field": "verification_level"}
+    },
+    {
+      "why": "a query must not become a write proxy",
+      "value": {"add_to": "query_service", "field": "method"}
+    }
+  ]
+}

@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/business-facade.schema.json",
+  "title": "Openthu v0.2 business facade",
+  "description": "Frozen call shapes for the single business facade. MCP, CLI and the local read dashboard consume this facade rather than reimplementing state checks. Query and health are read-only; prepare writes only an encrypted local plan; execute is the only campus-write path and requires trusted host authorization; result reconciles without resending; cancel is request cancellation only.",
+  "x-contract-version": "business-facade-v1",
+  "x-status": "frozen",
+  "x-semantics": "Internal operation names and states. They do not assert a school API or permission model.",
+  "x-read-write": {
+    "query": "READ_ONLY",
+    "health": "READ_ONLY",
+    "prepare": "LOCAL_WRITE_ENCRYPTED_PLAN",
+    "execute": "CAMPUS_WRITE_AFTER_PREFLIGHT_AND_HOST_AUTHORIZATION",
+    "result": "REMOTE_READ_ONLY_RECONCILIATION",
+    "cancel": "LOCAL_REQUEST_CANCELLATION_ONLY"
+  },
+  "x-cancel-semantics": "cancel cancels a queued or running local request. A campus business cancellation (library, sports, withdrawal or refund) is a separately prepared and executed registered action with its own specific authorization. This method never sends a campus write.",
+  "x-authorization": {
+    "authorization_string": "Recorded user intent only; it is not consent evidence.",
+    "host_authorization": "Trusted host callback bound to plan_id, account, digest, adapter_version, source=human, reference and expiry.",
+    "model_output_or_page_content": "Never authorization.",
+    "environment_variable": "Never a universal write grant."
+  },
+  "x-action-states": [
+    "NEEDS_USER_ACTION",
+    "PREPARED",
+    "AWAITING_OFFICIAL",
+    "DISPATCHING",
+    "UNKNOWN",
+    "PENDING_PAYMENT",
+    "PENDING_APPROVAL",
+    "SUCCEEDED",
+    "FAILED"
+  ],
+  "x-unknown-values": {
+    "state": "UNKNOWN",
+    "reason": null,
+    "record_reference": null,
+    "null_meaning": "not yet known or not applicable; never success",
+    "result_status": "UNKNOWN"
+  },
+  "x-legacy-tool-count": 29,
+  "x-legacy-tool-baseline": "contracts/v0.2/compatibility-baseline.json",
+  "methods": {
+    "query": {
+      "request_required": ["service_id", "operation", "parameters"],
+      "request_properties": {
+        "service_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "operation": {"type": "string", "minLength": 1, "maxLength": 120},
+        "parameters": {"type": "object"},
+        "cursor": {"type": "string", "minLength": 1, "maxLength": 128},
+        "page_size": {"type": "integer", "minimum": 1, "maximum": 200}
+      },
+      "response_contract": "result-envelope-v1",
+      "side_effect": "NONE",
+      "authorization": "NONE",
+      "notes": ["Only registered read operations are accepted.", "A query cannot carry method, headers, token, arbitrary URL or write fields."]
+    },
+    "health": {
+      "request_required": [],
+      "request_properties": {
+        "service_id": {"type": "string", "minLength": 1, "maxLength": 64}
+      },
+      "response_fields_required": ["status", "checked_at", "services", "warnings"],
+      "side_effect": "NONE",
+      "authorization": "NONE",
+      "notes": ["One unavailable service must not crash the remaining health report."]
+    },
+    "prepare": {
+      "request_required": ["service_id", "operation", "parameters"],
+      "request_properties": {
+        "service_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "operation": {"type": "string", "minLength": 1, "maxLength": 120},
+        "parameters": {"type": "object"}
+      },
+      "response_fields_required": ["operation_id", "plan_id", "status", "service_id", "operation", "preview", "expires_at", "missing_fields", "reason", "adapter_version", "revision"],
+      "side_effect": "LOCAL_ENCRYPTED_PLAN_WRITE",
+      "authorization": "NONE",
+      "notes": ["Preparation is not submission.", "The plan is encrypted with the ACTION purpose and expires after 600 seconds by default."]
+    },
+    "execute": {
+      "request_required": ["plan_id", "authorization"],
+      "request_properties": {
+        "plan_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+        "authorization": {"type": "string", "minLength": 8, "maxLength": 2000}
+      },
+      "requires_out_of_band_host_authorization": true,
+      "host_authorization_required": ["source", "reference", "plan_id", "account", "digest", "adapter_version", "expires_at"],
+      "response_fields_required": ["operation_id", "plan_id", "status", "service_id", "operation", "preview", "expires_at", "revision", "verification_level", "automatic_resend"],
+      "side_effect": "CAMPUS_WRITE_AFTER_PREFLIGHT_AND_HOST_AUTHORIZATION",
+      "authorization": "TRUSTED_HOST_AUTHORIZATION",
+      "notes": ["The request is saved before dispatch. A missing response becomes UNKNOWN and is reconciled, never replayed.", "authorization is not consent proof."]
+    },
+    "result": {
+      "request_required": ["operation_id"],
+      "request_properties": {
+        "operation_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"}
+      },
+      "response_fields_required": ["operation_id", "plan_id", "status", "service_id", "operation", "preview", "expires_at", "revision", "verification_level", "automatic_resend"],
+      "side_effect": "REMOTE_READ_ONLY_RECONCILIATION",
+      "authorization": "NONE",
+      "notes": ["Reconciliation may read the official record but never dispatches a new write.", "UNKNOWN and PENDING states stay distinguishable."]
+    },
+    "cancel": {
+      "request_required": ["request_id"],
+      "request_properties": {
+        "request_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "reason": {"type": "string", "maxLength": 200}
+      },
+      "response_fields_required": ["request_id", "cancelled", "state"],
+      "side_effect": "LOCAL_REQUEST_CANCELLATION_ONLY",
+      "authorization": "NONE",
+      "notes": ["Does not undo a campus write.", "A business cancellation must use prepare and execute on a registered cancel operation."]
+    }
+  },
+  "x-compatibility-sample": {
+    "method": "query",
+    "request": {
+      "service_id": "learn",
+      "operation": "courses",
+      "parameters": {},
+      "page_size": 50
+    },
+    "response": {
+      "status": "OK",
+      "source": {"service_id": "learn", "operation": "courses", "adapter_version": "query-v1"},
+      "checked_at": "2026-11-16T12:00:00+00:00",
+      "verification_level": "BUSINESS_READ",
+      "source_complete": true,
+      "complete": true,
+      "next_cursor": null,
+      "warnings": [],
+      "items": [{"course_id": "SYNTHETIC-COURSE-1", "course_name": "合成课程"}]
+    }
+  },
+  "x-rejection-samples": [
+    {
+      "why": "execute without trusted host authorization is only a recorded string",
+      "value": {
+        "method": "execute",
+        "request": {"plan_id": "0123456789abcdef0123456789abcdef", "authorization": "please do it"}
+      }
+    },
+    {
+      "why": "query is not a generic upstream proxy",
+      "value": {
+        "method": "query",
+        "request": {
+          "service_id": "learn",
+          "operation": "courses",
+          "parameters": {},
+          "method": "POST",
+          "headers": {"Authorization": "synthetic"}
+        }
+      }
+    },
+    {
+      "why": "cancel cannot carry a campus business cancellation payload",
+      "value": {
+        "method": "cancel",
+        "request": {"request_id": "req-1", "service_id": "library", "operation": "cancel_reservation"}
+      }
+    },
+    {
+      "why": "prepare requires a registered action operation",
+      "value": {
+        "method": "prepare",
+        "request": {"service_id": "library", "operation": "delete_everything", "parameters": {}}
+      }
+    }
+  ]
+}

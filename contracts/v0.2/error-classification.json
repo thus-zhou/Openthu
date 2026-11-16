@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/error-classification.json",
+  "title": "Openthu v0.2 error classification",
+  "description": "Stable internal error categories and retry semantics. New module-local codes must be registered here before they cross the business facade.",
+  "x-contract-version": "error-classification-v1",
+  "x-status": "frozen",
+  "x-semantics": "Categories describe Openthu behavior, not school error codes. The original upstream status is retained in source evidence.",
+  "required_error_fields": [
+    "code",
+    "category",
+    "retryable",
+    "automatic_replay_allowed",
+    "user_action"
+  ],
+  "x-unknown-values": {
+    "code": "UNKNOWN",
+    "category": "INTERNAL",
+    "retryable": false,
+    "automatic_replay_allowed": false,
+    "user_action": "CONTACT_SUPPORT",
+    "note": "Unregistered codes are treated as INTERNAL and never replayed."
+  },
+  "categories": {
+    "INPUT": {
+      "description": "Malformed, missing, conflicting or unsupported caller input.",
+      "retryable": false,
+      "automatic_replay_allowed": false,
+      "user_action": "FIX_INPUT"
+    },
+    "AUTH": {
+      "description": "Missing, expired or rejected authentication, including MFA and session material.",
+      "retryable": false,
+      "automatic_replay_allowed": false,
+      "user_action": "REAUTHENTICATE"
+    },
+    "PERMISSION": {
+      "description": "Authenticated but not permitted, or a feature switch expressly disables the operation.",
+      "retryable": false,
+      "automatic_replay_allowed": false,
+      "user_action": "CONTACT_SUPPORT"
+    },
+    "RATE_LIMIT": {
+      "description": "Upstream or local concurrency limit. Waiting is required; writes still never replay automatically.",
+      "retryable": true,
+      "automatic_replay_allowed": false,
+      "user_action": "WAIT"
+    },
+    "MAINTENANCE": {
+      "description": "Declared maintenance or temporary service unavailability.",
+      "retryable": true,
+      "automatic_replay_allowed": false,
+      "user_action": "WAIT"
+    },
+    "NETWORK": {
+      "description": "Transport, gateway, browser runtime or timeout failure. No conclusion about remote business state.",
+      "retryable": true,
+      "automatic_replay_allowed": false,
+      "user_action": "RETRY"
+    },
+    "UPSTREAM_CONTRACT": {
+      "description": "The source responded but its structure, fields or business state no longer match the adapter contract.",
+      "retryable": false,
+      "automatic_replay_allowed": false,
+      "user_action": "CHECK_REMOTE_RECORD"
+    },
+    "COMPLETENESS": {
+      "description": "Snapshot, cursor or pagination scope is incomplete, stale or mismatched.",
+      "retryable": true,
+      "automatic_replay_allowed": false,
+      "user_action": "RETRY"
+    },
+    "CONFLICT": {
+      "description": "A plan, account, adapter, resource or local lock changed before the operation could proceed.",
+      "retryable": false,
+      "automatic_replay_allowed": false,
+      "user_action": "FIX_INPUT"
+    },
+    "NOT_IMPLEMENTED": {
+      "description": "The capability, adapter or host integration is not present in this build.",
+      "retryable": false,
+      "automatic_replay_allowed": false,
+      "user_action": "CONTACT_SUPPORT"
+    },
+    "CANCELLED": {
+      "description": "The caller cancelled before or during the operation. Cancellation does not prove a remote write was undone.",
+      "retryable": false,
+      "automatic_replay_allowed": false,
+      "user_action": "NONE"
+    },
+    "INTERNAL": {
+      "description": "Local storage, encryption, state machine or unexpected implementation failure.",
+      "retryable": false,
+      "automatic_replay_allowed": false,
+      "user_action": "CONTACT_SUPPORT"
+    }
+  },
+  "write_replay_policy": {
+    "before_dispatch": "Retry only after fixing input or authorization; never bypass preflight.",
+    "after_dispatch": "Never replay automatically. Read the remote record and reconcile exact business fields.",
+    "unknown_remote_state": "Never replay. Keep UNKNOWN and provide the official reconciliation path.",
+    "model_chat": "At most one refresh before output starts and only for a clear 401; never after output, quota, 403, timeout or network failure."
+  },
+  "codes": {
+    "AUTH_REQUIRED": "AUTH",
+    "TWO_FACTOR_REQUIRED": "AUTH",
+    "SPACE_LOGIN_FAILED": "AUTH",
+    "BROWSER_SSO_NOT_VERIFIED": "AUTH",
+    "BROWSER_SESSION_NOT_FOUND": "AUTH",
+    "BROWSER_SESSION_DECRYPT_FAILED": "AUTH",
+    "USE_OFFICIAL_AUTH_FLOW_FOR_SECRETS": "AUTH",
+    "MODEL_AUTH_REJECTED": "AUTH",
+    "AuthenticationRequired": "AUTH",
+    "FORBIDDEN": "PERMISSION",
+    "PermissionError": "PERMISSION",
+    "MODEL_FORBIDDEN": "PERMISSION",
+    "LIBRARY_WRITES_DISABLED": "PERMISSION",
+    "SPORTS_WRITES_DISABLED": "PERMISSION",
+    "TODOS_DISABLED": "PERMISSION",
+    "NON_TSINGHUA_HTTPS_URL": "PERMISSION",
+    "INVALID_ARGUMENTS": "INPUT",
+    "MISSING_ARGUMENT": "INPUT",
+    "INVALID_ARGUMENT_TYPE": "INPUT",
+    "INVALID_ARGUMENT_LENGTH": "INPUT",
+    "INVALID_ARGUMENT_RANGE": "INPUT",
+    "INVALID_ARGUMENT_VALUE": "INPUT",
+    "UNKNOWN_TOOL": "INPUT",
+    "UNREGISTERED_QUERY_OPERATION": "INPUT",
+    "UNREGISTERED_ACTION_OPERATION": "INPUT",
+    "UNREGISTERED_SPORTS_READ": "INPUT",
+    "INVALID_OPERATION_ID": "INPUT",
+    "INVALID_SOURCE_URL": "INPUT",
+    "INVALID_JSON_POINTER": "INPUT",
+    "JSON_POINTER_NOT_FOUND": "INPUT",
+    "JSON_POINTER_REQUIRES_JSON": "INPUT",
+    "INVALID_LIBRARY_SELECTOR": "INPUT",
+    "INVALID_LIBRARY_QUERY": "INPUT",
+    "INVALID_TODO_SERVICES": "INPUT",
+    "PROVIDE_ONE_SERVICE_ID_OR_URL": "INPUT",
+    "MULTIPLE_RESOURCE_SELECTORS": "INPUT",
+    "PREPARE_CONCRETE_ACTION_BEFORE_SUBMIT": "INPUT",
+    "INVALID_DATE": "INPUT",
+    "INVALID_DATE_RANGE": "INPUT",
+    "ValidationError": "INPUT",
+    "RATE_LIMITED": "RATE_LIMIT",
+    "MODEL_RATE_LIMITED": "RATE_LIMIT",
+    "MODEL_QUOTA_EXCEEDED": "RATE_LIMIT",
+    "ProviderRateLimited": "RATE_LIMIT",
+    "MAINTENANCE": "MAINTENANCE",
+    "ProviderMaintenance": "MAINTENANCE",
+    "LIBRARY_NETWORK_ERROR": "NETWORK",
+    "SPORTS_NETWORK_ERROR": "NETWORK",
+    "CAMPUS_GATEWAY_UNAVAILABLE": "NETWORK",
+    "GATEWAY_EXITED": "NETWORK",
+    "BROWSER_RUNTIME_UNAVAILABLE": "NETWORK",
+    "BROWSER_NAVIGATION_FAILED": "NETWORK",
+    "MODEL_NETWORK_ERROR": "NETWORK",
+    "MODEL_TIMEOUT": "NETWORK",
+    "MODEL_STREAM_INTERRUPTED": "NETWORK",
+    "ProviderNetworkError": "NETWORK",
+    "LIBRARY_RESPONSE_INVALID": "UPSTREAM_CONTRACT",
+    "SPORTS_RESPONSE_INVALID": "UPSTREAM_CONTRACT",
+    "SPORTS_QUERY_REJECTED": "UPSTREAM_CONTRACT",
+    "SPACE_QUERY_REJECTED": "UPSTREAM_CONTRACT",
+    "LIBRARY_QUERY_FAILED": "UPSTREAM_CONTRACT",
+    "SPACE_READ_FAILED": "UPSTREAM_CONTRACT",
+    "SPACE_PAGE_FAILED": "UPSTREAM_CONTRACT",
+    "LIBRARY_REDIRECT_BLOCKED": "UPSTREAM_CONTRACT",
+    "LIBRARY_RESPONSE_TOO_LARGE": "UPSTREAM_CONTRACT",
+    "RESULT_TOO_LARGE_SELECT_NARROWER_SOURCE": "UPSTREAM_CONTRACT",
+    "SEAT_MAP_UNAVAILABLE": "UPSTREAM_CONTRACT",
+    "ROOM_RECORD_RESOURCE_UNVERIFIED": "UPSTREAM_CONTRACT",
+    "SPORTS_SLOT_NOT_VERIFIED": "UPSTREAM_CONTRACT",
+    "SPORTS_SITE_NOT_IN_SELECTED_ROOM": "UPSTREAM_CONTRACT",
+    "SPORTS_SCENE_SELECTOR_REQUIRED": "UPSTREAM_CONTRACT",
+    "SPORTS_ORDER_SEARCH_INCOMPLETE": "UPSTREAM_CONTRACT",
+    "SPORTS_OWN_RECORD_NOT_FOUND": "UPSTREAM_CONTRACT",
+    "LIBRARY_HISTORY_LIMIT": "UPSTREAM_CONTRACT",
+    "LIBRARY_LOAN_DATE_INVALID": "UPSTREAM_CONTRACT",
+    "LIBRARY_LOAN_TIME_INVALID": "UPSTREAM_CONTRACT",
+    "LIBRARY_LOAN_PAGE_FAILED": "UPSTREAM_CONTRACT",
+    "SPORTS_SESSION_DATE_MISMATCH": "UPSTREAM_CONTRACT",
+    "SPORTS_LOCATION_TREE_LIMIT": "UPSTREAM_CONTRACT",
+    "SPACE_TIME_INVALID": "UPSTREAM_CONTRACT",
+    "MODEL_RESPONSE_INVALID": "UPSTREAM_CONTRACT",
+    "MODEL_CONTENT_REFUSED": "UPSTREAM_CONTRACT",
+    "MODEL_NOT_FOUND": "UPSTREAM_CONTRACT",
+    "InterfaceDriftError": "UPSTREAM_CONTRACT",
+    "CURSOR_EXPIRED": "COMPLETENESS",
+    "CURSOR_QUERY_MISMATCH": "COMPLETENESS",
+    "STALE_SNAPSHOT_TAKE_NEW_SNAPSHOT": "COMPLETENESS",
+    "ACTION_ACCOUNT_MISMATCH": "CONFLICT",
+    "ACTION_ADAPTER_CHANGED": "CONFLICT",
+    "ACTION_ALREADY_CLAIMED": "CONFLICT",
+    "ACTION_ID_CONFLICT": "CONFLICT",
+    "ACTION_PLAN_EXPIRED": "CONFLICT",
+    "ACTION_RESULT_CHANGED_RECHECK": "CONFLICT",
+    "ACTION_STORE_BUSY": "CONFLICT",
+    "INVALID_ACTION_TRANSITION": "CONFLICT",
+    "REQUEST_SEQUENCE_REQUIRED": "CONFLICT",
+    "REQUEST_METHOD_INVALID": "CONFLICT",
+    "REQUEST_ENCODING_NOT_REGISTERED": "CONFLICT",
+    "ROOM_EXISTING_OVERLAP": "CONFLICT",
+    "SEAT_UNAVAILABLE": "CONFLICT",
+    "SPORTS_EXISTING_MATCHING_RESERVATION": "CONFLICT",
+    "SPORTS_EXISTING_UNPAID_ORDER": "CONFLICT",
+    "SPORTS_FEE_CHANGED": "CONFLICT",
+    "SPORTS_BUSY": "CONFLICT",
+    "STATE_ACCOUNT_MISMATCH": "CONFLICT",
+    "ADAPTER_REQUIRED": "NOT_IMPLEMENTED",
+    "SPORTS_CANCELLATION_NOT_AVAILABLE": "NOT_IMPLEMENTED",
+    "ProviderNotConfigured": "NOT_IMPLEMENTED",
+    "CANCELLED": "CANCELLED",
+    "ACTION_LOG_CORRUPT": "INTERNAL",
+    "ACTION_LOG_DECRYPT_FAILED": "INTERNAL",
+    "ACTION_LOG_ENCRYPT_FAILED": "INTERNAL",
+    "ACTION_NOT_FOUND": "INTERNAL",
+    "ACTION_PREFLIGHT_FAILED": "INTERNAL",
+    "TODO_CACHE_CORRUPT": "INTERNAL",
+    "TODO_CACHE_ENCRYPT_FAILED": "INTERNAL",
+    "TODO_CACHE_UNREADABLE": "INTERNAL",
+    "SPECIFIC_HUMAN_AUTHORIZATION_REQUIRED": "INTERNAL",
+    "TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED": "INTERNAL"
+  },
+  "x-compatibility-sample": {
+    "code": "AUTH_REQUIRED",
+    "category": "AUTH",
+    "message": "需要重新认证",
+    "retryable": false,
+    "automatic_replay_allowed": false,
+    "user_action": "REAUTHENTICATE"
+  },
+  "x-rejection-samples": [
+    {
+      "why": "automatic replay is never allowed after an error reaches this contract",
+      "value": {
+        "code": "SPORTS_NETWORK_ERROR",
+        "category": "NETWORK",
+        "retryable": true,
+        "automatic_replay_allowed": true,
+        "user_action": "RETRY"
+      }
+    },
+    {
+      "why": "unknown categories are not valid",
+      "value": {
+        "code": "SPORTS_NETWORK_ERROR",
+        "category": "WRITE",
+        "retryable": true,
+        "automatic_replay_allowed": false,
+        "user_action": "RETRY"
+      }
+    },
+    {
+      "why": "a code without a category cannot be classified by the facade",
+      "value": {
+        "code": "SOMETHING_FAILED",
+        "retryable": false,
+        "automatic_replay_allowed": false,
+        "user_action": "CONTACT_SUPPORT"
+      }
+    },
+    {
+      "why": "a model quota failure is not an input error and must not invite immediate replay",
+      "value": {
+        "code": "MODEL_QUOTA_EXCEEDED",
+        "category": "INPUT",
+        "retryable": false,
+        "automatic_replay_allowed": false,
+        "user_action": "FIX_INPUT"
+      }
+    }
+  ]
+}

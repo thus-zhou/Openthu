@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/calendar-event.schema.json",
+  "title": "Openthu v0.2 calendar event",
+  "description": "Frozen calendar event contract. Date-only and date-time values are separate shapes; a date-only value is never padded to midnight. Identity comes from account, service, source record and occurrence, never from the title or array position.",
+  "x-contract-version": "calendar-event-v1",
+  "x-status": "frozen",
+  "x-semantics": "Internal event model. Dates and times are display/business values, not a claim that a school endpoint uses these names.",
+  "x-identity-rule": "event_uid must be derived from account_domain, source.service_domain, source.kind, source.record_id and a stable occurrence discriminator. Title, course name, room name, array index and display order are display-only and must not participate.",
+  "x-timezone-default": "Asia/Shanghai",
+  "x-unknown-values": {
+    "status": "UNKNOWN",
+    "end": null,
+    "sequence": 0,
+    "null_meaning": "not provided or not applicable; never inferred",
+    "date_only": "kind=DATE, no implicit midnight"
+  },
+  "type": "object",
+  "required": [
+    "event_uid",
+    "account_domain",
+    "source",
+    "title",
+    "time",
+    "status",
+    "sequence",
+    "last_modified",
+    "source_evidence_id"
+  ],
+  "properties": {
+    "event_uid": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,240}$"
+    },
+    "account_domain": {
+      "type": "string",
+      "enum": ["CAMPUS", "MODEL", "LOCAL", "SYSTEM", "UNKNOWN"]
+    },
+    "source": {
+      "type": "object",
+      "required": ["service_domain", "kind", "record_id", "stable_resource_uid"],
+      "properties": {
+        "service_domain": {"type": "string", "enum": ["INFO", "LEARN", "LIBRARY", "SPORTS", "MADMODEL", "LOCAL", "UNKNOWN"]},
+        "kind": {"type": "string", "enum": ["COURSE", "ASSIGNMENT", "EXAM", "LIBRARY_LOAN", "SPACE_RESERVATION", "SPORTS_ORDER", "CUSTOM"]},
+        "record_id": {"type": "string", "minLength": 1, "maxLength": 240},
+        "stable_resource_uid": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,240}$"}
+      },
+      "additionalProperties": false
+    },
+    "title": {"type": "string", "minLength": 1, "maxLength": 500},
+    "time": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "date", "timezone"],
+          "properties": {
+            "kind": {"const": "DATE"},
+            "date": {"type": "string", "format": "date"},
+            "timezone": {"type": "string", "minLength": 1, "maxLength": 80}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "start", "end", "timezone"],
+          "properties": {
+            "kind": {"const": "DATE_TIME"},
+            "start": {"type": "string", "format": "date-time"},
+            "end": {"type": ["string", "null"], "format": "date-time"},
+            "timezone": {"type": "string", "minLength": 1, "maxLength": 80}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["CONFIRMED", "TENTATIVE", "CANCELLED", "UNKNOWN"]
+    },
+    "sequence": {"type": "integer", "minimum": 0},
+    "last_modified": {"type": "string", "format": "date-time"},
+    "source_evidence_id": {"type": "string", "minLength": 1, "maxLength": 120},
+    "location": {"type": ["string", "null"], "maxLength": 300},
+    "description": {"type": ["string", "null"], "maxLength": 4000},
+    "ics_uid": {"type": ["string", "null"], "maxLength": 240},
+    "export": {
+      "type": "object",
+      "required": ["state"],
+      "properties": {
+        "state": {"type": "string", "enum": ["NOT_EXPORTED", "EXPORTED", "STALE", "UNKNOWN"]},
+        "exported_at": {"type": ["string", "null"], "format": "date-time"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "x-compatibility-sample": {
+    "event_uid": "campus:learn:ASSIGNMENT:SYNTHETIC-ASSIGNMENT-1:2026-11-20T23:59:00+08:00",
+    "account_domain": "CAMPUS",
+    "source": {
+      "service_domain": "LEARN",
+      "kind": "ASSIGNMENT",
+      "record_id": "SYNTHETIC-ASSIGNMENT-1",
+      "stable_resource_uid": "learn:ASSIGNMENT:SYNTHETIC-ASSIGNMENT-1"
+    },
+    "title": "合成作业截止时间",
+    "time": {
+      "kind": "DATE_TIME",
+      "start": "2026-11-20T23:59:00+08:00",
+      "end": null,
+      "timezone": "Asia/Shanghai"
+    },
+    "status": "CONFIRMED",
+    "sequence": 1,
+    "last_modified": "2026-11-16T12:00:00+00:00",
+    "source_evidence_id": "learn.assignments",
+    "location": null,
+    "description": null,
+    "ics_uid": null,
+    "export": {"state": "NOT_EXPORTED", "exported_at": null}
+  },
+  "x-rejection-samples": [
+    {
+      "why": "a title is not an identity and cannot become event_uid",
+      "value": {
+        "event_uid": "合成作业截止时间",
+        "account_domain": "CAMPUS",
+        "source": {"service_domain": "LEARN", "kind": "ASSIGNMENT", "record_id": "SYNTHETIC-1", "stable_resource_uid": "learn:ASSIGNMENT:SYNTHETIC-1"},
+        "title": "合成作业截止时间",
+        "time": {"kind": "DATE_TIME", "start": "2026-11-20T23:59:00+08:00", "end": null, "timezone": "Asia/Shanghai"},
+        "status": "CONFIRMED",
+        "sequence": 1,
+        "last_modified": "2026-11-16T12:00:00+00:00",
+        "source_evidence_id": "learn.assignments"
+      }
+    },
+    {
+      "why": "a date-only value must not be silently padded to midnight",
+      "value": {
+        "event_uid": "campus:learn:EXAM:SYNTHETIC-EXAM-1",
+        "account_domain": "CAMPUS",
+        "source": {"service_domain": "LEARN", "kind": "EXAM", "record_id": "SYNTHETIC-EXAM-1", "stable_resource_uid": "learn:EXAM:SYNTHETIC-EXAM-1"},
+        "title": "合成考试",
+        "time": {"kind": "DATE_TIME", "start": "2026-11-20T00:00:00+08:00", "end": null, "timezone": "Asia/Shanghai"},
+        "status": "UNKNOWN",
+        "sequence": 0,
+        "last_modified": "2026-11-16T12:00:00+00:00",
+        "source_evidence_id": "learn.calendar"
+      }
+    },
+    {
+      "why": "end before start is not a valid interval",
+      "value": {
+        "event_uid": "campus:library:SPACE_RESERVATION:SYNTHETIC-1",
+        "account_domain": "CAMPUS",
+        "source": {"service_domain": "LIBRARY", "kind": "SPACE_RESERVATION", "record_id": "SYNTHETIC-1", "stable_resource_uid": "library:SPACE_RESERVATION:SYNTHETIC-1"},
+        "title": "合成研讨间预约",
+        "time": {"kind": "DATE_TIME", "start": "2026-11-20T18:00:00+08:00", "end": "2026-11-20T17:00:00+08:00", "timezone": "Asia/Shanghai"},
+        "status": "CONFIRMED",
+        "sequence": 2,
+        "last_modified": "2026-11-16T12:00:00+00:00",
+        "source_evidence_id": "library.reservations"
+      }
+    },
+    {
+      "why": "SUCCESS is not a calendar status and must not replace UNKNOWN",
+      "value": {
+        "event_uid": "campus:sports:SPORTS_ORDER:SYNTHETIC-1",
+        "account_domain": "CAMPUS",
+        "source": {"service_domain": "SPORTS", "kind": "SPORTS_ORDER", "record_id": "SYNTHETIC-1", "stable_resource_uid": "sports:SPORTS_ORDER:SYNTHETIC-1"},
+        "title": "合成体育订单",
+        "time": {"kind": "DATE_TIME", "start": "2026-11-20T18:00:00+08:00", "end": "2026-11-20T19:00:00+08:00", "timezone": "Asia/Shanghai"},
+        "status": "SUCCESS",
+        "sequence": 0,
+        "last_modified": "2026-11-16T12:00:00+00:00",
+        "source_evidence_id": "sports.orders"
+      }
+    }
+  ]
+}

@@ -1,0 +1,472 @@
+{
+  "module_count": 24,
+  "batch_count": 9,
+  "count_scope": "仅【执行方案本体】与结束标记之间；同时校验汉字数及全部非空白字符",
+  "required_han_range": [
+    2001,
+    2999
+  ],
+  "required_non_whitespace_range": [
+    2001,
+    2999
+  ],
+  "min_han": 2149,
+  "max_han": 2354,
+  "min_non_whitespace": 2537,
+  "max_non_whitespace": 2872,
+  "total_han": 53879,
+  "modules": [
+    {
+      "id": "1.1",
+      "title": "版本基线、架构契约与调度冻结",
+      "file": "模块/1.1-版本基线、架构契约与调度冻结.md",
+      "batch": 1,
+      "dependencies": [],
+      "parallel_peers": [],
+      "han_characters": 2331,
+      "non_whitespace_characters": 2705,
+      "sha256": "c582dcae94958afac14b040d8df48fce2fdefc433de66a6c8588d9a807a1640a"
+    },
+    {
+      "id": "2.1",
+      "title": "收编安装诊断与统一配置路径",
+      "file": "模块/2.1-收编安装诊断与统一配置路径.md",
+      "batch": 2,
+      "dependencies": [
+        "1.1"
+      ],
+      "parallel_peers": [
+        "2.2",
+        "2.3"
+      ],
+      "han_characters": 2253,
+      "non_whitespace_characters": 2737,
+      "sha256": "88a6733624d9717a1e80129b3b327f103a15d3c585b3fec2a0a94cbe11725380"
+    },
+    {
+      "id": "2.2",
+      "title": "跨平台加密存储与密钥生命周期",
+      "file": "模块/2.2-跨平台加密存储与密钥生命周期.md",
+      "batch": 2,
+      "dependencies": [
+        "1.1"
+      ],
+      "parallel_peers": [
+        "2.1",
+        "2.3"
+      ],
+      "han_characters": 2354,
+      "non_whitespace_characters": 2840,
+      "sha256": "6f6281d29dcb36ae261b863fc17d2f17f69f3c011b0deffd9c4d304f5158deac"
+    },
+    {
+      "id": "2.3",
+      "title": "校园来源证据与业务数据契约",
+      "file": "模块/2.3-校园来源证据与业务数据契约.md",
+      "batch": 2,
+      "dependencies": [
+        "1.1"
+      ],
+      "parallel_peers": [
+        "2.1",
+        "2.2"
+      ],
+      "han_characters": 2315,
+      "non_whitespace_characters": 2714,
+      "sha256": "28a59c93ccfc4e4b04f4c0071c7f0149daa6198774ce98e322deeda886d09d33"
+    },
+    {
+      "id": "3.1",
+      "title": "跨平台认证会话与网关迁移",
+      "file": "模块/3.1-跨平台认证会话与网关迁移.md",
+      "batch": 3,
+      "dependencies": [
+        "2.1",
+        "2.2",
+        "2.3"
+      ],
+      "parallel_peers": [
+        "3.2",
+        "3.3"
+      ],
+      "han_characters": 2337,
+      "non_whitespace_characters": 2872,
+      "sha256": "f2bed758806d0ddb661cdcab4eaa7e4513ef881bfc59b9c7eb06e6f0de1630b3"
+    },
+    {
+      "id": "3.2",
+      "title": "统一查询、数据模型与完整性规则",
+      "file": "模块/3.2-统一查询、数据模型与完整性规则.md",
+      "batch": 3,
+      "dependencies": [
+        "2.1",
+        "2.2",
+        "2.3"
+      ],
+      "parallel_peers": [
+        "3.1",
+        "3.3"
+      ],
+      "han_characters": 2198,
+      "non_whitespace_characters": 2704,
+      "sha256": "2f4d081673cece5592a66d348b9df1e032f0749081cd8b82e39869af9f170fbb"
+    },
+    {
+      "id": "3.3",
+      "title": "附件与图片的本地隐私处理",
+      "file": "模块/3.3-附件与图片的本地隐私处理.md",
+      "batch": 3,
+      "dependencies": [
+        "2.1",
+        "2.2",
+        "2.3"
+      ],
+      "parallel_peers": [
+        "3.1",
+        "3.2"
+      ],
+      "han_characters": 2222,
+      "non_whitespace_characters": 2651,
+      "sha256": "c29deb6bbded7c50184c5b108bcbc516b089e9d5a807157173165725799e9cbe"
+    },
+    {
+      "id": "4.1",
+      "title": "个人课表、考试与成绩只读适配",
+      "file": "模块/4.1-个人课表、考试与成绩只读适配.md",
+      "batch": 4,
+      "dependencies": [
+        "3.1",
+        "3.2",
+        "3.3"
+      ],
+      "parallel_peers": [
+        "4.2",
+        "4.3",
+        "4.4",
+        "4.5"
+      ],
+      "han_characters": 2229,
+      "non_whitespace_characters": 2642,
+      "sha256": "b188c4a736a08616973b07b4c50b194d274df29a12ad57b0114a5ce51247f72c"
+    },
+    {
+      "id": "4.2",
+      "title": "课程资料中心与跨课程检索",
+      "file": "模块/4.2-课程资料中心与跨课程检索.md",
+      "batch": 4,
+      "dependencies": [
+        "3.1",
+        "3.2",
+        "3.3"
+      ],
+      "parallel_peers": [
+        "4.1",
+        "4.3",
+        "4.4",
+        "4.5"
+      ],
+      "han_characters": 2286,
+      "non_whitespace_characters": 2650,
+      "sha256": "446b565a107d6f52a87432db5fe2ac109cc881ec5512a1f4383f42a253b026cd"
+    },
+    {
+      "id": "4.3",
+      "title": "图书馆体育查询一致性与规则读取",
+      "file": "模块/4.3-图书馆体育查询一致性与规则读取.md",
+      "batch": 4,
+      "dependencies": [
+        "3.1",
+        "3.2",
+        "3.3"
+      ],
+      "parallel_peers": [
+        "4.1",
+        "4.2",
+        "4.4",
+        "4.5"
+      ],
+      "han_characters": 2213,
+      "non_whitespace_characters": 2598,
+      "sha256": "b6cffb0320a1066766d8474682a91a7406a40497cd672529085dcaf1168db85d"
+    },
+    {
+      "id": "4.4",
+      "title": "统一办理框架与跨平台授权凭据",
+      "file": "模块/4.4-统一办理框架与跨平台授权凭据.md",
+      "batch": 4,
+      "dependencies": [
+        "3.1",
+        "3.2",
+        "3.3"
+      ],
+      "parallel_peers": [
+        "4.1",
+        "4.2",
+        "4.3",
+        "4.5"
+      ],
+      "han_characters": 2246,
+      "non_whitespace_characters": 2670,
+      "sha256": "6ae45c03ac5f9183c46a81e7e77bddcbeb989565aca24b5587e739b8ad1acfa8"
+    },
+    {
+      "id": "4.5",
+      "title": "模型图片输入与资料引用增强",
+      "file": "模块/4.5-模型图片输入与资料引用增强.md",
+      "batch": 4,
+      "dependencies": [
+        "3.1",
+        "3.2",
+        "3.3"
+      ],
+      "parallel_peers": [
+        "4.1",
+        "4.2",
+        "4.3",
+        "4.4"
+      ],
+      "han_characters": 2236,
+      "non_whitespace_characters": 2633,
+      "sha256": "6ece3dd31dc784bd68d47a933d3ebc3984d5294b3001ea93a99306c0e2a5eac3"
+    },
+    {
+      "id": "5.1",
+      "title": "图书馆预约、取消与续借适配",
+      "file": "模块/5.1-图书馆预约、取消与续借适配.md",
+      "batch": 5,
+      "dependencies": [
+        "4.1",
+        "4.2",
+        "4.3",
+        "4.4",
+        "4.5"
+      ],
+      "parallel_peers": [
+        "5.2",
+        "5.3",
+        "5.4"
+      ],
+      "han_characters": 2217,
+      "non_whitespace_characters": 2623,
+      "sha256": "b741bff03c09aed491d2d34ffc413aa396494d9c63dbcb22b50d8fe03dab285d"
+    },
+    {
+      "id": "5.2",
+      "title": "体育预约取消与付款状态闭环",
+      "file": "模块/5.2-体育预约取消与付款状态闭环.md",
+      "batch": 5,
+      "dependencies": [
+        "4.1",
+        "4.2",
+        "4.3",
+        "4.4",
+        "4.5"
+      ],
+      "parallel_peers": [
+        "5.1",
+        "5.3",
+        "5.4"
+      ],
+      "han_characters": 2164,
+      "non_whitespace_characters": 2537,
+      "sha256": "7e4916933d73969b4bb030ee8c72f570c7bfb2e4ada2e302cf70293fd7bc3b86"
+    },
+    {
+      "id": "5.3",
+      "title": "网络学堂作业上传与正式提交",
+      "file": "模块/5.3-网络学堂作业上传与正式提交.md",
+      "batch": 5,
+      "dependencies": [
+        "4.1",
+        "4.2",
+        "4.3",
+        "4.4",
+        "4.5"
+      ],
+      "parallel_peers": [
+        "5.1",
+        "5.2",
+        "5.4"
+      ],
+      "han_characters": 2238,
+      "non_whitespace_characters": 2694,
+      "sha256": "6a5d3e3788044ce7499cd29c20dfcfcd3c0b60b47e86da60b5558043d504485f"
+    },
+    {
+      "id": "5.4",
+      "title": "统一日程、增量事件与日历导出",
+      "file": "模块/5.4-统一日程、增量事件与日历导出.md",
+      "batch": 5,
+      "dependencies": [
+        "4.1",
+        "4.2",
+        "4.3",
+        "4.4",
+        "4.5"
+      ],
+      "parallel_peers": [
+        "5.1",
+        "5.2",
+        "5.3"
+      ],
+      "han_characters": 2209,
+      "non_whitespace_characters": 2619,
+      "sha256": "f7fb862a5307b2dc169bb70011f21fd1e0d3c6e6ec354071b078e0de33ec9f55"
+    },
+    {
+      "id": "6.1",
+      "title": "公共业务门面与 MCP CLI 集成",
+      "file": "模块/6.1-公共业务门面与 MCP CLI 集成.md",
+      "batch": 6,
+      "dependencies": [
+        "5.1",
+        "5.2",
+        "5.3",
+        "5.4"
+      ],
+      "parallel_peers": [
+        "6.2",
+        "6.3"
+      ],
+      "han_characters": 2149,
+      "non_whitespace_characters": 2632,
+      "sha256": "5e1615af32f524f56ac2172ee8315ea96be27f333983d47d1c61cbe9a83b0c0d"
+    },
+    {
+      "id": "6.2",
+      "title": "本地看板读取 API 与进程边界",
+      "file": "模块/6.2-本地看板读取 API 与进程边界.md",
+      "batch": 6,
+      "dependencies": [
+        "5.1",
+        "5.2",
+        "5.3",
+        "5.4"
+      ],
+      "parallel_peers": [
+        "6.1",
+        "6.3"
+      ],
+      "han_characters": 2221,
+      "non_whitespace_characters": 2639,
+      "sha256": "e8a60013c704fc3b9ed2fc97ea46a5293a2a60cb6fc16a63b7a4b997067d9bee"
+    },
+    {
+      "id": "6.3",
+      "title": "完整发行布局与安装升级迁移",
+      "file": "模块/6.3-完整发行布局与安装升级迁移.md",
+      "batch": 6,
+      "dependencies": [
+        "5.1",
+        "5.2",
+        "5.3",
+        "5.4"
+      ],
+      "parallel_peers": [
+        "6.1",
+        "6.2"
+      ],
+      "han_characters": 2208,
+      "non_whitespace_characters": 2705,
+      "sha256": "bcaf5ca11accb0f6a8dacc4a21a130241f8f420f8be0a6d8de320c5d9020bf78"
+    },
+    {
+      "id": "7.1",
+      "title": "轻量本地看板与统一使用体验",
+      "file": "模块/7.1-轻量本地看板与统一使用体验.md",
+      "batch": 7,
+      "dependencies": [
+        "6.1",
+        "6.2",
+        "6.3"
+      ],
+      "parallel_peers": [
+        "7.2",
+        "7.3"
+      ],
+      "han_characters": 2242,
+      "non_whitespace_characters": 2631,
+      "sha256": "cf86cdd4fc30d76f64ba239072f695873f86be5d722655d35678341af108dab7"
+    },
+    {
+      "id": "7.2",
+      "title": "跨平台回归、隐私与故障注入",
+      "file": "模块/7.2-跨平台回归、隐私与故障注入.md",
+      "batch": 7,
+      "dependencies": [
+        "6.1",
+        "6.2",
+        "6.3"
+      ],
+      "parallel_peers": [
+        "7.1",
+        "7.3"
+      ],
+      "han_characters": 2197,
+      "non_whitespace_characters": 2625,
+      "sha256": "a6d0eebc6ece7f65150733fa830502332c94021512d896499c19bad785ca94ae"
+    },
+    {
+      "id": "7.3",
+      "title": "能力文档、用户手册与升级记录",
+      "file": "模块/7.3-能力文档、用户手册与升级记录.md",
+      "batch": 7,
+      "dependencies": [
+        "6.1",
+        "6.2",
+        "6.3"
+      ],
+      "parallel_peers": [
+        "7.1",
+        "7.2"
+      ],
+      "han_characters": 2241,
+      "non_whitespace_characters": 2656,
+      "sha256": "bb7ce99a7e11847acc6695c3166a561fa43cda1f40a6b4ac9b53bed3017a9c03"
+    },
+    {
+      "id": "8.1",
+      "title": "全版本集成、候选构建与交审",
+      "file": "模块/8.1-全版本集成、候选构建与交审.md",
+      "batch": 8,
+      "dependencies": [
+        "7.1",
+        "7.2",
+        "7.3"
+      ],
+      "parallel_peers": [],
+      "han_characters": 2256,
+      "non_whitespace_characters": 2663,
+      "sha256": "65164d032f045ca4ea6afa372520de8f79d67842f292daa411e1d40a5eb60e22"
+    },
+    {
+      "id": "9.1",
+      "title": "Codex 整体审查与正式发行管理",
+      "file": "模块/9.1-Codex 整体审查与正式发行管理.md",
+      "batch": 9,
+      "dependencies": [
+        "8.1"
+      ],
+      "parallel_peers": [],
+      "han_characters": 2317,
+      "non_whitespace_characters": 2706,
+      "sha256": "f49cdf43e0d99e66d6e551a6ce3713ac2cac35e64efe370d3195097960c6462c"
+    }
+  ],
+  "validation_passed": true,
+  "no_background_appendices": true,
+  "serial_batches": [
+    1,
+    8,
+    9
+  ],
+  "parallel_batches": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "baseline_commit": "9135a75abc1847f317b8aedd1bb7447945669ac9"
+}
