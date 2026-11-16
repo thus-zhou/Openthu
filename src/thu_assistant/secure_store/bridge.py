@@ -122,7 +122,7 @@ def handle_request(
         }
     except SecureStoreError as exc:
         return {"ok": False, "error": exc.as_error()}
-    except Exception:
+    except Exception as exc:
         return {
             "ok": False,
             "error": {
