@@ -160,6 +160,11 @@ for index in range(12):
 
 manual_secret = os.urandom(32)
 manual_protected = keys._dpapi("protect", manual_secret)
+print("manual_protected_len", len(manual_protected or b""))
+print("manual_tail", (manual_protected or b"")[-4:].hex())
+for trim in range(4):
+    candidate = (manual_protected or b"")[: len(manual_protected or b"") - trim]
+    print("manual_trim", trim, keys._dpapi("unprotect", candidate) == manual_secret)
 manual_payload = keys.DPAPI_KEY_MAGIC + (manual_protected or b"")
 manual_file = root / "keys" / "manual-harden.key"
 fd = os.open(manual_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
