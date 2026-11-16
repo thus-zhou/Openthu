@@ -240,3 +240,24 @@ try:
 except Exception:
     print("bridge_inproc error")
     print(clean(traceback.format_exc()))
+
+probe = (
+    "import os, traceback\n"
+    "from thu_assistant.secure_store import bridge\n"
+    "try:\n"
+    "    bridge._provider_and_paths(dict(os.environ))\n"
+    "    print('child_probe_ok')\n"
+    "except Exception:\n"
+    "    print('child_probe_error')\n"
+    "    traceback.print_exc()\n"
+)
+probe_result = subprocess.run(
+    [sys.executable, "-c", probe],
+    capture_output=True,
+    env=bridge_env,
+    timeout=30,
+    check=False,
+)
+print("child_probe_rc", probe_result.returncode)
+print("child_probe_out", clean(probe_result.stdout.decode("utf-8", "replace")))
+print("child_probe_err", clean(probe_result.stderr.decode("utf-8", "replace")))
