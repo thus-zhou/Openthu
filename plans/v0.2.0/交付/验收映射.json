@@ -309,7 +309,7 @@
         "Model bundle preview plus request-bound single-use grant; capability probe reads no bytes; no network client imported.",
         "Temporary area 0700/0600 with .part atomic rename; disk-full, cancel and timeout leave nothing; cleanup keeps active and foreign files.",
         "Encrypted reference state via 2.2 secure store restores across processes and rejects a different account.",
-        "tests/test_media_assets.py: 67 passed on Linux; isolated tree at d897ccc: Python 600/5, Node 54, check 392 files 0 findings."
+        "tests/test_media_assets.py: 68 passed on Linux; isolated module tree at d897ccc: Python 600/5, Node 54, check 392 files 0 findings; joint batch tree at 1d681d0: Python 609/5, Node 64, check 402/0."
       ]
     },
     {
