@@ -8,7 +8,7 @@
   "integration_parent_commit": "4d60e8b",
   "delivery_commit": "ec2f617",
   "audit_fix_commit": "734d41a",
-  "audit_fix_followup": "a579c2f, 4281df0",
+  "audit_fix_followup": "a579c2f, 4281df0, 456e7a5",
   "record_commit": "338dd0b",
   "batch_state": "all three modules accepted; batch 3 ready pending the single integration commit",
   "branch": "hermes/1-install-diagnostics",
@@ -131,14 +131,15 @@
       "P1-2 checked_at included in cache-v2 binding",
       "P1-3 normalize_course fails closed on invalid observed_at/evidence id",
       "P1-4 source-evidence URL sanitization",
-      "P2 integer statuses, read scope window, title fallback, role digest, semester consistency, multi-record conflicts, malformed missing pages, query_time normalization, corrupt directory cache, filtered-empty semantics, builder validation"
+      "P2 integer statuses, source-state canonical enum integer parity, read scope window, title fallback, role digest, semester consistency, multi-record conflicts, malformed missing pages, query_time normalization, corrupt directory cache, filtered-empty semantics, builder validation"
     ],
     "remaining": [
       "fresh history cache semantics are explicit only for stale fallback",
       "LOCAL_CATALOG_READ and library semantic statuses stay outside the result-envelope enum for legacy compatibility",
       "MCP exception boundary still emits the legacy error shape",
       "result snapshots above max_bytes still raise the legacy explicit size error",
-      "plain local JSON cache can still be re-signed by a local editor; encryption/authentication belongs to the storage layer"
+      "plain local JSON cache can still be re-signed by a local editor; encryption/authentication belongs to the storage layer",
+      "browser.py keeps a separate browser-snapshot safe_url owned by 3.1/4.4; it strips session IDs and sensitive query keys but not userinfo. Browser navigation rejects userinfo; alignment belongs to those modules."
     ]
   },
   "next": "3.1 and 3.3 are also module-accepted. The integration owner records the single batch-3 integration commit, runs the joint offline suite and both-platform CI, and only then marks batch 3 accepted. This module does not create a new PR.",
