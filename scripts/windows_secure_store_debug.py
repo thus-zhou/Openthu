@@ -140,6 +140,18 @@ try:
 except Exception as exc:
     print("manual_load_error", type(exc).__name__, getattr(exc, "detail", ""))
 
+for index in range(20):
+    direct_secret = os.urandom(32)
+    direct_protected = keys._dpapi("protect", direct_secret)
+    direct_restored = keys._dpapi("unprotect", direct_protected or b"")
+    print(
+        "direct",
+        index,
+        len(direct_protected or b""),
+        direct_restored == direct_secret,
+        direct_secret.count(0),
+    )
+
 for index in range(12):
     loop_key = root / "keys" / f"loop-{index}.key"
     try:
@@ -160,11 +172,6 @@ for index in range(12):
 
 manual_secret = os.urandom(32)
 manual_protected = keys._dpapi("protect", manual_secret)
-print("manual_protected_len", len(manual_protected or b""))
-print("manual_tail", (manual_protected or b"")[-4:].hex())
-for trim in range(4):
-    candidate = (manual_protected or b"")[: len(manual_protected or b"") - trim]
-    print("manual_trim", trim, keys._dpapi("unprotect", candidate) == manual_secret)
 manual_payload = keys.DPAPI_KEY_MAGIC + (manual_protected or b"")
 manual_file = root / "keys" / "manual-harden.key"
 fd = os.open(manual_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
