@@ -1,9 +1,11 @@
 """Temporary Windows ACL diagnostic. No paths or account values are printed."""
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -210,3 +212,22 @@ print(
     keys._dpapi("unprotect", manual_file.read_bytes()[len(keys.DPAPI_KEY_MAGIC) :])
     == manual_secret,
 )
+
+from thu_assistant.secure_store import bridge as bridge_module
+
+bridge_key = root / "keys" / "bridge.key"
+keys.create_key_file(bridge_key, "windows-dpapi")
+bridge_env = bridge_module.subprocess_environment(
+    bridge_key, root / "bridge-data", base={"PATH": os.environ.get("PATH", "")}
+)
+bridge_result = subprocess.run(
+    [sys.executable, "-m", "thu_assistant.secure_store.bridge"],
+    input=json.dumps({"action": "health"}).encode(),
+    capture_output=True,
+    env=bridge_env,
+    timeout=30,
+    check=False,
+)
+print("bridge_rc", bridge_result.returncode)
+print("bridge_out", clean(bridge_result.stdout.decode("utf-8", "replace")))
+print("bridge_err", clean(bridge_result.stderr.decode("utf-8", "replace")))
