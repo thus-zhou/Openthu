@@ -312,15 +312,6 @@ class ReferenceRegistry:
                 and (item.expires_at is None or now < item.expires_at)
             }
 
-    def retained_paths(self) -> set[Path]:
-        """Derived files whose retention survives this process."""
-        with self._lock:
-            return {
-                item.path
-                for item in self._items.values()
-                if item.state == "ACTIVE" and item.retention != "SESSION"
-            }
-
     def active_paths(self) -> set[Path]:
         with self._lock:
             return {
