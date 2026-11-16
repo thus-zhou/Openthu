@@ -254,7 +254,8 @@ def normalize_role(value):
 def mapped_status(value, mapping, *, unknown='UNKNOWN'):
     """Map a platform status without publishing an unfamiliar raw label."""
     status, digest = _enum(value, mapping, unknown=unknown)
-    return {'status': status, 'mapping_state': 'MAPPED' if digest is None else 'UNKNOWN',
+    mapped = digest is None and value not in (None, '')
+    return {'status': status, 'mapping_state': 'MAPPED' if mapped else 'UNKNOWN',
             'source_status_digest': digest}
 
 

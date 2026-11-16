@@ -240,6 +240,7 @@ def test_integer_platform_statuses_map_instead_of_becoming_unknown():
     assert domain_models.mapped_status(128, {128: 'COMPLETED'})['mapping_state'] == 'MAPPED'
     assert domain_models.mapped_status('128', {128: 'COMPLETED'})['status'] == 'COMPLETED'
     assert domain_models.mapped_status(True, {True: 'BAD'})['status'] == 'UNKNOWN'
+    assert domain_models.mapped_status(None, {})['mapping_state'] == 'UNKNOWN'
 
 
 def test_three_records_with_the_same_uid_all_stay_in_conflict():
