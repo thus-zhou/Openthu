@@ -421,6 +421,7 @@ def test_bridge_is_bounded_and_keeps_key_path_out_of_payload(tmp_path):
         "PYTHONPATH",
         "PYTHONUTF8",
         "PYTHONNOUSERSITE",
+        "PSModulePath",
         "THU_SECURE_KEY_FILE",
         "THU_SECURE_DATA_DIR",
         "THU_SECURE_BACKEND",
