@@ -14,6 +14,14 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def diagnostics_module():
+    script_dir = str(Path(__file__).resolve().parent)
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+    import dev_diagnostics
+    return dev_diagnostics
+
+
 def environment(state: Path) -> dict[str, str]:
     env = os.environ.copy()
     for key in list(env):
@@ -69,20 +77,34 @@ def main():
         if hasattr(stream,'reconfigure'):
             stream.reconfigure(encoding='utf-8',errors='replace')
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=['setup-node','check','smoke','test'])
+    parser.add_argument('command',choices=['setup-node','doctor','check','smoke','test'])
     parser.add_argument('--python-only',action='store_true')
     parser.add_argument('--node-only',action='store_true')
+    parser.add_argument('--json',action='store_true',help='machine-readable diagnostics for doctor')
     args=parser.parse_args()
+    if args.command=='doctor':
+        module=diagnostics_module()
+        report=module.collect()
+        if args.json:
+            print(json.dumps(report,ensure_ascii=False,indent=2))
+        else:
+            print(module.format_report(report))
+        return 0 if report['ok'] else 1
     if args.command=='setup-node':
         npm=shutil.which('npm.cmd' if os.name=='nt' else 'npm')
         if not npm:
-            parser.error('Node.js 24 and npm are required')
+            parser.error('Node.js 24 and npm are required; install Node.js 24 from https://nodejs.org/ and retry')
         registry=os.environ.get('OPENTHU_NPM_REGISTRY','https://registry.npmjs.org')
         return subprocess.call([npm,'ci','--ignore-scripts','--no-audit','--no-fund','--registry='+registry],cwd=ROOT/'src/thu_assistant')
     with tempfile.TemporaryDirectory(prefix='openthu-offline-') as tmp:
         env=environment(Path(tmp))
         if args.command in ('check','smoke'):
             if args.command=='check':
+                module=diagnostics_module()
+                report=module.collect()
+                if not report['ok']:
+                    print(module.format_report(report),file=sys.stderr)
+                    return 1
                 node=run([env['THU_NODE'],'--version'],capture_output=True,env=env)
                 if node.returncode or int(node.stdout.lstrip('v').split('.')[0])<24:
                     raise RuntimeError('Node.js 24+ is required for this validated development setup')
@@ -91,7 +113,11 @@ def main():
                 scan=run([sys.executable,'scripts/privacy_scan.py'],env=env)
                 if scan.returncode:
                     return scan.returncode
-            print(json.dumps(smoke(env)))
+            try:
+                print(json.dumps(smoke(env)))
+            except RuntimeError as error:
+                print(f'{args.command} failed: {error}',file=sys.stderr)
+                return 1
             return 0
         results={}
         if not args.node_only:
