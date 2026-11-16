@@ -141,17 +141,6 @@ except Exception as exc:
     print("manual_load_error", type(exc).__name__, getattr(exc, "detail", ""))
 
 for index in range(12):
-    direct_secret = os.urandom(32)
-    direct_protected = keys._dpapi("protect", direct_secret)
-    direct_restored = keys._dpapi("unprotect", direct_protected or b"")
-    print(
-        "direct",
-        index,
-        len(direct_protected or b""),
-        direct_restored == direct_secret,
-    )
-
-for index in range(12):
     loop_key = root / "keys" / f"loop-{index}.key"
     try:
         keys.create_key_file(loop_key, "windows-dpapi")
@@ -168,3 +157,22 @@ for index in range(12):
         )
     except Exception as exc:
         print("loop_error", index, type(exc).__name__, getattr(exc, "detail", ""))
+
+manual_secret = os.urandom(32)
+manual_protected = keys._dpapi("protect", manual_secret)
+manual_payload = keys.DPAPI_KEY_MAGIC + (manual_protected or b"")
+manual_file = root / "keys" / "manual-harden.key"
+fd = os.open(manual_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+try:
+    keys._write_all(fd, manual_payload)
+    os.fsync(fd)
+finally:
+    os.close(fd)
+print("pre_harden_size", len(manual_file.read_bytes()))
+keys._harden_windows_acl(manual_file)
+print("post_harden_size", len(manual_file.read_bytes()))
+print(
+    "post_harden_unprotect",
+    keys._dpapi("unprotect", manual_file.read_bytes()[len(keys.DPAPI_KEY_MAGIC) :])
+    == manual_secret,
+)
