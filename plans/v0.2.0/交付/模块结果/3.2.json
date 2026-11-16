@@ -8,6 +8,7 @@
   "integration_parent_commit": "4d60e8b",
   "delivery_commit": "ec2f617",
   "audit_fix_commit": "734d41a",
+  "audit_fix_followup": "a579c2f",
   "record_commit": "338dd0b",
   "batch_state": "all three modules accepted; batch 3 ready pending the single integration commit",
   "branch": "hermes/1-install-diagnostics",

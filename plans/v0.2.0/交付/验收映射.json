@@ -270,7 +270,7 @@
         "Domain identities, date/time precision, integer status mapping, role digest and same-title/different-id relations validated against course-v1 and query fixtures.",
         "Cursor c1 bound to parameters, account scope and snapshot-v2 for learn, authenticated pages and account-bound services; cancelled second page keeps the first segment but stays partial.",
         "tests/test_query_contracts.py: 40 passed; clean-tree full offline suite at 734d41a Python 622 passed/5 skipped, Node 64 passed; check 402 files/0 findings.",
-        "Audit remediation 734d41a fixes P1-1..P1-4 and the P2 findings; remaining P3 limits are recorded in the module result.",
+        "Audit remediation 734d41a (follow-up a579c2f) fixes P1-1..P1-4 and the P2 findings; remaining P3 limits are recorded in the module result.",
         "Result mirrored at plans/v0.2.0/交付/模块结果/3.2.json; no live campus, model or business calls.",
         "All three batch-3 modules are module-accepted; batch 3 stays ready until the single integration commit records the joint suite and CI."
       ]
