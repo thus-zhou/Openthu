@@ -44,6 +44,7 @@ from .errors import (
     SecureLegacyUnavailable,
     SecurePayloadInvalid,
     SecureRecordNotFound,
+    SecureRecordMismatch,
     SecureRevisionConflict,
     SecureRollbackUnavailable,
     SecureRotationIncomplete,
@@ -707,6 +708,17 @@ class SecureStore:
                 for source in files:
                     raw = _read_record_bytes(source)
                     envelope = parse_envelope(raw)
+                    expected_id = source.name[: -len(".secure")]
+                    if (
+                        self._require_record_binding
+                        and envelope.context.record_id is None
+                    ):
+                        raise SecureRecordMismatch("record identity is not bound")
+                    if (
+                        envelope.context.record_id is not None
+                        and envelope.context.record_id != expected_id
+                    ):
+                        raise SecureRecordMismatch("record identifier differs")
                     old_provider = self._providers.get(
                         envelope.header.get("key_id")
                     )
@@ -778,6 +790,17 @@ class SecureStore:
                 try:
                     raw = _read_record_bytes(path)
                     envelope = parse_envelope(raw)
+                    expected_id = path.name[: -len(".secure")]
+                    if (
+                        self._require_record_binding
+                        and envelope.context.record_id is None
+                    ):
+                        raise SecureRecordMismatch("record identity is not bound")
+                    if (
+                        envelope.context.record_id is not None
+                        and envelope.context.record_id != expected_id
+                    ):
+                        raise SecureRecordMismatch("record identifier differs")
                     record_provider = self._providers.get(
                         envelope.header.get("key_id")
                     )
@@ -821,6 +844,17 @@ class SecureStore:
             try:
                 raw = _read_record_bytes(path)
                 envelope = parse_envelope(raw)
+                expected_id = path.name[: -len(".secure")]
+                if (
+                    self._require_record_binding
+                    and envelope.context.record_id is None
+                ):
+                    raise SecureKeyUnavailable("record identity is not bound")
+                if (
+                    envelope.context.record_id is not None
+                    and envelope.context.record_id != expected_id
+                ):
+                    raise SecureRecordMismatch("record identifier differs")
                 provider = self._providers.get(envelope.header.get("key_id"))
                 if provider is None:
                     raise SecureKeyUnavailable("record key is not available")

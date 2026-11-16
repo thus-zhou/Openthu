@@ -633,6 +633,7 @@ def test_record_identity_is_bound_to_its_path(secure):
     )
     with pytest.raises(SecureRecordMismatch):
         read_session(store, "b")
+    assert store.health()["ok"] is False
     assert read_session(store, "a") == b"A-secret"
 
 
