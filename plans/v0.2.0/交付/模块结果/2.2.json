@@ -6,10 +6,16 @@
   "status": "accepted",
   "baseline_commit": "970cb0d",
   "integration_parent_commit": "8b2ecb9",
-  "delivery_commit": "713e527",
+  "delivery_commit": "4519117e6508f47adcd1664af50f86ec432d1764",
   "code_commits": [
     "b910498",
-    "713e527"
+    "713e527",
+    "281bce7",
+    "1153500",
+    "a5706a7",
+    "aa7709b",
+    "e71ed94",
+    "4519117"
   ],
   "branch": "hermes/1-install-diagnostics",
   "version_pr": 2,
@@ -51,18 +57,35 @@
       "command": "python -m pytest -o addopts='' -q tests/test_secure_store.py"
     },
     "full_offline_suite_linux": {
-      "python_passed": 467,
+      "python_passed": 481,
       "python_skipped": 5,
       "python_failed": 0,
       "node_passed": 54,
       "node_failed": 0,
-      "check_files": 335,
+      "check_files": 369,
       "check_findings": 0,
       "commands": [
         "python scripts/dev.py check",
         "python scripts/dev.py test"
       ],
-      "worktree": "clean checkout of delivery commit 713e527"
+      "worktree": "clean checkout of delivery commit 4519117"
+    },
+    "full_offline_suite_windows": {
+      "python_passed": 482,
+      "python_skipped": 4,
+      "python_failed": 0,
+      "node_passed": 54,
+      "node_failed": 0,
+      "secure_store_failures": 0
+    },
+    "github_actions": {
+      "ubuntu-24.04": "success",
+      "windows-2025": "success",
+      "head_sha": "4519117e6508f47adcd1664af50f86ec432d1764",
+      "runs": [
+        43898440026,
+        43898424606
+      ]
     },
     "contracts": {
       "plan_validator": "ok",
@@ -87,11 +110,14 @@
     "stored data and temporary files contain no synthetic plaintext",
     "production entry refuses a missing key and does not import a test codec",
     "header validates against JSON Schema Draft 2020-12",
+    "Windows DPAPI key creation/load, ACL rejection and legacy read pass on Windows CI",
+    "Windows key and record files are opened in binary mode; no newline translation corrupts ciphertext",
+    "private bridge subprocess returns one JSON response and keeps key paths out of payloads",
     "legacy DPAPI format is recognized; cross-platform read returns a re-authentication error"
   ],
   "blocked": [],
   "limits": [
-    "Windows DPAPI and ACL behavior is covered by Windows-only tests; the cloud Linux host cannot execute them locally.",
+    "The cloud Linux host cannot run Windows DPAPI/ACL locally; those tests passed on the GitHub windows-2025 runner.",
     "No anti-rollback claim: revision detects ordinary concurrent writers, not an attacker replacing both data and pointer.",
     "No automatic cross-machine key migration or secure deletion.",
     "The release/packaging module 6.3 owns the final runtime dependency manifest and lock."

@@ -134,8 +134,8 @@
         "AES-256-GCM envelope with AESGCM, per-seal random nonce, canonical AAD and frozen header schema validation.",
         "Windows current-user DPAPI and POSIX owner-only random key backends; key/data separation, symlink and permission rejection.",
         "Rotation preview, verified re-seal, atomic pointer switch, rollback, legacy DPAPI read-only recognition.",
-        "22 Linux module tests passed; 3 Windows-only tests deferred to Windows CI.",
-        "Clean delivery tree: check 335 files/0 findings; Python 467 passed/5 skipped; Node 54 passed; no live campus/model/business calls."
+        "22 Linux module tests passed; Windows secure-store tests passed on windows-2025.",
+        "Final batch tree: check 369 files/0 findings; Python 481/5 Linux, 482/4 Windows; Node 54; CI both platforms green."
       ]
     },
     {

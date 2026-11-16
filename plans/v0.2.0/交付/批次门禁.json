@@ -81,8 +81,8 @@
       "module_acceptance": {
         "2.2": {
           "accepted_at": "2026-11-16",
-          "delivery_commit": "713e527",
-          "evidence": "AES-256-GCM + Windows DPAPI/POSIX key backends; 22 Linux module tests + 3 Windows-only; clean delivery tree check 335/0, Python 467/5, Node 54; plan and contract validators ok"
+          "delivery_commit": "4519117e6508f47adcd1664af50f86ec432d1764",
+          "evidence": "AES-256-GCM + Windows DPAPI/POSIX key backends; 22 Linux module tests + Windows secure-store tests pass; check 369/0; Python 481/5 Linux, 482/4 Windows; Node 54; CI ubuntu-24.04 and windows-2025 green"
         },
         "2.3": {
           "accepted_at": "2026-11-16",
@@ -92,9 +92,19 @@
         "2.1": {
           "accepted_at": "2026-11-16",
           "delivery_commit": "690cbab",
-          "evidence": "31 module tests; check 367/0; Python 479/5, Node 54; plan/contract ok; Windows 2.1 test files no failures; 2.2 secure_store still blocks batch"
+          "evidence": "31 module tests; check 367/0; Python 479/5, Node 54; plan/contract ok; Windows 2.1 test files no failures"
         }
       },
+      "checks": [
+        "plan validator ok",
+        "contract validator ok (9 schema samples, 35 rejection samples, 8 extra samples)",
+        "source validator ok (29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures)",
+        "scripts/dev.py check: 369 files, 0 findings, 29 MCP tools",
+        "Python: 481 passed/5 skipped Linux; 482 passed/4 skipped Windows",
+        "Node: 54 passed/0 failed",
+        "GitHub Actions: ubuntu-24.04 and windows-2025 successful at 4519117"
+      ],
+      "gate_note": "All three modules are accepted and reconnected at 4519117 with green CI. The batch status remains ready because the frozen 1.1 contract validator hard-codes batch 2 as ready; changing gate state requires a 1.1-owned validator update.",
       "entry_condition": "all batch 1 modules accepted and integrated",
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     },

@@ -120,7 +120,7 @@
     "total": 9,
     "current": 2,
     "current_status": "ready",
-    "module_status_note": "2.1, 2.2 and 2.3 accepted; batch reconnect and 2.2 Windows secure_store remain",
+    "module_status_note": "2.1, 2.2 and 2.3 accepted; batch reconnect green at 4519117; gate remains ready pending a 1.1-owned dynamic validator update",
     "next": 3,
     "gate_file": "交付/批次门禁.json"
   },
