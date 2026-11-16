@@ -6,7 +6,7 @@
   "status": "accepted",
   "baseline_commit": "4d60e8bbca91d771dc6c4db478de4863922a2b07",
   "integration_parent_commit": "d897ccc7d1e6b4b75e344a28aaa6b4adcb392eef",
-  "delivery_commit": "0784367d6e355c26b4dcf2feb6114e96b1fc67bb",
+  "delivery_commit": "6972ef84b46cce5507ce63c24fc818fe4f787dee",
   "code_commits": [
     "24ecdb7",
     "e81ceb9",
@@ -14,7 +14,10 @@
     "4528b0a",
     "feb3a79",
     "4895404",
-    "0784367"
+    "0784367",
+    "6930dde",
+    "b4bcecb",
+    "6972ef8"
   ],
   "branch": "hermes/1-install-diagnostics",
   "version_pr": 2,
@@ -35,7 +38,10 @@
     "tests/campus-crypto-bridge.test.js",
     "tests/test_campus.py",
     "tests/test_gateway_bridge.py",
-    "tests/fixtures/session-writer.js"
+    "tests/fixtures/session-writer.js",
+    "src/learn_assistant/providers/web.py",
+    "src/learn_assistant/models.py",
+    "src/thu_assistant/mcp_stdio.py"
   ],
   "contracts": [
     "secure-storage-header-v1",
@@ -191,8 +197,8 @@
   },
   "checks": {
     "module_tests": {
-      "python_passed": 8,
-      "node_v3_passed": 6,
+      "python_passed": 14,
+      "node_v3_passed": 7,
       "node_crypto_passed": 4,
       "failed": 0,
       "commands": [
@@ -200,14 +206,14 @@
         "node --test tests/campus-session-v3.test.js",
         "node --test tests/campus-crypto-bridge.test.js"
       ],
-      "python_skipped": 1,
-      "python_windows_passed": 9
+      "python_skipped": 2,
+      "python_windows_passed": 16
     },
     "full_offline_suite_linux": {
-      "python_passed": 622,
-      "python_skipped": 6,
+      "python_passed": 645,
+      "python_skipped": 7,
       "python_failed": 0,
-      "node_passed": 64,
+      "node_passed": 65,
       "node_failed": 0,
       "check_files": 402,
       "check_findings": 0,
@@ -218,10 +224,10 @@
       "note": "Shared tree includes the accepted 3.2 and 3.3 modules; these are not 3.1-only counts."
     },
     "full_offline_suite_windows": {
-      "python_passed": 617,
+      "python_passed": 641,
       "python_skipped": 11,
       "python_failed": 0,
-      "node_passed": 64,
+      "node_passed": 65,
       "node_failed": 0,
       "check_files": 402,
       "check_findings": 0
@@ -232,44 +238,47 @@
       "source_validator": "ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures"
     },
     "github_actions": {
-      "head_sha": "0784367d6e355c26b4dcf2feb6114e96b1fc67bb",
-      "run_id": 43941862411,
+      "head_sha": "6972ef84b46cce5507ce63c24fc818fe4f787dee",
+      "run_id": 43951528116,
       "ubuntu_24_04": "success",
       "windows_2025": "success",
-      "ubuntu_result": "622 passed, 6 skipped, 0 failed; Node 64 passed",
-      "windows_result": "617 passed, 11 skipped, 0 failed; Node 64 passed"
+      "ubuntu_result": "645 passed, 7 skipped, 0 failed; Node 65 passed",
+      "windows_result": "641 passed, 11 skipped, 0 failed; Node 65 passed"
     },
     "live_campus_calls": 0,
     "model_calls": 0,
     "business_submissions": 0
   },
   "accepted_cases": [
-    "legacy campus-v2.dpapi is read, copied to .before-v3 and retained after a verified campus-v3.secure write",
+    "legacy campus-v2.dpapi is read by the real Windows DPAPI helper, copied to .before-v3 and retained after a verified campus-v3.secure write",
     "Linux without a key fails protected session operations with SECURE_KEY_NOT_CONFIGURED while public reads and the static catalog remain available",
     "two secure processes merge independent cookies and report STATE_CONFLICT without overwriting a conflicting value",
     "switching the account rejects both load and commit with STATE_ACCOUNT_MISMATCH and writes no new state",
     "a simulated browser persistence failure returns sessionPersisted=false with a concrete error",
     "crypto timeout and cancellation kill the private child and the next call starts independently; no request is replayed",
-    "cross-domain and expired browser cookies do not widen injection scope",
-    "gateway stdout contains only the sealed browser state and never a cookie value"
+    "cross-domain and expired browser cookies do not widen injection scope; out-of-scope cookies are ignored",
+    "gateway stdout contains only the sealed browser state and never a cookie value",
+    "Learn session envelopes are account-bound; another account cannot load the file",
+    "configured secure keys fail closed when the Windows session helper is unavailable"
   ],
   "limits": [
-    "The cloud Linux host cannot run Windows DPAPI/ACL; Windows behavior must be proven by the GitHub windows-2025 runner.",
+    "The cloud Linux host cannot run Windows DPAPI/ACL; Windows behavior is proven by the GitHub windows-2025 runner, including the new real-DPAPI migration test.",
     "A full directory rollback that replaces both state and pointer is outside the revision/record-id guarantee.",
     "action_store and todos retain their outer THU-ACTION-1 / THU-TODOS-1 container magic; full record identity and business migration belong to 4.4 and 5.4.",
-    "learn_assistant/providers/web.py still prints a Windows DPAPI message; the actual provider is secure-store when configured. Documentation is handed to 6.1/7.3.",
+    "The upstream Windows CookieJar stores name/value/path only; expires/secure/httpOnly/sameSite are enforced where available but cannot be fully round-tripped without changing vendor/madmodel-proxy.",
     "The Linux key file must be created explicitly by the user; this module does not generate or export a key.",
+    "Custom configuration-file state selection and a few standalone gateway paths still need the 2.1/6.3 resolver; the normal GatewayClient path is covered.",
     "No real campus login, write, payment or submission was performed."
   ],
   "rollback": "Stop new session writes, keep campus-v3.secure, session.secure, .before-v3 and campus-v2.dpapi, and switch to the compatibility wrapper. Do not roll back a runtime that cannot read a pending new-format transaction; require explicit re-authentication instead of deleting state.",
   "next": "Batch integration must reconnect 3.1 with the accepted 3.2 and 3.3 commits, run the batch check and full offline suite, and record Ubuntu/Windows CI. The batch gate remains ready until that integration commit is recorded.",
   "cross_module_requests": [
     "src/thu_assistant/secure_store/keys.py (2.2 owner): the private DPAPI backend now calls _dpapi_protect_legacy/_dpapi_unprotect_legacy from learn_assistant.auth so creating or unwrapping the provider master key cannot re-enter the secure provider. The primitive behavior is unchanged; owner review requested.",
-    "error-classification.json owner (1.1): register SECURE_KEY_NOT_CONFIGURED, SECURE_LEGACY_UNAVAILABLE, SECURE_KEY_LOCATION and related storage codes before the facade exposes them as classified errors.",
-    "learn_assistant/providers/web.py (6.1/7.3): replace the hard-coded Windows DPAPI message with SecureSessionStore.protection.",
-    "4.4: give action_store records a stable record_id and migrate the outer THU-ACTION-1 container; the compatibility wrapper already routes captured protect/unprotect references to the secure provider.",
+    "src/learn_assistant/models.py, providers/web.py and thu_assistant/mcp_stdio.py (6.1/7.3): LoginStatus.error_code and the account-scoped Learn session require these integration changes; wording now follows SecureSessionStore.protection.",
+    "error-classification.json owner (1.1): register SECURE_KEY_NOT_CONFIGURED, SECURE_LEGACY_UNAVAILABLE, SECURE_KEY_LOCATION, LEARN_ACCOUNT_REQUIRED and related storage codes before the facade exposes them as classified errors.",
+    "4.4: give action_store records a stable record_id and migrate the outer THU-ACTION-1 container; the compatibility wrapper already routes captured protect/unprotect references to the secure provider and now rejects non-ACTION envelopes.",
     "5.4: give the todo cache a stable record_id and migrate the outer THU-TODOS-1 container.",
-    "6.3: provide the default key-file setup command and packaging for crypto_service.py / crypto-bridge.js; the module does not create a key automatically."
+    "6.3: provide the default key-file setup command and packaging for crypto_service.py / crypto-bridge.js; the module now discovers the default key but does not create it automatically."
   ],
   "privacy": {
     "raw_payload_included": false,

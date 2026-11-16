@@ -209,13 +209,14 @@
       "integration_order": 5,
       "status": "accepted",
       "accepted_at": "2026-11-17",
-      "delivery_commit": "0784367d6e355c26b4dcf2feb6114e96b1fc67bb",
+      "delivery_commit": "6972ef84b46cce5507ce63c24fc818fe4f787dee",
       "evidence": [
-        "Module tests: 9 Python (8 pass + 1 Linux skip; 9 pass on Windows) + 6 Node v3 + 4 Node crypto; shared-tree check 402 files/0 findings; Python 622/6, Node 64/0 on Linux; Windows 617/11, Node 64/0.",
-        "GitHub Actions run 43941862411 at 0784367: ubuntu-24.04 and windows-2025 both successful.",
+        "Module tests: 14 Python (2 Linux skips; 16 Windows pass) + 7 Node v3 + 4 Node crypto; shared-tree check 402 files/0 findings; Linux 645/7, Node 65/0; Windows 641/11, Node 65/0.",
+        "GitHub Actions run 43951528116 at 6972ef8: ubuntu-24.04 and windows-2025 both successful.",
         "Linux without a key fails protected session operations with SECURE_KEY_NOT_CONFIGURED; public reads and the static catalog remain available.",
         "Browser state is sealed through the owned gateway; gateway stdout contains ciphertext only, never a cookie value.",
-        "learn_assistant/auth.py writes session.secure with scope learn-session; captured _dpapi_protect/_dpapi_unprotect references in action_store and todos reach the new provider."
+        "learn_assistant/auth.py writes session.secure with scope learn-session; captured _dpapi_protect/_dpapi_unprotect references in action_store and todos reach the new provider.",
+        "Audit remediation 6930dde/b4bcecb/6972ef8 adds Learn account binding, ACTION-only compatibility decrypt, fail-closed access helper, browser identity rejection, default-key discovery, verified temp-file writes and real Windows DPAPI migration coverage."
       ]
     },
     {
