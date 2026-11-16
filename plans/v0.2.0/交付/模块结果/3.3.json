@@ -111,9 +111,15 @@
     "model_calls": 0,
     "business_submissions": 0,
     "github_actions": {
-      "commit": "d897ccc7d1e6b4b75e344a28aaa6b4adcb392eef",
-      "ubuntu_24_04": "success: Python 600 passed / 5 skipped / 0 failed; Node 54 passed / 0 failed",
-      "windows_2025": "success: Python 595 passed / 10 skipped / 0 failed; Node 54 passed / 0 failed"
+      "d897ccc": {
+        "ubuntu_24_04": "success: Python 600 passed / 5 skipped / 0 failed; Node 54 passed / 0 failed",
+        "windows_2025": "success: Python 595 passed / 10 skipped / 0 failed; Node 54 passed / 0 failed"
+      },
+      "1d681d0": {
+        "ubuntu_24_04": "success",
+        "windows_2025": "failure; the 8 Python failures are all in tests/test_session_gateway.py and tests/test_secure_store.py (SecureKeyPermissionError, bridge timeout) plus 3 Node session-store failures; no test_media_assets failure appears in the log. 3.1 continued the fix in 4528b0a and dcfb159."
+      },
+      "note": "3.3's own code is unchanged in behaviour between d897ccc and 1d681d0 apart from the pending_cleanup listing; the batch integrator must re-run CI on the final integration tree."
     },
     "module_tests_windows": {
       "passed": 63,
@@ -229,8 +235,13 @@
     {
       "owner": "7.2",
       "request": "Include tests/test_media_assets.py in cross-platform regression; five POSIX-only cases skip on Windows for platform reasons."
+    },
+    {
+      "owner": "4.5/6.1",
+      "request": "Pass the configured 2.1 temp_dir as MediaAssets(temp_root); the directory must be created 0700 by the caller or the module refuses it, and it must not be a user download directory."
     }
   ],
+  "blockers": [],
   "remaining_limits": [
     "Derived images are always re-encoded: JPEG is lossy (quality 90, stepping down to 60 only to satisfy the 8 MiB limit), ICC is dropped, so the derived hash differs from the source hash by design.",
     "OOXML files are recognised as ZIP containers only; internal document structure is not validated and content is never executed.",
