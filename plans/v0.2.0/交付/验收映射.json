@@ -131,11 +131,11 @@
       ],
       "completion_standard": "跨平台认证加密存储、随机主密钥、权限/链接检查、旧 DPAPI 只读兼容",
       "evidence": [
-        "AES-256-GCM envelope with AESGCM, per-seal random nonce, canonical AAD and frozen header schema validation.",
-        "Windows current-user DPAPI and POSIX owner-only random key backends; key/data separation, symlink and permission rejection.",
-        "Rotation preview, verified re-seal, atomic pointer switch, rollback, legacy DPAPI read-only recognition.",
-        "22 Linux module tests passed; Windows secure-store tests passed on windows-2025.",
-        "Final batch tree: check 369 files/0 findings; Python 481/5 Linux, 482/4 Windows; Node 54; CI both platforms green."
+        "AES-256-GCM envelope with AESGCM, per-seal random nonce, canonical AAD, optional record_id binding and frozen header schema validation.",
+        "Windows current-user DPAPI and POSIX owner-only random key backends; key/data separation revalidated on rotation; symlink/reparse/permission rejection.",
+        "Rotation preview, verified re-seal, atomic pointer switch, restarted rollback with THU_SECURE_RETIRED_KEY_FILES, previous-record verification, legacy DPAPI read-only recognition.",
+        "33 Linux module tests passed; Windows secure-store tests passed on windows-2025.",
+        "Final audit-fix tree: check 369 files/0 findings; Python 497/5 Linux, 497/5 Windows; Node 54; CI both platforms green at a6b54bb."
       ]
     },
     {

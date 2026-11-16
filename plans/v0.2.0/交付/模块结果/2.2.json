@@ -6,7 +6,7 @@
   "status": "accepted",
   "baseline_commit": "970cb0d",
   "integration_parent_commit": "8b2ecb9",
-  "delivery_commit": "4519117e6508f47adcd1664af50f86ec432d1764",
+  "delivery_commit": "a6b54bb6502947e401999d4c14fa70c92ee4b268",
   "code_commits": [
     "b910498",
     "713e527",
@@ -15,7 +15,9 @@
     "a5706a7",
     "aa7709b",
     "e71ed94",
-    "4519117"
+    "4519117",
+    "6e99d3d",
+    "a6b54bb"
   ],
   "branch": "hermes/1-install-diagnostics",
   "version_pr": 2,
@@ -36,28 +38,31 @@
     ],
     "key_checks": [
       "absolute path",
-      "regular file, no symlink",
+      "regular file, no symlink/reparse point",
       "current-user ownership",
       "owner-only permissions/ACL",
-      "parent directory not writable by others on POSIX",
-      "random namespace key protected by the active provider"
+      "parent directory not writable by others on POSIX; Windows parent ACL hardened",
+      "random namespace key protected by the active provider",
+      "rotation provider key location revalidated against the data directory"
     ],
-    "aad": "canonical JSON binds format, purpose, account/service domains, opaque account reference and revision",
+    "aad": "canonical JSON binds format, purpose, account/service domains, opaque account reference, revision and optional record_id",
     "nonce": "12 random bytes per seal; unique per operation",
     "account_reference": "HKDF-separated HMAC-SHA256 pseudonym, stable across data-key rotation",
     "legacy": "LA-DPAPI-1, THU-ACTION-1 and THU-TODOS-1 are recognized read-only and never rewritten automatically",
     "node_boundary": "fixed actions, 2 MiB request and 1 MiB plaintext limits, minimal subprocess environment",
-    "plaintext_fallback": "none; missing key refuses production storage"
+    "plaintext_fallback": "none; missing key refuses production storage",
+    "record_identity": "new records bind record_id into AAD; copying a record to another record path fails with SECURE_RECORD_MISMATCH; legacy unbound records only in a legacy pointer",
+    "rollback": "explicit retired key files via THU_SECURE_RETIRED_KEY_FILES; previous records and namespace authenticated before pointer switch"
   },
   "checks": {
     "module_tests_linux": {
-      "passed": 22,
+      "passed": 33,
       "skipped": 3,
       "failed": 0,
       "command": "python -m pytest -o addopts='' -q tests/test_secure_store.py"
     },
     "full_offline_suite_linux": {
-      "python_passed": 481,
+      "python_passed": 497,
       "python_skipped": 5,
       "python_failed": 0,
       "node_passed": 54,
@@ -68,11 +73,11 @@
         "python scripts/dev.py check",
         "python scripts/dev.py test"
       ],
-      "worktree": "clean checkout of delivery commit 4519117"
+      "worktree": "clean checkout of audit-fix commit a6b54bb"
     },
     "full_offline_suite_windows": {
-      "python_passed": 482,
-      "python_skipped": 4,
+      "python_passed": 497,
+      "python_skipped": 5,
       "python_failed": 0,
       "node_passed": 54,
       "node_failed": 0,
@@ -81,10 +86,10 @@
     "github_actions": {
       "ubuntu-24.04": "success",
       "windows-2025": "success",
-      "head_sha": "4519117e6508f47adcd1664af50f86ec432d1764",
+      "head_sha": "a6b54bb6502947e401999d4c14fa70c92ee4b268",
       "runs": [
-        43898440026,
-        43898424606
+        43908837616,
+        43908850975
       ]
     },
     "contracts": {
@@ -92,7 +97,8 @@
       "contract_validator": "ok",
       "schema_samples": 9,
       "rejection_samples": 35,
-      "extra_samples": 8
+      "extra_samples": 8,
+      "record_id_schema": "optional record_id added to secure-storage-header-v1 with backward-compatible AAD omission"
     },
     "live_campus_calls": 0,
     "model_calls": 0,
@@ -101,10 +107,15 @@
   "accepted_cases": [
     "different ciphertext and nonce on repeated sealing; same provider recovers plaintext",
     "nonce, ciphertext, service domain and account domain tampering fail closed without partial plaintext",
-    "missing key, broad permissions and symlinks are rejected",
+    "missing key, broad permissions, symlinks and reparse points are rejected",
     "write, fsync and pointer-switch failures preserve the previous valid record or pointer",
     "half-failed rotation leaves the old pointer/key readable; retry completes",
     "rotation preserves the account reference and is readable after restart and rollback",
+    "record identity is bound to AAD; copying one record onto another fails with SECURE_RECORD_MISMATCH",
+    "rotation rejects a new key located inside the data directory",
+    "a restarted store can roll back with THU_SECURE_RETIRED_KEY_FILES; corrupt previous records are refused",
+    "health authenticates ciphertext, counts unreadable records and does not expose paths",
+    "first pointer failure reclaims empty orphan record directories on restart",
     "cross-account, cross-purpose and cross-service reads are denied",
     "concurrent writers cannot both advance the same revision",
     "stored data and temporary files contain no synthetic plaintext",
@@ -118,10 +129,11 @@
   "blocked": [],
   "limits": [
     "The cloud Linux host cannot run Windows DPAPI/ACL locally; those tests passed on the GitHub windows-2025 runner.",
-    "No anti-rollback claim: revision detects ordinary concurrent writers, not an attacker replacing both data and pointer.",
+    "No anti-rollback claim: revision and record identity detect ordinary record replacement, not an attacker replacing both data and pointer.",
     "No automatic cross-machine key migration or secure deletion.",
-    "The release/packaging module 6.3 owns the final runtime dependency manifest and lock."
+    "The module is not yet wired to the existing session/action paths; 3.1/4.x must consume it before claiming end-to-end protection.",
+    "The release/packaging module 6.3 still owns the final runtime dependency manifest and lock; cryptography is now declared for the package dependency while 6.3 can adjust the lock."
   ],
-  "rollback": "Stop new writes, keep the previous records directory and key, verify old records, then switch store.json back to the previous pointer. No old ciphertext or key is deleted automatically.",
-  "next": "Reconnect 2.1, 2.2 and 2.3 to one batch integration commit; run batch-level check and full offline regression before unlocking batch 3."
+  "rollback": "Stop new writes, keep the previous records directory and key, set THU_SECURE_RETIRED_KEY_FILES to the previous key path(s), verify old records, then rollback() switches store.json back. No old ciphertext or key is deleted automatically.",
+  "next": "2.2 audit P1 fixes are complete; keep batch 2 accepted at this fix commit and batch 3 ready. Do not start 3.1 in this 2.2 task; the next batch executor should begin when assigned."
 }

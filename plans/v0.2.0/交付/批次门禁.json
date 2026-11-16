@@ -77,13 +77,13 @@
         "2.3": "accepted"
       },
       "status": "accepted",
-      "integration_commit": "4519117e6508f47adcd1664af50f86ec432d1764",
+      "integration_commit": "a6b54bb6502947e401999d4c14fa70c92ee4b268",
       "accepted_at": "2026-11-16",
       "module_acceptance": {
         "2.2": {
           "accepted_at": "2026-11-16",
-          "delivery_commit": "4519117e6508f47adcd1664af50f86ec432d1764",
-          "evidence": "AES-256-GCM + Windows DPAPI/POSIX key backends; 22 Linux module tests + Windows secure-store tests pass; check 369/0; Python 481/5 Linux, 482/4 Windows; Node 54; CI ubuntu-24.04 and windows-2025 green"
+          "delivery_commit": "a6b54bb6502947e401999d4c14fa70c92ee4b268",
+          "evidence": "AES-256-GCM + DPAPI/file keys; record_id AAD binding; rotation key separation; restarted rollback with retired keys; health auth/path-safe; 33 Linux module tests; check 369/0; Python 497/5 Linux and 497/5 Windows; Node 54; CI green"
         },
         "2.3": {
           "accepted_at": "2026-11-16",
@@ -101,11 +101,11 @@
         "contract validator ok (9 schema samples, 35 rejection samples, 8 extra samples)",
         "source validator ok (29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures)",
         "scripts/dev.py check: 369 files, 0 findings, 29 MCP tools",
-        "Python: 481 passed/5 skipped Linux; 482 passed/4 skipped Windows",
+        "Python: 497 passed/5 skipped Linux; 497 passed/5 skipped Windows",
         "Node: 54 passed/0 failed",
-        "GitHub Actions: ubuntu-24.04 and windows-2025 successful at 4519117"
+        "GitHub Actions: ubuntu-24.04 and windows-2025 successful at a6b54bb"
       ],
-      "gate_note": "2.1, 2.2 and 2.3 accepted and reconnected at 4519117; Linux 481/5, Windows 482/4, Node 54, CI green. The dynamic validator accepts the accepted prefix and unlocks batch 3.",
+      "gate_note": "2.1, 2.2 and 2.3 accepted and reconnected through the 2.2 audit-fix commit a6b54bb; batch 3 remains ready, not started.",
       "entry_condition": "all batch 1 modules accepted and integrated",
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     },

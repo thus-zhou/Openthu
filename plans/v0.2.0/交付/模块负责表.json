@@ -110,12 +110,15 @@
       "integration_order": 3,
       "status": "accepted",
       "accepted_at": "2026-11-16",
-      "delivery_commit": "4519117e6508f47adcd1664af50f86ec432d1764",
+      "delivery_commit": "a6b54bb6502947e401999d4c14fa70c92ee4b268",
       "evidence": [
         "AES-256-GCM envelope, Windows DPAPI and POSIX owner-only key backends",
-        "22 Linux module tests passed; Windows secure-store tests passed on windows-2025",
-        "final batch tree: Python 481/5 Linux and 482/4 Windows; Node 54; check 369/0",
-        "CI ubuntu-24.04 and windows-2025 successful at 4519117"
+        "record_id bound into AAD; record substitution rejected; legacy unbound stores read-only",
+        "rotation rejects a key inside data; restarted rollback loads THU_SECURE_RETIRED_KEY_FILES",
+        "health authenticates ciphertext; unreadable records counted without path leakage",
+        "33 Linux module tests passed; Windows secure-store failures 0",
+        "final audit-fix tree: Python 497/5 Linux and 497/5 Windows; Node 54; check 369/0",
+        "CI ubuntu-24.04 and windows-2025 successful at a6b54bb"
       ]
     },
     {
