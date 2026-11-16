@@ -1,0 +1,230 @@
+{
+  "module": "3.3",
+  "title": "附件与图片的本地隐私处理",
+  "batch": 3,
+  "owner": "Hermes",
+  "status": "accepted",
+  "baseline_commit": "4d60e8b",
+  "delivery_commit": "d897ccc7d1e6b4b75e344a28aaa6b4adcb392eef",
+  "code_commits": [
+    "d897ccc"
+  ],
+  "branch": "hermes/1-install-diagnostics",
+  "version_pr": 2,
+  "paths": [
+    "src/thu_assistant/media_assets/",
+    "tests/test_media_assets.py",
+    "pyproject.toml",
+    "requirements-dev.txt"
+  ],
+  "contracts": [
+    "media-reference-v1",
+    "secure-storage-header-v1",
+    "source-evidence-v1"
+  ],
+  "interfaces": {
+    "register": [
+      "MediaAssets.register_user_file",
+      "MediaAssets.register_downloaded_attachment",
+      "MediaAssets.register_synthetic_file"
+    ],
+    "read": [
+      "MediaAssets.resolve",
+      "MediaAssets.descriptor",
+      "MediaAssets.manifest",
+      "MediaAssets.read_bytes",
+      "MediaAssets.source_info"
+    ],
+    "model_outbound": [
+      "MediaAssets.prepare_model_bundle",
+      "MediaAssets.authorize_model_send",
+      "MediaAssets.consume_model_bundle",
+      "MediaAssets.capability"
+    ],
+    "lifecycle": [
+      "MediaAssets.cancel_task",
+      "MediaAssets.cleanup",
+      "MediaAssets.close",
+      "MediaAssets.save_state",
+      "MediaAssets.restore_state"
+    ]
+  },
+  "security_summary": {
+    "type_decision": "content signature only; extension and declared MIME must agree, mismatch is rejected",
+    "forbidden_content": [
+      "executable headers (MZ, ELF, Mach-O)",
+      "HTML and script documents",
+      "SVG"
+    ],
+    "file_boundary": [
+      "regular file only; symlink and reparse point rejected",
+      "current-user read permission required on POSIX",
+      "single open with O_NOFOLLOW plus fstat identity and size re-check",
+      "bounded streaming read; growth during read is refused"
+    ],
+    "image_limits": {
+      "max_bytes_per_image": 8388608,
+      "max_images_per_request": 4,
+      "max_total_bytes_per_request": 16777216,
+      "max_pixels_per_image": 16000000,
+      "max_side_pixels": 20000,
+      "stricter_platform_contract_wins": true
+    },
+    "image_sanitisation": "orientation applied; always re-encoded; EXIF/GPS/XMP/ICC/comment and trailing container data dropped; derived bytes re-opened and checked; JPEG quality steps down to satisfy the byte limit",
+    "reference_binding": "account_scope + task_id + purpose + expires_at; derived sha256 re-verified on every read",
+    "external_transfer": "explicit flag at registration, MODEL_INPUT purpose, preview, request-bound single-use grant, single consume",
+    "capability_probe": "pure function; never resolves a reference",
+    "logging": "no logging of paths or bytes; error detail restricted to enum tokens; no print calls",
+    "network": "no network client imported anywhere in the package; asserted by AST scan and a socket guard",
+    "temporary_storage": "POSIX 0700 root, 0600 files, .part plus atomic rename, retention-aware exit cleanup",
+    "encrypted_state": "optional 2.2 secure store; file name only, account bound into authenticated data"
+  },
+  "checks": {
+    "module_tests_linux": {
+      "passed": 67,
+      "skipped": 0,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_media_assets.py"
+    },
+    "full_offline_suite_isolated_tree": {
+      "worktree": "detached checkout of d897ccc with node_modules linked",
+      "python_passed": 600,
+      "python_skipped": 5,
+      "python_failed": 0,
+      "node_passed": 54,
+      "node_failed": 0,
+      "check_files": 392,
+      "check_findings": 0,
+      "commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ]
+    },
+    "validators": {
+      "plan": "ok, 24 modules / 9 batches",
+      "contracts": "ok, 9 schema samples / 35 rejection samples / 8 extra samples",
+      "sources": "ok, 29 sources / 10 models / 8 tasks / 14 readiness rows / 7 fixtures"
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0,
+    "github_actions": {
+      "commit": "d897ccc7d1e6b4b75e344a28aaa6b4adcb392eef",
+      "ubuntu_24_04": "success: Python 600 passed / 5 skipped / 0 failed; Node 54 passed / 0 failed",
+      "windows_2025": "success: Python 595 passed / 10 skipped / 0 failed; Node 54 passed / 0 failed"
+    },
+    "module_tests_windows": {
+      "passed": 62,
+      "skipped": 5,
+      "failed": 0,
+      "evidence": "derived from the windows-2025 totals (595 passed / 10 skipped) minus the 533 passing and 5 skipping non-media tests; the module file was not run alone on Windows",
+      "skipped_reason": "five POSIX-only cases: FIFO, mode bits, /proc descriptor accounting, world-readable temp root, private derived file"
+    }
+  },
+  "acceptance": [
+    {
+      "case": "extensions cannot disguise content",
+      "tests": [
+        "test_png_renamed_as_jpeg_is_rejected",
+        "test_html_renamed_as_png_is_rejected",
+        "test_executable_renamed_as_pdf_is_rejected",
+        "test_svg_named_as_png_is_rejected",
+        "test_declared_mime_conflict_is_rejected",
+        "test_pdf_named_as_docx_is_rejected"
+      ]
+    },
+    {
+      "case": "derived images keep no location or device metadata",
+      "tests": [
+        "test_gps_metadata_is_removed_from_derived_png",
+        "test_device_metadata_and_comment_are_removed_from_derived_jpeg",
+        "test_orientation_is_applied_and_tag_removed"
+      ]
+    },
+    {
+      "case": "small file with huge declared dimensions fails inside the limit",
+      "tests": [
+        "test_small_file_with_huge_dimensions_fails_within_limits",
+        "test_pixel_limit_is_enforced_with_a_stricter_limit",
+        "test_oversized_file_is_rejected_before_decode"
+      ]
+    },
+    {
+      "case": "other account, task, purpose or expiry cannot resolve a reference",
+      "tests": [
+        "test_other_account_cannot_resolve",
+        "test_other_task_cannot_resolve",
+        "test_purpose_binding_is_enforced",
+        "test_expired_reference_is_rejected"
+      ]
+    },
+    {
+      "case": "cancel, timeout and disk-full produce no sendable half-product",
+      "tests": [
+        "test_disk_full_leaves_no_half_product",
+        "test_cancel_during_processing_leaves_nothing",
+        "test_processing_deadline_aborts_without_output"
+      ]
+    },
+    {
+      "case": "no network request during preparation",
+      "tests": [
+        "test_media_package_imports_no_network_client",
+        "test_preparation_makes_no_network_connection"
+      ]
+    },
+    {
+      "case": "errors, logs and manifests carry no encoding, path or credential",
+      "tests": [
+        "test_errors_and_logs_carry_no_path_or_image_bytes",
+        "test_descriptor_and_manifest_contain_no_local_path",
+        "test_source_info_exposes_provenance_without_a_path",
+        "test_every_media_error_uses_a_frozen_category_policy"
+      ]
+    },
+    {
+      "case": "temporary directory and descriptors are clean after the task",
+      "tests": [
+        "test_cleanup_keeps_active_references_and_removes_orphans",
+        "test_cleanup_never_deletes_foreign_files",
+        "test_close_removes_session_files",
+        "test_session_retention_is_removed_at_process_exit",
+        "test_explicit_retention_survives_a_restart",
+        "test_encrypted_state_survives_a_restart",
+        "test_reads_do_not_leak_file_descriptors"
+      ]
+    }
+  ],
+  "cross_module_requests": [
+    {
+      "owner": "6.1",
+      "request": "Register MEDIA_* codes in contracts/v0.2/error-classification.json before they cross the business facade; retryable and user_action already follow the frozen category policy."
+    },
+    {
+      "owner": "4.5",
+      "request": "Register images with purpose MODEL_INPUT through MediaAssets and send only through prepare_model_bundle -> authorize_model_send -> consume_model_bundle; no second local read path or arbitrary image URL."
+    },
+    {
+      "owner": "4.2",
+      "request": "Register course attachments with purpose COURSE_RESOURCE and use MediaAssets.source_info for provenance; do not re-implement file checks in the resource module."
+    },
+    {
+      "owner": "6.3",
+      "request": "Include Pillow==13.0.0 in the final lock and wheel resource manifest; add media_assets/README.md to package-data if the installed layout ships module docs."
+    },
+    {
+      "owner": "7.2",
+      "request": "Include tests/test_media_assets.py in cross-platform regression; five POSIX-only cases skip on Windows for platform reasons."
+    }
+  ],
+  "remaining_limits": [
+    "Derived images are always re-encoded: JPEG is lossy (quality 90, stepping down to 60 only to satisfy the 8 MiB limit), ICC is dropped, so the derived hash differs from the source hash by design.",
+    "OOXML files are recognised as ZIP containers only; internal document structure is not validated and content is never executed.",
+    "Animated WebP/APNG is refused instead of sending only the first frame.",
+    "Windows has no POSIX mode bits: derived-file privacy relies on the user-directory ACL; the module rejects reparse points and requires a writable root but does not repeat the 2.2 ACL checks.",
+    "Cleanup means closing handles and unlinking files; no physical erasure or secure memory wipe is claimed.",
+    "models.py and the generic download path are untouched by design; real model image transfer does not exist until 4.5/6.1 integration."
+  ],
+  "rollback": "Stop calling MediaAssets and remove the controlled temporary directory; original files were never modified and user download directories are untouched.",
+  "next_step": "Batch integration reconnects 3.1, 3.2 and 3.3 on one commit, then runs the batch-level check, the full offline suite and contract linkage before the gate moves."
+}
