@@ -6,9 +6,12 @@
   "status": "accepted",
   "baseline_commit": "4d60e8bbca91d771dc6c4db478de4863922a2b07",
   "integration_parent_commit": "d897ccc7d1e6b4b75e344a28aaa6b4adcb392eef",
-  "delivery_commit": "24ecdb73a3abf4897ba6389a175735e269300c18",
+  "delivery_commit": "4528b0a6ab6c5bae3fcb1847ba9486bf8a0d8d7b",
   "code_commits": [
-    "24ecdb7"
+    "24ecdb7",
+    "e81ceb9",
+    "19f68e9",
+    "4528b0a"
   ],
   "branch": "hermes/1-install-diagnostics",
   "version_pr": 2,

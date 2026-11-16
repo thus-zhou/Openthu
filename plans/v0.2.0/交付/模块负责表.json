@@ -209,7 +209,7 @@
       "integration_order": 5,
       "status": "accepted",
       "accepted_at": "2026-11-17",
-      "delivery_commit": "24ecdb73a3abf4897ba6389a175735e269300c18",
+      "delivery_commit": "4528b0a6ab6c5bae3fcb1847ba9486bf8a0d8d7b",
       "evidence": [
         "crypto-bridge.js and crypto_service.py: fixed four actions, request ids, 2 MiB request / 2 MiB + 64 KiB response limits, timeout and cancellation, minimal child environment; no request-selected program or path.",
         "SessionStore reads legacy campus-v2.dpapi, copies it to .before-v3, writes a verified campus-v3.secure envelope and retains the old ciphertext.",

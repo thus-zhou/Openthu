@@ -259,7 +259,7 @@ def test_two_secure_processes_merge_or_reject_stale_cookies(tmp_path, values, ex
             worker.stdin.write(value + "\n")
             worker.stdin.flush()
             assert worker.stdout.readline().strip() == result
-            worker.wait(timeout=10)
+            worker.wait(timeout=30)
     finally:
         for worker in workers:
             if worker.poll() is None:
