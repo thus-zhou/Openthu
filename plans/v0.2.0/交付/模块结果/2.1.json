@@ -128,7 +128,7 @@
       "command": "python -m pytest -o addopts='' -q tests/test_configuration.py tests/test_dev_diagnostics.py"
     },
     "full_offline_suite_linux": {
-      "python_passed": 504,
+      "python_passed": 505,
       "python_skipped": 5,
       "python_failed": 0,
       "node_passed": 54,

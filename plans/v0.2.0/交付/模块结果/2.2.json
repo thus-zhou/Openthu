@@ -153,13 +153,13 @@
       "validate_key_separation and record identity checks unchanged."
     ],
     "module_tests": {
-      "passed": 38,
+      "passed": 39,
       "skipped": 3,
       "failed": 0,
       "command": "python -m pytest -o addopts='' -q tests/test_secure_store.py"
     },
     "full_offline_suite_linux": {
-      "python_passed": 504,
+      "python_passed": 505,
       "python_skipped": 5,
       "python_failed": 0,
       "node_passed": 54,

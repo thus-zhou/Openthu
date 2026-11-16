@@ -647,6 +647,15 @@ def test_sddl_owner_parser_normalises_well_known_aliases_and_sids(monkeypatch):
     assert _owner_only(monkeypatch, sid_form, current=system) is True
 
 
+def test_sddl_owner_parser_handles_the_builtin_administrator_alias(monkeypatch):
+    # GitHub's Windows runner runs as the built-in administrator; SDDL then
+    # uses the LA alias instead of the concrete SID.  Both forms must work.
+    admin = "S-1-5-21-1111111111-2222222222-3333333333-500"
+    sddl = _synthetic_sddl(owner="LA", trustees=["LA", "SY", "BA"])
+    assert _owner_only(monkeypatch, sddl, current=admin) is True
+    assert _owner_only(monkeypatch, sddl, current=SYNTHETIC_SID) is False
+
+
 def test_sddl_owner_parser_rejects_other_trustees(monkeypatch):
     everyone = _synthetic_sddl(trustees=[SYNTHETIC_SID, "WD"])
     assert _owner_only(monkeypatch, everyone) is False
