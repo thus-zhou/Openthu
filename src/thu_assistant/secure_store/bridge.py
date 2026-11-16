@@ -132,6 +132,7 @@ def handle_request(
                 "automatic_replay_allowed": False,
                 "user_action": "CONTACT_SUPPORT",
             },
+            "detail": type(exc).__name__,
         }
 
 
@@ -143,7 +144,9 @@ def subprocess_environment(
     base: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Return the minimal environment a private Node helper may inherit."""
-    source = os.environ if base is None else base
+    source = dict(os.environ)
+    if base:
+        source.update(base)
     allowed = (
         "PATH",
         "PATHEXT",
@@ -155,6 +158,7 @@ def subprocess_environment(
         "PYTHONPATH",
         "PYTHONUTF8",
         "PYTHONNOUSERSITE",
+        "PSModulePath",
     )
     env = {name: source[name] for name in allowed if name in source}
     env.update(
