@@ -86,9 +86,9 @@
     "github_actions": {
       "ubuntu-24.04": "success",
       "windows-2025": "success",
-      "head_sha": "4281df0",
-      "runs": [43942584816],
-      "note": "Final 3.2 audit-fix head; both jobs in one offline-checks run succeeded."
+      "head_sha": "456e7a5",
+      "runs": [43945010355],
+      "note": "Final 3.2 audit-fix head including canonical enum parity; both jobs in one offline-checks run succeeded."
     },
     "joint_batch_tree": {
       "head_sha": "dc5edea",
