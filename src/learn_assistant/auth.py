@@ -128,8 +128,23 @@ _SECURE_PROVIDERS: dict[tuple[str, str | None], object] = {}
 _SECURE_PROVIDER_FAILURE: str | None = None
 
 
+def _default_secure_key_path() -> str | None:
+    """Return the shared default key file, if the installation created one."""
+    try:
+        from thu_assistant import paths
+
+        candidate = paths.default_paths().config_file.parent / "keys" / "master.key"
+        return str(candidate) if candidate.is_file() else None
+    except Exception:
+        return None
+
+
 def _secure_key_path() -> str | None:
-    return os.environ.get("OPENTHU_SECURE_KEY_FILE") or os.environ.get("THU_SECURE_KEY_FILE")
+    return (
+        os.environ.get("OPENTHU_SECURE_KEY_FILE")
+        or os.environ.get("THU_SECURE_KEY_FILE")
+        or _default_secure_key_path()
+    )
 
 
 def _secure_provider():
@@ -193,17 +208,33 @@ def _secure_protect(
 
 
 def _secure_unprotect(raw: bytes) -> bytes | None:
+    """Read an ACTION envelope only; never decrypt an arbitrary secure record."""
     provider = _secure_provider()
     if provider is None or not raw.startswith(SECURE_MAGIC):
         return None
     try:
-        return provider.unseal(raw, None).plaintext
+        envelope = parse_envelope(raw)
+        if (
+            envelope.context.purpose != "ACTION"
+            or envelope.context.account_domain != "CAMPUS"
+            or envelope.context.service_domain != "LOCAL"
+        ):
+            return None
+        expected = StorageContext(
+            purpose="ACTION",
+            account_domain="CAMPUS",
+            service_domain="LOCAL",
+            account_ref=envelope.context.account_ref,
+            revision=envelope.context.revision,
+            record_id=envelope.context.record_id,
+        )
+        return provider.unseal(raw, expected).plaintext
     except (SecureStoreError, ValueError, TypeError):
         return None
 
 
-def _secure_unprotect_session(raw: bytes) -> bytes | None:
-    """Read only the Learn session scope, not any envelope under this key."""
+def _secure_unprotect_session(raw: bytes, account: str | None = None) -> bytes | None:
+    """Read only the Learn session scope for the expected account."""
     provider = _secure_provider()
     if provider is None or not raw.startswith(SECURE_MAGIC):
         return None
@@ -216,7 +247,20 @@ def _secure_unprotect_session(raw: bytes) -> bytes | None:
             or envelope.context.record_id != "learn-session"
         ):
             return None
-        return provider.unseal(raw, envelope.context).plaintext
+        expected = StorageContext(
+            purpose="SESSION",
+            account_domain="CAMPUS",
+            service_domain="LEARN",
+            account_ref=provider.account_reference(
+                account or "",
+                purpose="SESSION",
+                account_domain="CAMPUS",
+                service_domain="LEARN",
+            ),
+            revision=envelope.context.revision,
+            record_id="learn-session",
+        )
+        return provider.unseal(raw, expected).plaintext
     except (SecureStoreError, ValueError, TypeError):
         return None
 
@@ -293,7 +337,12 @@ class SecureSessionStore:
 
     MAGIC = b"LA-DPAPI-1\0"
 
-    def __init__(self, path: str | os.PathLike[str] | None = None) -> None:
+    def __init__(
+        self,
+        path: str | os.PathLike[str] | None = None,
+        *,
+        account: str | None = None,
+    ) -> None:
         legacy = Path(path).expanduser() if path else default_session_dir() / "session.dpapi"
         self.legacy_path = legacy
         self.secure_path = (
@@ -301,6 +350,7 @@ class SecureSessionStore:
             if legacy.name == "session.dpapi"
             else legacy.with_name(legacy.name + ".secure")
         )
+        self.account = account or os.environ.get("THU_LEARN_ACCOUNT") or os.environ.get("OPENTHU_LEARN_ACCOUNT")
         self.last_format: str | None = None
         self.last_error: str | None = None
 
@@ -332,6 +382,39 @@ class SecureSessionStore:
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _write_verified(
+        self,
+        path: Path,
+        data: bytes,
+        expected: bytes,
+        verify,
+        backup_suffix: str,
+    ) -> bool:
+        """Write only after the exact bytes can be decrypted to the payload."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
+        try:
+            with open(temporary, "xb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            if os.name != "nt":
+                os.chmod(temporary, 0o600)
+            if verify(temporary.read_bytes()) != expected:
+                self.last_error = "STATE_ENCRYPT_FAILED"
+                return False
+            if path.exists():
+                backup = path.with_name(path.name + backup_suffix)
+                if not backup.exists():
+                    backup.write_bytes(path.read_bytes())
+            os.replace(temporary, path)
+            return True
+        except OSError:
+            self.last_error = "STATE_WRITE_FAILED"
+            return False
         finally:
             temporary.unlink(missing_ok=True)
 
@@ -372,29 +455,33 @@ class SecureSessionStore:
 
     def save(self, session: BrowserSession) -> bool:
         raw = self._payload(session)
-        if self.secure_path.exists() and not _secure_key_path():
+        secure_key = _secure_key_path()
+        if secure_key and not self.account:
+            self.last_error = "LEARN_ACCOUNT_REQUIRED"
+            return False
+        if self.secure_path.exists() and not secure_key:
             self.last_error = "SECURE_KEY_NOT_CONFIGURED"
             return False
         protected = _secure_protect(
-            raw, purpose="SESSION", service_domain="LEARN", record_id="learn-session"
+            raw,
+            purpose="SESSION",
+            service_domain="LEARN",
+            account=self.account,
+            record_id="learn-session",
         )
         if protected is not None:
-            try:
-                if self.secure_path.exists():
-                    backup = self.secure_path.with_name(self.secure_path.name + ".previous")
-                    if not backup.exists():
-                        backup.write_bytes(self.secure_path.read_bytes())
-                self._write(self.secure_path, protected)
-            except OSError:
-                self.last_error = "STATE_WRITE_FAILED"
-                return False
-            if _secure_unprotect_session(protected) != raw:
-                self.last_error = "STATE_ENCRYPT_FAILED"
+            if not self._write_verified(
+                self.secure_path,
+                protected,
+                raw,
+                lambda data: _secure_unprotect_session(data, account=self.account),
+                ".previous",
+            ):
                 return False
             self.last_format = "secure-store"
             self.last_error = None
             return True
-        if _secure_key_path():
+        if secure_key:
             self.last_error = _SECURE_PROVIDER_FAILURE or "SECURE_KEY_NOT_CONFIGURED"
             return False
         if os.name != "nt":
@@ -404,14 +491,13 @@ class SecureSessionStore:
         if legacy is None:
             self.last_error = "STATE_ENCRYPT_FAILED"
             return False
-        try:
-            if self.legacy_path.exists():
-                backup = self.legacy_path.with_name(self.legacy_path.name + ".before-secure")
-                if not backup.exists():
-                    backup.write_bytes(self.legacy_path.read_bytes())
-            self._write(self.legacy_path, self.MAGIC + legacy)
-        except OSError:
-            self.last_error = "STATE_WRITE_FAILED"
+        if not self._write_verified(
+            self.legacy_path,
+            self.MAGIC + legacy,
+            raw,
+            lambda data: _dpapi_unprotect(data[len(self.MAGIC) :]),
+            ".before-secure",
+        ):
             return False
         self.last_format = "legacy-dpapi"
         self.last_error = None
@@ -422,12 +508,15 @@ class SecureSessionStore:
             if not _secure_key_path():
                 self.last_error = "SECURE_KEY_NOT_CONFIGURED"
                 return None
+            if not self.account:
+                self.last_error = "LEARN_ACCOUNT_REQUIRED"
+                return None
             try:
                 raw = self.secure_path.read_bytes()
             except OSError:
                 self.last_error = "STATE_READ_FAILED"
                 return None
-            plain = _secure_unprotect_session(raw)
+            plain = _secure_unprotect_session(raw, account=self.account)
             if plain is None:
                 self.last_error = _SECURE_PROVIDER_FAILURE or "STATE_DECRYPT_FAILED"
                 return None

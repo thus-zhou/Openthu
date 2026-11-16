@@ -155,3 +155,18 @@ test('crypto child configuration never inherits account or path material from a 
   assert.equal(looksSecureEnvelope(Buffer.from('THU-SECURE-1\0rest')), true);
   assert.equal(looksSecureEnvelope(Buffer.from('other')), false);
 });
+
+
+test('browser sync ignores school cookies outside the current service scope', () => {
+  const jar = new CampusCookies();
+  const boot = {version: 2, revision: 0, account: identity({username: 'synthetic'}), serviceOrigin: origin,
+    url: origin + '/', cookies: [], cookieRecords: [], appOrigins: []};
+  const apps = {};
+  const result = browserSync(jar, {cookies: [
+    {name: 'sid', value: 'in-scope', domain: '.learn.tsinghua.edu.cn', path: '/'},
+    {name: 'other', value: 'other-service', domain: 'library.tsinghua.edu.cn', path: '/'},
+  ], origins: []}, boot, boot.account, apps);
+  assert.equal(result.cookies.length, 1);
+  assert.equal(result.cookies[0].name, 'sid');
+  assert.equal(jar.valueFor(origin + '/', 'sid'), 'in-scope');
+});

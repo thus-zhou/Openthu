@@ -249,14 +249,28 @@ class BrowserManager:
         except Exception:s['persistence_error']='BROWSER_STATE_SYNC_FAILED'
         return False
 
+    @staticmethod
+    def _account_changed(error):
+        code = getattr(error, 'code', '') or 'STATE_ACCOUNT_MISMATCH'
+        return code
+
+    def _require_account(self, session_id, session):
+        if not session.get('account_id'):
+            return
+        try:
+            current = gateway('action_identity').get('account_id')
+        except CampusError as error:
+            # Identity is not provable; never treat a failed identity query as
+            # evidence that the old account is still current.
+            self.close(session_id)
+            raise CampusError(self._account_changed(error)) from None
+        if current and current != session['account_id']:
+            self.close(session_id)
+            raise CampusError('STATE_ACCOUNT_MISMATCH')
+
     def snapshot(self,session_id,offset=0,limit=24000):
         s = self._session(session_id)
-        if s.get('account_id'):
-            try:current=gateway('action_identity').get('account_id')
-            except CampusError:current=s.get('account_id')
-            if current and current!=s['account_id']:
-                self.close(session_id)
-                raise CampusError('STATE_ACCOUNT_MISMATCH')
+        self._require_account(session_id, s)
         s['secrets'] += [c['value'] for c in s['context'].cookies() if len(c.get('value',''))>=6]
         for origin in s['context'].storage_state().get('origins',[]):
             s['secrets'] += [v['value'] for v in origin.get('localStorage',[]) if SECRET.search(v.get('name','')) and len(v.get('value',''))>=6]
@@ -300,6 +314,9 @@ class BrowserManager:
             except Exception:
                 continue
         persisted=self._persist_context(s)
+        if not persisted and s.get('persistence_error') in ('STATE_ACCOUNT_MISMATCH','STATE_DECRYPT_FAILED','SECURE_KEY_NOT_CONFIGURED'):
+            self.close(session_id)
+            raise CampusError(s['persistence_error'])
         current_url=s['page'].url
         text=self._redact('\n'.join(texts),s)
         offset=max(0,int(offset));limit=min(100000,max(1,int(limit)))

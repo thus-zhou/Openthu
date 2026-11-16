@@ -111,3 +111,16 @@ def test_browser_persistence_reports_errors_and_rotates_sync_token(monkeypatch):
     monkeypatch.setattr(module,'gateway',encrypt_failure)
     assert not BrowserManager._persist_context(session)
     assert session['persistence_error']=='STATE_ENCRYPT_FAILED'
+
+
+def test_browser_snapshot_rejects_unprovable_identity(monkeypatch):
+    import thu_assistant.browser as module
+    manager = BrowserManager.__new__(BrowserManager)
+    closed = []
+    manager.close = lambda sid: closed.append(sid)
+    def failed(*args, **kwargs):
+        raise CampusError('STATE_DECRYPT_FAILED')
+    monkeypatch.setattr(module, 'gateway', failed)
+    with pytest.raises(CampusError, match='STATE_DECRYPT_FAILED'):
+        manager._require_account('session-a', {'account_id': 'account-a'})
+    assert closed == ['session-a']

@@ -19,7 +19,7 @@ const { atomicWrite } = up('./platform/file-store');
 const {withPidLock,AuthGate,SerialQueue,errorRecord} = require('./scheduler');
 const legacyStateDir = process.env.LOCALAPPDATA
   ? path.join(process.env.LOCALAPPDATA, 'TsinghuaAssistant')
-  : path.join(os.homedir(), '.local', 'state', 'openthu');
+  : path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'openthu');
 const stateDir = process.env.OPENTHU_STATE_DIR || process.env.THU_ASSISTANT_STATE_DIR || legacyStateDir;
 const cryptoConfig = resolveCryptoConfig(process.env, stateDir);
 const secureCrypto = cryptoConfig.enabled ? createSecureCrypto(cryptoConfig) : null;
@@ -51,8 +51,10 @@ async function sealBrowser(jar,account,serviceOrigin,url,apps,revision){
 }
 function importLearning(jar,token){
   const cookies=jar.browserCookies(['https://learn.tsinghua.edu.cn/']);
+  const env={...process.env};
+  if(activeSession?.store?.account)env.THU_LEARN_ACCOUNT=activeSession.store.account;
   try{return JSON.parse(execFileSync(process.env.THU_PYTHON||'python',[path.join(path.dirname(process.env.THU_ACCESS_HELPER||path.join(__dirname, '../../runtime/windows/access.js')),'import-session.py')],
-    {input:JSON.stringify({cookies,csrf:token}),encoding:'utf8',windowsHide:true,stdio:['pipe','pipe','pipe'],timeout:45000}));}
+    {input:JSON.stringify({cookies,csrf:token}),encoding:'utf8',windowsHide:true,stdio:['pipe','pipe','pipe'],timeout:45000,env}));}
   catch{throw fail('LEARN_PLUGIN_IMPORT_FAILED');}
 }
 function learningSessionDir(){

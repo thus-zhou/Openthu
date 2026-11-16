@@ -4,6 +4,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
 const { execFileSync } = require('node:child_process');
 const deployed = process.env.THU_MADMODEL_DIR || path.resolve(__dirname, '../../vendor/madmodel-proxy');
@@ -40,15 +41,34 @@ function dpapi(mode, input) {
   }).toString().trim(), 'base64');
 }
 
+function accountIdentity() {
+  try {
+    const account = credentials.readAccount();
+    if (!account?.username) return '';
+    return crypto.createHash('sha256').update(String(account.username)).digest('hex');
+  } catch {
+    return '';
+  }
+}
+
+function sessionEnvironment() {
+  const env = {...process.env};
+  const identity = accountIdentity();
+  if (identity) env.THU_LEARN_ACCOUNT = identity;
+  else delete env.THU_LEARN_ACCOUNT;
+  return env;
+}
+
 function sessionHelper(mode, payload) {
   try {
     const output = execFileSync(process.env.THU_PYTHON || 'python', [path.join(__dirname, 'session-store.py'), mode], {
       input: payload === undefined ? '' : JSON.stringify(payload), encoding: 'utf8', windowsHide: true,
-      stdio: ['pipe', 'pipe', 'pipe'], timeout: 20000,
+      stdio: ['pipe', 'pipe', 'pipe'], timeout: 20000, env: sessionEnvironment(),
     });
-    return JSON.parse(output);
+    const parsed = JSON.parse(output);
+    return parsed && typeof parsed === 'object' ? parsed : {ok: false, errorCode: 'HELPER_INVALID_RESPONSE'};
   } catch {
-    return null;
+    return {ok: false, errorCode: 'HELPER_UNAVAILABLE'};
   }
 }
 
@@ -70,19 +90,21 @@ function saveSession(jar) {
 // The file is base64-wrapped ciphertext; no cookie/token is ever written raw.
 function restoreSession() {
   const stored = sessionHelper('read');
+  const secureKey = Boolean(process.env.THU_SECURE_KEY_FILE || process.env.OPENTHU_SECURE_KEY_FILE);
   if (stored?.ok && Array.isArray(stored.cookies)) {
     const jar = new auth.CookieJar();
     for (const cookie of stored.cookies) {
       const host = String(cookie.domain || '').replace(/^\./, '');
       const origin = 'https://' + host;
       if (!origins.has(origin) || typeof cookie.name !== 'string' || typeof cookie.value !== 'string') continue;
+      if (typeof cookie.expires === 'number' && cookie.expires > 0 && cookie.expires * 1000 <= Date.now()) continue;
       (jar.cookies[origin] ||= []).push({name: cookie.name, value: cookie.value, path: cookie.path || '/'});
     }
     if (Object.keys(jar.cookies).length) return jar;
+    if (secureKey) throw failure('STATE_DECRYPT_FAILED');
   }
-  if ((process.env.THU_SECURE_KEY_FILE || process.env.OPENTHU_SECURE_KEY_FILE) &&
-      stored && !stored.ok && stored.errorCode !== 'NO_SESSION') {
-    throw failure(stored.errorCode);
+  if (secureKey && !(stored && stored.ok === false && stored.errorCode === 'NO_SESSION')) {
+    throw failure(stored?.errorCode || 'SECURE_KEY_UNAVAILABLE');
   }
   try {
     const encoded = fs.readFileSync(sessionFile, 'utf8');

@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -226,6 +227,7 @@ def test_learn_session_and_action_journal_use_the_secure_store_and_fail_closed(t
     key = make_key(tmp_path)
     learn = tmp_path / "learn"
     monkeypatch.setenv("THU_SECURE_KEY_FILE", str(key))
+    monkeypatch.setenv("THU_LEARN_ACCOUNT", "synthetic-account")
     monkeypatch.setenv("OPENTHU_LEARN_SESSION_DIR", str(learn))
     from learn_assistant.auth import SecureSessionStore, _dpapi_protect, _dpapi_unprotect
     from learn_assistant.models import BrowserCookie, BrowserSession
@@ -291,3 +293,157 @@ def test_two_secure_processes_merge_or_reject_stale_cookies(tmp_path, values, ex
     state = unseal_session(secure, key, header["revision"], header["account_ref"])
     assert len(state["cookies"]) == (2 if expected == "saved" else 1)
     assert state["cookies"][0]["value"] == "1"
+
+
+def _learn_session():
+    from learn_assistant.models import BrowserCookie, BrowserSession
+
+    return BrowserSession(
+        cookies=(BrowserCookie(name="sid", value="synthetic", domain=".learn.tsinghua.edu.cn",
+                               path="/", secure=True, expires=None),),
+        user_agent="synthetic", csrf_token="csrf", captured_at="now", source="synthetic",
+    )
+
+
+def test_secure_learn_session_is_bound_to_account(tmp_path, monkeypatch):
+    key = make_key(tmp_path)
+    learn = tmp_path / "learn"
+    monkeypatch.setenv("THU_SECURE_KEY_FILE", str(key))
+    monkeypatch.setenv("OPENTHU_LEARN_SESSION_DIR", str(learn))
+    from learn_assistant.auth import SecureSessionStore
+
+    first = SecureSessionStore(account="account-a")
+    assert first.save(_learn_session()) is True
+    assert first.last_format == "secure-store"
+    from thu_assistant.secure_store.envelope import inspect_envelope
+
+    header = inspect_envelope((learn / "session.secure").read_bytes())
+    assert header["account_ref"] != "none"
+    other = SecureSessionStore(account="account-b")
+    assert other.load() is None
+    assert other.last_error in {"STATE_DECRYPT_FAILED", "SECURE_ACCOUNT_MISMATCH"}
+
+
+def test_learn_session_store_requires_account_when_key_is_configured(tmp_path, monkeypatch):
+    key = make_key(tmp_path)
+    learn = tmp_path / "learn"
+    monkeypatch.setenv("THU_SECURE_KEY_FILE", str(key))
+    monkeypatch.setenv("OPENTHU_LEARN_SESSION_DIR", str(learn))
+    monkeypatch.delenv("THU_LEARN_ACCOUNT", raising=False)
+    monkeypatch.delenv("OPENTHU_LEARN_ACCOUNT", raising=False)
+    from learn_assistant.auth import SecureSessionStore
+
+    store = SecureSessionStore()
+    assert store.save(_learn_session()) is False
+    assert store.last_error == "LEARN_ACCOUNT_REQUIRED"
+    assert not (learn / "session.secure").exists()
+
+
+def test_learn_session_store_discovers_default_key(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    config = home / ".config"
+    key = config / "openthu" / "keys" / "master.key"
+    key.parent.mkdir(parents=True, mode=0o700)
+    key.parent.chmod(0o700)
+    create_key_file(key)
+    learn = tmp_path / "learn"
+    for name in ("THU_SECURE_KEY_FILE", "OPENTHU_SECURE_KEY_FILE", "THU_SECURE_BACKEND", "OPENTHU_SECURE_BACKEND"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config))
+    monkeypatch.setenv("XDG_STATE_HOME", str(home / "state"))
+    monkeypatch.setenv("OPENTHU_LEARN_SESSION_DIR", str(learn))
+    monkeypatch.setenv("THU_LEARN_ACCOUNT", "synthetic-account")
+    from learn_assistant.auth import SecureSessionStore
+
+    store = SecureSessionStore()
+    assert store.save(_learn_session()) is True
+    assert store.last_format == "secure-store"
+    assert (learn / "session.secure").is_file()
+
+
+def test_secure_unprotect_rejects_non_action_envelopes(tmp_path, monkeypatch):
+    key = make_key(tmp_path)
+    monkeypatch.setenv("THU_SECURE_KEY_FILE", str(key))
+    from learn_assistant.auth import _secure_unprotect
+    from thu_assistant.secure_store.envelope import StorageContext
+
+    provider = load_provider(str(key), None)
+    context = StorageContext(
+        purpose="SESSION", account_domain="CAMPUS", service_domain="LEARN",
+        account_ref=provider.account_reference("account-a", purpose="SESSION",
+                                               account_domain="CAMPUS", service_domain="LEARN"),
+        revision=0, record_id="learn-session",
+    )
+    envelope = provider.seal(b"synthetic-session", context)
+    assert _secure_unprotect(envelope) is None
+
+
+def test_learn_session_verification_failure_keeps_previous_file(tmp_path, monkeypatch):
+    key = make_key(tmp_path)
+    learn = tmp_path / "learn"
+    monkeypatch.setenv("THU_SECURE_KEY_FILE", str(key))
+    monkeypatch.setenv("OPENTHU_LEARN_SESSION_DIR", str(learn))
+    from learn_assistant import auth
+
+    store = auth.SecureSessionStore(account="account-a")
+    assert store.save(_learn_session()) is True
+    original = (learn / "session.secure").read_bytes()
+    monkeypatch.setattr(auth, "_secure_unprotect_session", lambda raw, account=None: b"wrong")
+    assert store.save(_learn_session()) is False
+    assert store.last_error == "STATE_ENCRYPT_FAILED"
+    assert (learn / "session.secure").read_bytes() == original
+
+
+def test_windows_access_helper_fails_closed_when_python_bridge_is_unavailable(tmp_path):
+    if shutil.which("node") is None:
+        pytest.skip("node is unavailable")
+    state = tmp_path / "access"
+    state.mkdir()
+    (state / "session.dpapi").write_text("AAAA")
+    env = {
+        **os.environ,
+        "THU_ACCESS_STATE_DIR": str(state),
+        "THU_PYTHON": str(tmp_path / "missing-python"),
+        "THU_SECURE_KEY_FILE": str(tmp_path / "key"),
+    }
+    script = (
+        "const a=require('./runtime/windows/access.js');"
+        "try{a.restoreSession();process.stdout.write('NO_ERROR')}"
+        "catch(e){process.stdout.write(String(e.code||e.message))}"
+    )
+    done = subprocess.run([NODE, "-e", script], cwd=ROOT, env=env,
+                          capture_output=True, text=True, timeout=30)
+    assert "NO_ERROR" not in done.stdout
+    assert "HELPER_UNAVAILABLE" in done.stdout or "STATE_DECRYPT_FAILED" in done.stdout
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows DPAPI session migration")
+def test_windows_dpapi_legacy_session_is_read_by_real_helper(tmp_path):
+    key = make_key(tmp_path)
+    env = gateway_env(tmp_path, key=key)
+    env.pop("THU_ACCESS_HELPER", None)
+    env["THU_ACCESS_STATE_DIR"] = str(tmp_path / "access")
+    campus = Path(env["THU_ASSISTANT_STATE_DIR"])
+    from learn_assistant.auth import _dpapi_protect_legacy
+
+    legacy_state = {
+        "version": 2, "account": ACCOUNT_HASH, "revision": 4, "cookies": [], "apps": {},
+    }
+    protected = _dpapi_protect_legacy(json.dumps(legacy_state).encode())
+    assert protected
+    old = base64.b64encode(protected).decode()
+    (campus / "campus-v2.dpapi").write_text(old)
+    client = GatewayClient([NODE, str(GATEWAY), "--stdio"], env)
+    try:
+        result = client.call("read", url="https://info.tsinghua.edu.cn/", via_webvpn=True)
+        assert result["status"] == "PAGE_READ_VERIFIED"
+    finally:
+        client.close()
+    assert (campus / "campus-v2.dpapi").read_text() == old
+    assert (campus / "campus-v2.dpapi.before-v3").read_text() == old
+    secure = campus / "campus-v3.secure"
+    header = inspect_envelope(secure.read_bytes())
+    state = unseal_session(secure, key, header["revision"], header["account_ref"])
+    assert state["version"] == 3
+    assert state["migration"]["source"] == "LEGACY_DPAPI"

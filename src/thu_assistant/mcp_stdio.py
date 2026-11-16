@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import os
 from datetime import datetime, timezone
 import sys
 import queue
@@ -93,7 +94,16 @@ class CampusAssistant:
         self.todos=todos.TodoEngine(self)
 
     def _learning(self,force=False):
-        if self.verify_learning_state:self.bridge('ensure_learn_session')
+        if self.verify_learning_state:
+            try:
+                identity = self.bridge('action_identity').get('account_id')
+            except CampusError:
+                identity = None
+            if identity:
+                os.environ['THU_LEARN_ACCOUNT'] = str(identity)
+            else:
+                os.environ.pop('THU_LEARN_ACCOUNT', None)
+            self.bridge('ensure_learn_session')
         store=SecureSessionStore()
         try:
             st=store.path.stat();signature=(st.st_mtime_ns,st.st_size)
@@ -121,9 +131,9 @@ class CampusAssistant:
                 result['service']=self.bridge('read',**catalog.request_arguments(service_id=args['service_id']))
             return result
         if name=='get_login_status':
-            result=self._learning().get_login_status();authenticated=result['status']['authenticated']
+            result=self._learning().get_login_status();status=result.get('status') or {};authenticated=status.get('authenticated');error_code=status.get('error_code')
             return {**metadata('learn','status','https://learn.tsinghua.edu.cn/','AUTHENTICATED_PAGE' if authenticated else 'NONE',complete=True),
-                **result,'service_state':'AUTHENTICATED' if authenticated else 'AUTH_REQUIRED'}
+                **result,'service_state':'AUTHENTICATED' if authenticated else ('AUTH_UNKNOWN' if error_code else 'AUTH_REQUIRED')}
         if name=='describe_service':return describe(**args)
         if name=='query_service':return self.queries.query(**args)
         if name=='get_todos':return self.todos.get(**args)

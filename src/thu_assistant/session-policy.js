@@ -1,6 +1,6 @@
 'use strict';
 const {equal}=require('./session-store');
-const {key,allowedUrls}=require('./cookies');
+const {key,allowedUrls,inScope}=require('./cookies');
 const fail=code=>Object.assign(new Error(code),{code});
 function loginRequired(response){
   const body=String(response.body||''),url=new URL(response.finalUrl);
@@ -27,8 +27,13 @@ function browserSync(jar,data,bootstrap,account,apps){
   if(bootstrap.account!==account)throw fail('STATE_ACCOUNT_MISMATCH');
   if(!Array.isArray(data.cookies)||data.cookies.length>500||!Array.isArray(bootstrap.cookieRecords)||!Array.isArray(bootstrap.cookies)||!Array.isArray(data.origins||[]))throw fail('INVALID_BROWSER_STATE');
   const urls=allowedUrls(bootstrap.serviceOrigin,bootstrap.url);
+  const cookies=data.cookies.filter(c=>{
+    const domain=String(c?.domain||'').replace(/^\./,'');
+    const hostOnly=!String(c?.domain||'').startsWith('.');
+    return domain && inScope({domain,path:c?.path||'/',hostOnly},urls);
+  });
   const old=new Map(bootstrap.cookies.map(c=>[key({...c,domain:c.domain.replace(/^\./,'')}),c]));
-  const current=new Map(data.cookies.map(c=>[key({...c,domain:String(c.domain).replace(/^\./,'')}),c]));
+  const current=new Map(cookies.map(c=>[key({...c,domain:String(c.domain).replace(/^\./,'')}),c]));
   const baseline=new Map(bootstrap.cookieRecords.map(c=>[key(c),c]));
   const latest=new Map(jar.export().map(c=>[key(c),c]));
   for(const k of new Set([...old.keys(),...current.keys()])){
@@ -56,6 +61,6 @@ function browserSync(jar,data,bootstrap,account,apps){
     const comparable=c=>c?{...c,sameSite:c.sameSite||'Lax'}:c;
     return equal(comparable(old.get(k)),comparable(after))?baseline.get(k):saved.get(k);
   }).filter(Boolean);
-  return {...bootstrap,cookies:data.cookies,cookieRecords:records,origins,appOrigins:origins};
+  return {...bootstrap,cookies,cookieRecords:records,origins,appOrigins:origins};
 }
 module.exports={authenticationState,shouldRetryModel,browserSync,loginRequired};
