@@ -141,6 +141,17 @@ except Exception as exc:
     print("manual_load_error", type(exc).__name__, getattr(exc, "detail", ""))
 
 for index in range(12):
+    direct_secret = os.urandom(32)
+    direct_protected = keys._dpapi("protect", direct_secret)
+    direct_restored = keys._dpapi("unprotect", direct_protected or b"")
+    print(
+        "direct",
+        index,
+        len(direct_protected or b""),
+        direct_restored == direct_secret,
+    )
+
+for index in range(12):
     loop_key = root / "keys" / f"loop-{index}.key"
     try:
         keys.create_key_file(loop_key, "windows-dpapi")
