@@ -5,11 +5,13 @@
   "owner": "Hermes",
   "status": "accepted",
   "baseline_commit": "4d60e8b",
-  "delivery_commit": "1c54b0c",
+  "delivery_commit": "036a00d",
   "code_commits": [
     "d897ccc",
     "1d681d0",
-    "1c54b0c"
+    "1c54b0c",
+    "90307f9",
+    "036a00d"
   ],
   "branch": "hermes/1-install-diagnostics",
   "version_pr": 2,
@@ -45,6 +47,7 @@
     ],
     "lifecycle": [
       "MediaAssets.pending_cleanup",
+      "MediaAssets.state_record_id",
       "MediaAssets.cancel_task",
       "MediaAssets.cleanup",
       "MediaAssets.close",
@@ -84,24 +87,10 @@
   },
   "checks": {
     "module_tests_linux": {
-      "passed": 69,
+      "passed": 84,
       "skipped": 0,
       "failed": 0,
       "command": "python -m pytest -o addopts='' -q tests/test_media_assets.py"
-    },
-    "full_offline_suite_isolated_tree": {
-      "worktree": "detached checkout of d897ccc with node_modules linked (module tree before 3.1 was committed)",
-      "python_passed": 600,
-      "python_skipped": 5,
-      "python_failed": 0,
-      "node_passed": 54,
-      "node_failed": 0,
-      "check_files": 392,
-      "check_findings": 0,
-      "commands": [
-        "python scripts/dev.py check",
-        "python scripts/dev.py test"
-      ]
     },
     "validators": {
       "plan": "ok, 24 modules / 9 batches",
@@ -125,10 +114,14 @@
         "ubuntu_24_04": "success",
         "windows_2025": "success",
         "note": "both platforms completed with no failing job at the final code commit; local joint-tree run: Python 610 passed / 5 skipped, Node 64 passed, check 402 files / 0 findings"
+      },
+      "036a00d": {
+        "ubuntu_24_04": "pending at handoff",
+        "windows_2025": "pending at handoff"
       }
     },
     "module_tests_windows": {
-      "passed": 64,
+      "passed": 79,
       "skipped": 5,
       "failed": 0,
       "evidence": "derived from the windows-2025 totals minus the non-media tests; the module file was not run alone on Windows",
@@ -145,7 +138,39 @@
       "check_findings": 0,
       "note": "observed for the batch integrator; batch acceptance and the joint CI record remain the integration step"
     },
-    "acceptance_listing": "pending_cleanup() lists every reference that still holds derived bytes with retention, expiry and presence, without a path"
+    "acceptance_listing": "pending_cleanup() lists every reference that still holds derived bytes with retention, expiry and presence, without a path",
+    "final_tree": {
+      "worktree": "detached checkout of 036a00d with node_modules linked",
+      "python_passed": 637,
+      "python_skipped": 6,
+      "python_failed": 0,
+      "node_passed": 64,
+      "node_failed": 0,
+      "check_files": 402,
+      "check_findings": 0,
+      "commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ]
+    },
+    "coverage": {
+      "total": "79% branch",
+      "media_modules": {
+        "api": "85%",
+        "registry": "84%",
+        "limits": "85%",
+        "errors": "100%"
+      },
+      "command": "coverage run --branch --source=thu_assistant.media_assets -m pytest tests/test_media_assets.py"
+    },
+    "audit_remediation": {
+      "report": ".local/audits/3.3-audit-20261117.md",
+      "remediation": ".local/audits/3.3-audit-remediation-20261117.md",
+      "p1_fixed": 2,
+      "p2_fixed": 8,
+      "p3_fixed": 9,
+      "regression_tests_added": 15
+    }
   },
   "acceptance": [
     {
@@ -181,7 +206,8 @@
         "test_other_account_cannot_resolve",
         "test_other_task_cannot_resolve",
         "test_purpose_binding_is_enforced",
-        "test_expired_reference_is_rejected"
+        "test_expired_reference_is_rejected",
+        "test_scope_none_is_not_a_media_account"
       ]
     },
     {
@@ -217,7 +243,10 @@
         "test_session_retention_is_removed_at_process_exit",
         "test_explicit_retention_survives_a_restart",
         "test_encrypted_state_survives_a_restart",
-        "test_reads_do_not_leak_file_descriptors"
+        "test_reads_do_not_leak_file_descriptors",
+        "test_second_instance_cannot_own_the_same_temp_root",
+        "test_cancel_after_the_derived_write_leaves_no_file",
+        "test_restore_rejects_path_traversal_and_counts_skips"
       ]
     }
   ],
@@ -249,9 +278,13 @@
   ],
   "blockers": [],
   "remaining_limits": [
-    "Derived images are always re-encoded: JPEG is lossy (quality 90, stepping down to 60 only to satisfy the 8 MiB limit), ICC is dropped, so the derived hash differs from the source hash by design.",
+    "Derived images are always re-encoded: JPEG is lossy (quality 90, stepping down to 60 to satisfy the 8 MiB limit) and PNG retries at compress level 9; ICC is dropped, so the derived hash differs from the source hash by design.",
     "OOXML files are recognised as ZIP containers only; internal document structure is not validated and content is never executed.",
     "Animated WebP/APNG is refused instead of sending only the first frame.",
+    "One controlled root allows one live instance ('.media-lock'); parallel processes must use separate roots or fetch bytes through the business facade.",
+    "State records rewrite the whole per-account document on every change (reference counts are normally small) and skipped restore entries are counted, not itemised.",
+    "Restore checks file existence; the derived sha256 is verified on every read, not during restore.",
+    "Images cannot be registered as attachments; course images must use kind=\"IMAGE\" and are therefore re-encoded.",
     "Windows has no POSIX mode bits: derived-file privacy relies on the user-directory ACL; the module rejects reparse points and requires a writable root but does not repeat the 2.2 ACL checks.",
     "Cleanup means closing handles and unlinking files; no physical erasure or secure memory wipe is claimed.",
     "models.py and the generic download path are untouched by design; real model image transfer does not exist until 4.5/6.1 integration."
