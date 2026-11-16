@@ -20,7 +20,8 @@
     "batch_unlock": "A batch may start only after every module in the previous batch is accepted and reconnected to the same integration commit.",
     "module_acceptance": "implementation or explicit blocker; commit; contract; tests; security summary; rollback note; next step.",
     "no_fake_success": "Mocks, fixtures and missing sources are recorded as synthetic or blocked, never as live campus success.",
-    "release_boundary": "Hermes completes through batch 8 and prepares a candidate. Codex owns batch 9 review, merge, tag and Release."
+    "release_boundary": "Hermes completes through batch 8 and prepares a candidate. Codex owns batch 9 review, merge, tag and Release.",
+    "batch_state": "Zero or more accepted batches, exactly one ready at the first unfinished batch, then locked. All accepted is legal only when the version is complete. Serial gates 1, 8 and 9 remain single-module serial batches."
   },
   "batches": [
     {
@@ -75,9 +76,9 @@
         "2.2": "accepted",
         "2.3": "accepted"
       },
-      "status": "ready",
-      "integration_commit": null,
-      "accepted_at": null,
+      "status": "accepted",
+      "integration_commit": "4519117e6508f47adcd1664af50f86ec432d1764",
+      "accepted_at": "2026-11-16",
       "module_acceptance": {
         "2.2": {
           "accepted_at": "2026-11-16",
@@ -104,7 +105,7 @@
         "Node: 54 passed/0 failed",
         "GitHub Actions: ubuntu-24.04 and windows-2025 successful at 4519117"
       ],
-      "gate_note": "All three modules are accepted and reconnected at 4519117 with green CI. The batch status remains ready because the frozen 1.1 contract validator hard-codes batch 2 as ready; changing gate state requires a 1.1-owned validator update.",
+      "gate_note": "2.1, 2.2 and 2.3 accepted and reconnected at 4519117; Linux 481/5, Windows 482/4, Node 54, CI green. The dynamic validator accepts the accepted prefix and unlocks batch 3.",
       "entry_condition": "all batch 1 modules accepted and integrated",
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     },
@@ -121,11 +122,12 @@
         "3.2": "pending",
         "3.3": "pending"
       },
-      "status": "locked",
+      "status": "ready",
       "integration_commit": null,
       "accepted_at": null,
       "entry_condition": "all batch 2 modules accepted and integrated",
-      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
+      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
+      "gate_note": "Unlocked after batch 2 accepted under the monotonic batch-state rule."
     },
     {
       "batch": 4,

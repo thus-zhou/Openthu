@@ -425,6 +425,55 @@ def validate_extra_samples(loaded: dict) -> int:
     return count
 
 
+def batch_state_errors(batches: list[dict], serial_gate_batches=()) -> list[str]:
+    """Validate a monotonic batch state sequence without hard-coding batch numbers.
+
+    The legal sequence is: zero or more accepted batches, exactly one ready
+    batch at the first unfinished position, then locked batches. All accepted
+    is legal only at the end of the version. The serial-gate batches keep their
+    single-module, serial mode; they do not get a special status exception.
+    """
+    problems: list[str] = []
+    ordered = sorted(batches, key=lambda item: item.get("batch", 0))
+    numbers = [item.get("batch") for item in ordered]
+    if numbers != list(range(1, len(ordered) + 1)):
+        problems.append("batch numbers must be contiguous starting at 1")
+    statuses = {item.get("batch"): item.get("status") for item in ordered}
+    for number, status in statuses.items():
+        if status not in {"accepted", "ready", "locked"}:
+            problems.append(f"batch {number}: invalid status {status!r}")
+    ready = [number for number in numbers if statuses.get(number) == "ready"]
+    if len(ready) > 1:
+        problems.append(f"exactly one batch may be ready; found {ready}")
+    first_unaccepted = next((number for number in numbers if statuses.get(number) != "accepted"), None)
+    if first_unaccepted is not None:
+        if statuses.get(first_unaccepted) != "ready":
+            problems.append(f"batch {first_unaccepted} is the first unfinished batch and must be ready")
+        for number in numbers:
+            if number > first_unaccepted and statuses.get(number) != "locked":
+                problems.append(f"batch {number} must be locked after ready batch {first_unaccepted}")
+        if ready and ready[0] != first_unaccepted:
+            problems.append(f"ready batch must be {first_unaccepted}, found {ready[0]}")
+    seen_ready = False
+    for number in numbers:
+        status = statuses.get(number)
+        if status == "ready":
+            seen_ready = True
+        elif seen_ready and status == "accepted":
+            problems.append(f"batch {number} is accepted after a ready batch")
+    by_batch = {item.get("batch"): item for item in ordered}
+    for number in serial_gate_batches:
+        gate = by_batch.get(number)
+        if gate is None:
+            problems.append(f"serial gate batch {number} is missing")
+            continue
+        if gate.get("mode") != "serial_gate":
+            problems.append(f"batch {number} is a serial gate but mode is {gate.get('mode')!r}")
+        if len(gate.get("modules", [])) != 1:
+            problems.append(f"batch {number} is a serial gate and must contain exactly one module")
+    return problems
+
+
 def validate_delivery() -> None:
     manifest = load(PLAN / "02-字数与依赖校验.json")
     if not isinstance(manifest, dict):
@@ -472,11 +521,8 @@ def validate_delivery() -> None:
         covered = [mid for batch in batches for mid in batch.get("modules", [])]
         check(sorted(covered) == sorted(plan_ids), "batch gates do not cover all 24 modules")
         by_batch = {batch["batch"]: batch for batch in batches}
-        check(by_batch.get(1, {}).get("status") == "accepted", "batch 1 must be accepted")
-        check(by_batch.get(2, {}).get("status") == "ready", "batch 2 must be ready after batch 1")
-        for number in range(3, 10):
-            check(by_batch.get(number, {}).get("status") == "locked",
-                  f"batch {number} must remain locked before its predecessor is accepted")
+        serial_gate_batches = set(gates.get("rules", {}).get("serial_gate_batches", []))
+        errors.extend(batch_state_errors(batches, serial_gate_batches))
         for number in range(2, 10):
             expected = set(by_batch[number - 1].get("modules", []))
             first_id = [m for m in plan_ids if plan_by_id[m]["batch"] == number][0]
