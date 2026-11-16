@@ -27,6 +27,7 @@
         "src/learn_assistant/providers/learn_read.py:234-269",
         "docs/CAPABILITIES.md"
       ],
+      "evidence_role": "ABSENCE_OR_SCOPE_ONLY: the calendar proves what the existing adapter does not cover; it is not a timetable source.",
       "missing_evidence": [
         "Official endpoint or page for the personal timetable.",
         "Term identifier, course identifier and week/period semantics.",
@@ -59,6 +60,7 @@
         "src/learn_assistant/providers/learn_read.py:268-269",
         "docs/CAPABILITIES.md"
       ],
+      "evidence_role": "ABSENCE_OR_SCOPE_ONLY: the calendar proves what the existing adapter does not cover; it is not an exam source.",
       "missing_evidence": [
         "Official exam endpoint or page.",
         "Exam identifier, course association and date/time precision.",

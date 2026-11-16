@@ -147,12 +147,12 @@
       "integration_order": 4,
       "status": "accepted",
       "accepted_at": "2026-11-16",
-      "delivery_commit": "the commit containing this record",
+      "delivery_commit": "f7fe6408ad3e9e16bdee2ca041cb648a2fc2b2ab",
       "evidence": [
         "29 source rows, 10 domain models, 8 source tasks, 14 adapter-readiness rows, 7 synthetic fixtures",
-        "contracts/v0.2/sources/validate.py: ok=true; 9 schema samples, 21 rejection samples",
-        "tests/test_source_contracts.py: 3 passed",
-        "shared-tree check: 367 files, 0 findings; test: 470 Python passed/5 skipped, 54 Node passed; warning in a 2.1 diagnostics thread test"
+        "contracts/v0.2/sources/validate.py: ok=true; 9 schema samples, 24 rejection samples",
+        "tests/test_source_contracts.py: 5 passed",
+        "shared-tree check: 367 files, 0 findings; test: 481 Python passed/5 skipped, 54 Node passed; no failures"
       ]
     },
     {

@@ -109,7 +109,7 @@
     }
   ],
   "x-compatibility-sample": {
-    "renewal_uid": "library.renewal:RENEWAL:SESSION-SYNTHETIC-LOAN-1",
+    "renewal_uid": "library.renewal:RENEWAL:library.loans:ORDER:SYNTHETIC-LOAN-1",
     "loan_uid": "library.loans:ORDER:SYNTHETIC-LOAN-1",
     "source_id": "library.renewal",
     "eligibility": "ELIGIBLE",
@@ -127,7 +127,7 @@
     {
       "why": "a failed renewal cannot claim a verified new due date",
       "value": {
-        "renewal_uid": "library.renewal:RENEWAL:SESSION-SYNTHETIC-LOAN-1",
+        "renewal_uid": "library.renewal:RENEWAL:library.loans:ORDER:SYNTHETIC-LOAN-1",
         "loan_uid": "library.loans:ORDER:SYNTHETIC-LOAN-1",
         "source_id": "library.renewal",
         "eligibility": "ELIGIBLE",
@@ -144,7 +144,7 @@
     {
       "why": "an accepted renewal requires a verified new due date",
       "value": {
-        "renewal_uid": "library.renewal:RENEWAL:SESSION-SYNTHETIC-LOAN-1",
+        "renewal_uid": "library.renewal:RENEWAL:library.loans:ORDER:SYNTHETIC-LOAN-1",
         "loan_uid": "library.loans:ORDER:SYNTHETIC-LOAN-1",
         "source_id": "library.renewal",
         "eligibility": "ELIGIBLE",
@@ -152,6 +152,23 @@
         "execution_state": "ACCEPTED",
         "due_date_before": "2026-12-01T23:59:00+08:00",
         "due_date_after": null,
+        "verified": false,
+        "automatic_replay_allowed": false,
+        "source_evidence_id": "library.renewal",
+        "synthetic": true
+      }
+    },
+    {
+      "why": "a failed renewal must not change the due date, even when verified=false",
+      "value": {
+        "renewal_uid": "library.renewal:RENEWAL:library.loans:ORDER:SYNTHETIC-LOAN-1",
+        "loan_uid": "library.loans:ORDER:SYNTHETIC-LOAN-1",
+        "source_id": "library.renewal",
+        "eligibility": "ELIGIBLE",
+        "eligibility_hint": "合成资格提示：可续借",
+        "execution_state": "FAILED",
+        "due_date_before": "2026-12-01T23:59:00+08:00",
+        "due_date_after": "2026-12-05T23:59:00+08:00",
         "verified": false,
         "automatic_replay_allowed": false,
         "source_evidence_id": "library.renewal",

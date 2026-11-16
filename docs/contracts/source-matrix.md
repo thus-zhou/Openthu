@@ -42,9 +42,11 @@
 | `academics.exams` | 4.1 | `BLOCKED_SOURCE_EVIDENCE` | 没有考试安排来源；不能从教学日历推导 |
 | `academics.grades` | 4.1 | `BLOCKED_SOURCE_EVIDENCE` | 没有课程成绩来源；作业成绩不是课程成绩 |
 | `learn.submission` | 5.3 | `BLOCKED_SOURCE_EVIDENCE` | 上传、草稿、正式提交和结果查询均无已验证接口 |
-| `library.renewal` | 5.1 | `BLOCKED_SOURCE_EVIDENCE` | 只有续借资格提示，没有执行和回执语义 |
+| `library.renewal` | 5.1 | `PARTIAL`；5.1 执行 `BLOCKED_SOURCE_EVIDENCE` | 只有续借资格提示，没有执行和回执语义 |
 | `model.image_input` | 4.5 | `BLOCKED_SOURCE_EVIDENCE` | 目录标记支持图片，但当前代理的图片协议未验证 |
 | `visitors.form` | 4.4 | `BLOCKED_SOURCE_EVIDENCE` | 只有公开入口，没有当前表单和权限契约 |
+
+说明：`library.renewal` 的资格提示是 `PARTIAL/LIMITED`，上表的阻塞结论只针对 5.1 的续借执行，不是整个来源不可用；计数时应把“部分可用”和“完全阻塞”分开。
 
 ## 待纠正的说明/实现差异
 
@@ -53,6 +55,7 @@
 | 位置 | 旧说明或表面行为 | 当前代码事实 | 后续处理 |
 |---|---|---|---|
 | `src/thu_assistant/actions.py` 顶部 | 早期 docstring 写“No campus write adapter is enabled in block 5” | `src/thu_assistant/mcp_stdio.py` 已注册体育创建/取消和图书馆座位/研讨间办理适配；`actions.py` 也有 `VERIFIED_ADAPTERS` | 4.4 统一更正说明，保留“真实事项仍需具体授权”的边界 |
+| `src/learn_assistant/core.py` 的 `prepare_submission` | 2.3 的 `prepare` 边界写“只写本地加密计划” | 当前实现把摘要写到 `system_data_root/submission-previews/*.json`，是未加密 JSON，并含本地 path；不上传、不提交 | 5.3 接入前改为加密计划或明确这条只适用于 4.4 的 facade；不要把现状写成已满足 |
 | `learn.calendar` 的 `fl` | 旧事件字典把 `fl` 放进 `status` | `fl` 是来源分类字段，不是 `calendar-event-v1` 的 `CONFIRMED/TENTATIVE/...` 状态 | 5.4 只保留来源字段，不映射为日历状态 |
 | `library.catalog_detail` 的 `borrowable` | 表面是布尔值 | 代码为“不可借时 False，否则 None”；None 表示未核验 | 4.3 保留三态，不把 None 写成可借 |
 | `sports.availability` 的 `available`/费用 | 表面是“可预约/价格” | 只是余量与报价，不是预约或付款回执 | 4.3/5.2 保持来源证据，不折叠成成功 |

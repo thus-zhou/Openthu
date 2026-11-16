@@ -24,6 +24,7 @@ CONTRACTS = ROOT / "contracts" / "v0.2"
 SOURCES = CONTRACTS / "sources"
 MODELS = SOURCES / "data-models"
 FIXTURES = ROOT / "tests" / "fixtures" / "sources"
+DOCS = ROOT / "docs" / "contracts"
 
 errors: list[str] = []
 
@@ -77,7 +78,100 @@ def first_error(instance_validator, instance) -> str:
     return "no error" if not found else found[0].message
 
 
-def validate_schema_contract(path: Path, expected_owner: str = "2.3/Hermes") -> tuple[int, int]:
+def _resolve_property(schema: dict, name: str):
+    if not isinstance(schema, dict):
+        return None
+    properties = schema.get("properties")
+    if isinstance(properties, dict) and name in properties:
+        return properties[name]
+    for keyword in ("oneOf", "anyOf", "allOf"):
+        branches = schema.get(keyword)
+        if isinstance(branches, list):
+            for branch in branches:
+                found = _resolve_property(branch, name)
+                if found is not None:
+                    return found
+    return None
+
+
+def resolve_canonical_path(schema: dict, path: str) -> bool:
+    current = schema
+    for part in path.split("."):
+        if not isinstance(current, dict):
+            return False
+        if current.get("type") == "array":
+            current = current.get("items", {})
+        found = _resolve_property(current, part)
+        if found is None:
+            return False
+        current = found
+    return True
+
+
+def renewal_semantic_errors(record) -> list[str]:
+    if not isinstance(record, dict):
+        return ["renewal record must be an object"]
+    errors: list[str] = []
+    loan_uid = record.get("loan_uid")
+    renewal_uid = record.get("renewal_uid")
+    if isinstance(loan_uid, str) and isinstance(renewal_uid, str):
+        if not renewal_uid.endswith(":" + loan_uid):
+            errors.append("renewal_uid must end with ':<loan_uid>'")
+    state = record.get("execution_state")
+    if state in {"FAILED", "REJECTED", "NOT_ATTEMPTED"}:
+        before = record.get("due_date_before")
+        after = record.get("due_date_after")
+        if after is not None and after != before:
+            errors.append("failed or unexecuted renewal must not change due_date_after")
+        if record.get("verified") is True:
+            errors.append("failed or unexecuted renewal cannot be verified")
+    if state == "ACCEPTED":
+        if record.get("verified") is not True:
+            errors.append("accepted renewal must be verified")
+        if not record.get("due_date_after"):
+            errors.append("accepted renewal must have a new due_date_after")
+    return errors
+
+
+def submission_semantic_errors(record) -> list[str]:
+    if not isinstance(record, dict):
+        return ["submission record must be an object"]
+    errors: list[str] = []
+    state = record.get("state")
+    if state == "SUBMITTED":
+        if record.get("is_final") is not True:
+            errors.append("SUBMITTED must be final")
+        if record.get("result_observed") is not True:
+            errors.append("SUBMITTED requires result_observed=true")
+        if not record.get("remote_submission_id"):
+            errors.append("SUBMITTED requires a remote_submission_id")
+    if state == "UPLOADED_STAGING" and not record.get("upload_receipt_id"):
+        errors.append("UPLOADED_STAGING requires an upload_receipt_id")
+    return errors
+
+
+def model_image_semantic_errors(record) -> list[str]:
+    if not isinstance(record, dict):
+        return ["model capability record must be an object"]
+    errors: list[str] = []
+    if record.get("capability_state") == "AVAILABLE":
+        if record.get("evidence_level") not in {"SYNTHETIC_TRANSPORT", "LIVE_READ"}:
+            errors.append("AVAILABLE requires transport evidence, not only an offline contract")
+    return errors
+
+
+def semantic_errors_for(schema_path: Path, record) -> list[str]:
+    if schema_path.name == "renewal.schema.json":
+        return renewal_semantic_errors(record)
+    if schema_path.name == "submission.schema.json":
+        return submission_semantic_errors(record)
+    if schema_path.name == "model-image-capability.schema.json":
+        return model_image_semantic_errors(record)
+    return []
+
+
+def validate_schema_contract(path: Path, expected_owner: str = "2.3/Hermes",
+                             semantic=None) -> tuple[int, int]:
     data = load(path)
     if not isinstance(data, dict):
         return 0, 0
@@ -99,9 +193,11 @@ def validate_schema_contract(path: Path, expected_owner: str = "2.3/Hermes") -> 
     sample = data.get("x-compatibility-sample")
     if schema_validator is not None and isinstance(sample, dict):
         samples += 1
+        semantic_problems = semantic(sample) if semantic is not None else []
         check(
-            schema_validator.is_valid(sample),
-            f"{path.relative_to(ROOT)}: compatibility sample is invalid: {first_error(schema_validator, sample)}",
+            schema_validator.is_valid(sample) and not semantic_problems,
+            f"{path.relative_to(ROOT)}: compatibility sample is invalid: "
+            f"{first_error(schema_validator, sample) if not schema_validator.is_valid(sample) else '; '.join(semantic_problems)}",
         )
     rejected = data.get("x-rejection-samples")
     if schema_validator is not None and isinstance(rejected, list):
@@ -111,8 +207,9 @@ def validate_schema_contract(path: Path, expected_owner: str = "2.3/Hermes") -> 
                 errors.append(f"{path.relative_to(ROOT)}: rejection sample {index} is not an object")
                 continue
             rejections += 1
+            semantic_problems = semantic(value) if semantic is not None else []
             check(
-                not schema_validator.is_valid(value),
+                not schema_validator.is_valid(value) or bool(semantic_problems),
                 f"{path.relative_to(ROOT)}: rejection sample {index} was accepted",
             )
     return samples, rejections
@@ -171,17 +268,69 @@ def validate_mapping_targets(sources: list) -> None:
             canonical = mapping.get("canonical_field") if isinstance(mapping, dict) else None
             if not canonical:
                 continue
-            parts = canonical.split(".")
-            if len(parts) < 2:
+            model, separator, canonical_path = canonical.partition(".")
+            if not separator or not canonical_path:
                 errors.append(f"{sid}: canonical field {canonical} has no model property")
                 continue
-            model, prop = parts[0], parts[1]
             schema = schemas.get(model)
             if not isinstance(schema, dict):
                 errors.append(f"{sid}: unknown canonical model {model}")
                 continue
-            if prop not in schema.get("properties", {}):
+            if not resolve_canonical_path(schema, canonical_path):
                 errors.append(f"{sid}: canonical field {canonical} does not exist in {model} schema")
+
+
+def validate_code_refs(sources: list) -> None:
+    for row in sources:
+        if not isinstance(row, dict):
+            continue
+        sid = row.get("source_id")
+        refs = row.get("code_refs")
+        check(isinstance(refs, list), f"{sid}: code_refs must be an array")
+        if not isinstance(refs, list):
+            continue
+        for ref in refs:
+            if not isinstance(ref, str):
+                errors.append(f"{sid}: code reference is not a string")
+                continue
+            match = re.fullmatch(r"([^:]+)(?::(\d+)(?:-(\d+))?)?", ref)
+            if not match:
+                errors.append(f"{sid}: invalid code reference {ref}")
+                continue
+            path = ROOT / match.group(1)
+            if not path.is_file():
+                errors.append(f"{sid}: missing code reference file {match.group(1)}")
+                continue
+            if match.group(2):
+                line_count = len(path.read_text(encoding="utf-8").splitlines())
+                start = int(match.group(2))
+                end = int(match.group(3) or start)
+                if start < 1 or end < start or end > line_count:
+                    errors.append(f"{sid}: code reference range out of bounds {ref}")
+
+
+def validate_attachment_mapping(sources: list) -> None:
+    for row in sources:
+        if not isinstance(row, dict) or row.get("source_id") != "learn.course_files":
+            continue
+        fields = {
+            mapping.get("canonical_field")
+            for mapping in row.get("field_mappings", [])
+            if isinstance(mapping, dict)
+        }
+        required = {
+            "attachment.source_record_id",
+            "attachment.display_name",
+            "attachment.mime_type",
+            "attachment.byte_size",
+            "attachment.attachment_uid",
+            "attachment.download_state",
+            "attachment.identity_state",
+            "attachment.external_transfer_allowed",
+            "attachment.source_evidence_id",
+        }
+        missing = sorted(required - fields)
+        check(not missing, f"learn.course_files: attachment-v1 has no mapping for {missing}")
 
 
 def validate_registry() -> int:
@@ -211,6 +360,8 @@ def validate_registry() -> int:
         check(registry_source_invalid(row) is False, f"{sid}: source row has an inconsistent evidence state")
         check(bool(row.get("unresolved") is not None), f"{sid}: unresolved must be an array")
     validate_mapping_targets(sources)
+    validate_code_refs(sources)
+    validate_attachment_mapping(sources)
     sample = data.get("x-compatibility-sample")
     rejected = data.get("x-rejection-samples")
     if isinstance(schema, dict) and isinstance(schema.get("$defs", {}).get("source"), dict):
@@ -264,7 +415,9 @@ def validate_models() -> int:
             check(schema.get("x-owner") == "1.1/Hermes",
                   f"model {row.get('name')}: reused contract owner changed")
             continue
-        model_samples, model_rejections = validate_schema_contract(schema_path)
+        model_samples, model_rejections = validate_schema_contract(
+            schema_path, semantic=lambda record: semantic_errors_for(schema_path, record)
+        )
         samples += model_samples
         rejections += model_rejections
     return len(models), samples, rejections
@@ -328,6 +481,15 @@ def validate_tasks_and_readiness() -> tuple[int, int]:
                 if row.get("start_conclusion", "").startswith("BLOCKED"):
                     check(bool(row.get("blocked_scope")), f"{mid}: blocked module has no blocked scope")
                     check(bool(row.get("next_action")), f"{mid}: blocked module has no next action")
+            referenced_sources = {
+                source
+                for row in rows
+                if isinstance(row, dict)
+                for source in row.get("source_ids", [])
+            }
+            missing_sources = sorted(source_ids - referenced_sources)
+            check(not missing_sources,
+                  f"adapter-readiness: sources without a module conclusion: {missing_sources}")
             by_module = {row.get("module"): row for row in rows if isinstance(row, dict)}
             for mid in ("4.1", "4.5", "5.1", "5.3"):
                 check(by_module.get(mid, {}).get("start_conclusion") == "BLOCKED_SOURCE_EVIDENCE",
@@ -440,6 +602,8 @@ def validate_fixtures() -> int:
                 if v is not None:
                     check(v.is_valid(record),
                           f"submission-states: invalid record: {first_error(v, record)}")
+                check(not submission_semantic_errors(record),
+                      f"submission-states: semantic error: {'; '.join(submission_semantic_errors(record))}")
         states = [record.get("state") for record in records]
         check(states == ["UPLOADED_STAGING", "DRAFT_SAVED", "SUBMITTED"],
               "submission-states: states are not distinct")
@@ -456,6 +620,8 @@ def validate_fixtures() -> int:
             v = validator(schema)
             if v is not None:
                 check(v.is_valid(record), f"renewal fixture: invalid record: {first_error(v, record)}")
+            check(not renewal_semantic_errors(record),
+                  f"renewal fixture: semantic error: {'; '.join(renewal_semantic_errors(record))}")
         check(record.get("eligibility") == "ELIGIBLE" and record.get("execution_state") == "FAILED",
               "renewal fixture: expected eligible but failed execution")
         check(record.get("due_date_before") == record.get("due_date_after"),
@@ -472,6 +638,8 @@ def validate_fixtures() -> int:
             v = validator(schema)
             if v is not None:
                 check(v.is_valid(record), f"model-image fixture: invalid record: {first_error(v, record)}")
+            check(not model_image_semantic_errors(record),
+                  f"model-image fixture: semantic error: {'; '.join(model_image_semantic_errors(record))}")
         check(record.get("catalog_support_image") is True and
               record.get("protocol_state") == "UNVERIFIED" and
               record.get("capability_state") == "UNVERIFIED",
@@ -486,7 +654,9 @@ def validate_module_result() -> bool:
     check(data.get("module") == "2.3", "module-result: wrong module")
     check(data.get("module_status") == "accepted", "module-result: module is not accepted")
     check(data.get("target_version") == "0.2.0", "module-result: wrong target version")
-    check(bool(data.get("delivery_commit")), "module-result: missing delivery commit")
+    delivery_commit = data.get("delivery_commit")
+    check(isinstance(delivery_commit, str) and re.fullmatch(r"[a-f0-9]{40}", delivery_commit) is not None,
+          "module-result: delivery_commit must be a 40-character SHA")
     checks = data.get("checks", {})
     for key in ("live_campus_calls", "model_calls", "business_submissions"):
         check(checks.get(key) == 0, f"module-result: {key} must be 0")
@@ -504,7 +674,7 @@ def validate_module_result() -> bool:
 
 
 def validate_privacy() -> None:
-    for base in (SOURCES, FIXTURES):
+    for base in (SOURCES, FIXTURES, DOCS):
         for path in base.rglob("*"):
             if not path.is_file() or path.suffix not in {".json", ".md", ".py"}:
                 continue
