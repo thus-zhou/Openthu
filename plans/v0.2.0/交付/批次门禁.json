@@ -123,7 +123,7 @@
       ],
       "module_status": {
         "3.1": "pending",
-        "3.2": "pending",
+        "3.2": "accepted",
         "3.3": "pending"
       },
       "status": "ready",
@@ -131,7 +131,7 @@
       "accepted_at": null,
       "entry_condition": "all batch 2 modules accepted and integrated",
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
-      "gate_note": "Unlocked after batch 2 accepted under the monotonic batch-state rule."
+      "gate_note": "3.2 accepted at ec2f617; 3.1 and 3.3 remain pending, so batch 3 stays ready and is not integrated."
     },
     {
       "batch": 4,

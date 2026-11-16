@@ -251,7 +251,14 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "统一数据模型、完整性三态、稳定键、缓存策略和分页语义",
-      "evidence": []
+      "evidence": [
+        "Source-state completeness triad and source-evidence builder; error-code mirror checked against error-classification-v1.",
+        "Domain identities, date/time precision, role mapping and same-title/different-id relations validated against course-v1 and query fixtures.",
+        "Cursor c1 bound to parameters, account scope and snapshot-v2; cancelled second page keeps the first segment but stays partial.",
+        "tests/test_query_contracts.py: 28 passed; isolated-tree full offline suite Python 533 passed/5 skipped, Node 54 passed; check 379 files/0 findings.",
+        "Result mirrored at plans/v0.2.0/交付/模块结果/3.2.json; no live campus, model or business calls.",
+        "Batch 3 remains ready until 3.1 and 3.3 are accepted and reconnected."
+      ]
     },
     {
       "id": "3.3",

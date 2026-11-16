@@ -1,0 +1,111 @@
+{
+  "module": "3.2",
+  "title": "统一查询、数据模型与完整性规则",
+  "batch": 3,
+  "owner": "Hermes",
+  "status": "accepted",
+  "baseline_commit": "4d60e8b",
+  "integration_parent_commit": "4d60e8b",
+  "delivery_commit": "ec2f617",
+  "branch": "hermes/1-install-diagnostics",
+  "version_pr": 2,
+  "paths": [
+    "src/thu_assistant/queries.py",
+    "src/thu_assistant/catalog.py",
+    "src/thu_assistant/pagination.js",
+    "src/thu_assistant/domain_models.py",
+    "src/thu_assistant/source_state.py",
+    "src/thu_assistant/cache_policy.py",
+    "tests/test_query_contracts.py",
+    "tests/fixtures/query/"
+  ],
+  "contracts": [
+    "result-envelope-v1",
+    "source-evidence-v1",
+    "error-classification-v1",
+    "calendar-event-v1"
+  ],
+  "outputs": [
+    "source-state-v1: completeness triad, source evidence builder, error classification",
+    "domain-models-v1: stable identities, time precision, role/status mapping, duplicate relations, standard record",
+    "cache-v1: LIVE_ONLY availability, SHORT_CACHE directory, explicit HISTORY_FALLBACK_ALLOWED",
+    "query-v1 envelope: query_time, read_scope, upstream_total, snapshot_complete, partial_reasons, source_state",
+    "cursor c1 bound to parameters/account scope/snapshot-v2; distinct expiry, mismatch and stale-version errors",
+    "pagination.js collector cancellation: first segment retained, complete=false"
+  ],
+  "checks": {
+    "module_tests_linux": {
+      "passed": 28,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_query_contracts.py"
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "compatibility_baselines": 1,
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "fixtures": 7,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "privacy_check": {
+      "ok": true,
+      "files_checked": 379,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 533,
+      "python_skipped": 5,
+      "python_failed": 0,
+      "node_passed": 54,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test",
+      "worktree": "isolated tree at 4d60e8b with only the 3.2 commit applied; the shared tree contains in-flight 3.1/3.3 work"
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0
+  },
+  "accepted_cases": [
+    "a successful empty source list is EMPTY only with source_complete, snapshot_complete and complete true; login pages, 401/403/429, maintenance, timeout, missing pages and unknown JSON business states are never EMPTY",
+    "the same title with different source record ids keeps both records and reports POSSIBLE_DUPLICATE_TITLE / SAME_TITLE_DIFFERENT_IDENTITY",
+    "a date-only value keeps date precision and is neither padded to midnight nor sorted as a timed value",
+    "a cursor continuation keeps the original query_time, checked_at and read window across midnight",
+    "availability cache is always rejected as live evidence; directory cache is bounded; history fallback requires allow_stale=true and stays HISTORICAL/incomplete",
+    "parameter, account, page-size or snapshot-version changes after a cursor produce CURSOR_QUERY_MISMATCH or STALE_SNAPSHOT_TAKE_NEW_SNAPSHOT; expiry/eviction produces CURSOR_EXPIRED",
+    "cancelling an upstream second page keeps the first segment but marks the collection partial (complete=false, snapshot_complete=false)",
+    "unfamiliar school statuses keep UNKNOWN plus a non-reversible digest; exception text, URLs, hosts and private paths never enter public error fields",
+    "result envelopes and source evidence validate against the frozen JSON Schemas; the embedded error-code mirror matches error-classification-v1"
+  ],
+  "limits": [
+    "A result snapshot above max_bytes still raises the legacy explicit RESULT_TOO_LARGE_SELECT_NARROWER_SOURCE error instead of silently truncating; it never reports completeness.",
+    "cache_policy is delivered and used by catalog.py; queries.py does not attach a new persistent history cache. 4.3/5.1/5.4/6.2 should reuse the policy when they add history fallback.",
+    "Library semantic statuses such as NOT_OPEN and NEEDS_USER_ACTION remain in the legacy status field for compatibility; source_state maps them to UNKNOWN and 6.1 may publish a separate public status.",
+    "The MCP exception boundary still emits the legacy error shape; query envelopes already carry the classified error object and 6.1 should enrich the boundary.",
+    "Offline synthetic evidence only: no real campus login, read, booking, payment or submission was performed."
+  ],
+  "rollback": "Restore the nine listed code/test paths to 4d60e8b and delete tests/fixtures/query/. New fields are optional and old clients ignore them; the added directory cache fields are additive. Existing c1 cursors become invalid explicitly and are never re-fetched into a new snapshot.",
+  "next": "Wait for 3.1 and 3.3 to be accepted and reconnected; the batch integration commit then runs the full offline regression. Module acceptance does not mark batch 3 accepted and does not create a new PR.",
+  "cross_module_requests": [
+    "4.1/4.2/4.3/4.5/5.1/5.3/5.4: use domain_models for stable identities, time precision and duplicate relations instead of re-deriving them per adapter.",
+    "4.3/5.1/5.2/5.4/6.2: use cache_policy for any history fallback and keep cached results non-live and non-booking.",
+    "6.1: enrich the MCP/CLI boundary with source_state.public_error and consume the new envelope fields without changing the 29 legacy tools."
+  ]
+}

@@ -238,7 +238,16 @@
         "统一数据模型、完整性三态、稳定键、缓存策略和分页语义"
       ],
       "integration_order": 6,
-      "status": "pending"
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "ec2f617",
+      "evidence": [
+        "source-state-v1 completeness triad, source-evidence builder and error-classification mirror; 28 module tests passed",
+        "domain-models-v1 stable identities, time precision and same-title/different-id relations; cache-v1 live/directory/history policies",
+        "cursor c1 bound to parameters/account/snapshot-v2 with distinct mismatch, stale and expired errors; cancelled continuation stays partial",
+        "isolated-tree full offline suite: Python 533 passed/5 skipped, Node 54 passed; check 379 files/0 findings; validators ok",
+        "no live campus, model or business calls; batch 3 remains ready until 3.1 and 3.3 are accepted and reconnected"
+      ]
     },
     {
       "id": "3.3",
