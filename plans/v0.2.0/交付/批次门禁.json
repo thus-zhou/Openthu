@@ -86,8 +86,8 @@
         },
         "2.3": {
           "accepted_at": "2026-11-16",
-          "delivery_commit": "the commit containing this record",
-          "evidence": "29 sources; 10 models; 8 tasks; 14 readiness rows; 7 fixtures; validator ok=true; no live campus calls"
+          "delivery_commit": "f7fe6408ad3e9e16bdee2ca041cb648a2fc2b2ab",
+          "evidence": "29 sources; 10 models; 8 tasks; 14 readiness rows; 7 fixtures; 9 schema samples; 24 rejection samples; 5 tests; validator ok=true; no live campus calls"
         },
         "2.1": {
           "accepted_at": "2026-11-16",

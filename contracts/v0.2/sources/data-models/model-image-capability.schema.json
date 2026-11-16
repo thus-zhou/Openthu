@@ -149,6 +149,22 @@
         "source_evidence_id": "model.image_input",
         "synthetic": true
       }
+    },
+    {
+      "why": "AVAILABLE requires transport evidence, not only an offline contract sample",
+      "value": {
+        "model_id": "synthetic-model-a",
+        "source_id": "model.image_input",
+        "catalog_state": "LISTED",
+        "catalog_support_image": true,
+        "protocol_state": "VERIFIED",
+        "capability_state": "AVAILABLE",
+        "reason_code": "SYNTHETIC",
+        "evidence_level": "OFFLINE_CONTRACT",
+        "checked_at": "2026-11-16T12:00:00+00:00",
+        "source_evidence_id": "model.image_input",
+        "synthetic": true
+      }
     }
   ]
 }

@@ -22,7 +22,7 @@
 
 ## 证据记录格式
 
-来源行至少包含：`source_id`、服务、操作、证据类别、版本、检查时间、字段映射、分页规则、未决问题、写入副作用和 `raw_payload_included=false`。规范模型样例必须带 `synthetic=true`。
+来源行至少包含：`source_id`、`owner`、服务、操作、证据类别、版本、检查时间、字段映射、分页规则、未决问题、写入副作用和 `raw_payload_included=false`。规范模型样例必须带 `synthetic=true`。
 
 ## 检查
 

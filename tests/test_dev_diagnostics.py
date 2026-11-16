@@ -256,15 +256,16 @@ def test_configured_node_path_is_used_by_diagnostics(tmp_path):
     module = load_diagnostics()
     root = complete_checkout(tmp_path)
     package = root / "src" / "thu_assistant"
+    configured_node = str(tmp_path / "configured-node.exe")
     config = synthetic_config(package)
     config.runtime = SimpleNamespace(
-        node="/configured/node", command_timeout_seconds=2, max_output_bytes=2048
+        node=configured_node, command_timeout_seconds=2, max_output_bytes=2048
     )
     seen = []
 
     def probe(path):
         seen.append(path)
-        if path.endswith("node"):
+        if path == configured_node:
             return {"status": "pass", "version": "24.18.0"}
         return {"status": "pass", "version": "11.16.0"}
 
@@ -277,7 +278,7 @@ def test_configured_node_path_is_used_by_diagnostics(tmp_path):
     report = module.collect(**kwargs)
     rows = {row["id"]: row for row in report["checks"]}
     assert rows["node"]["status"] == "pass"
-    assert "/configured/node" in seen
+    assert configured_node in seen
 
 
 def test_missing_required_package_resources_block_doctor(tmp_path):

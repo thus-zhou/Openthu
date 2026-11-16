@@ -4,7 +4,7 @@
   "description": "The loan is eligible for renewal but the execution fails. The due date must remain unchanged and the result must not be reported as success.",
   "schema": "contracts/v0.2/sources/data-models/renewal.schema.json",
   "record": {
-    "renewal_uid": "library.renewal:RENEWAL:SYNTHETIC-LOAN-1",
+    "renewal_uid": "library.renewal:RENEWAL:library.loans:ORDER:SYNTHETIC-LOAN-1",
     "loan_uid": "library.loans:ORDER:SYNTHETIC-LOAN-1",
     "source_id": "library.renewal",
     "eligibility": "ELIGIBLE",

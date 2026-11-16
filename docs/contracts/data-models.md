@@ -66,6 +66,8 @@ event_uid      = 1.1 calendar-event-v1 的账号、服务、来源和 occurrence
 
 `RETAINED_SOURCE_ONLY` 不是“以后再随手加字段”，而是明确承认当前规范模型没有对应位置。后续模块若要提升为规范字段，必须先修改契约、样例和拒绝样例。
 
+`required: true` 表示规范记录必须满足该字段，不表示当前读取适配已经强制它。现有 `learn.courses`/`learn.assignments` 仍可能把缺失标题读成空字符串，`Course.role` 也可能是小写；3.2 必须在规范化层统一转换为契约值或失败关闭，不能把 registry 的 required 当成运行时保证。
+
 ## 事件模型
 
 事件复用 1.1 的 `calendar-event-v1`，不新建重复 schema。日期级事件使用 `time.kind=DATE`，精确事件使用 `DATE_TIME`；二者不能互相伪装。教学日历的 `fl` 是来源分类字段，不得直接映射成 `status=CONFIRMED`。事件覆盖范围仍受来源限制，不能把教学日历说成完整课表或考试表。

@@ -16,6 +16,7 @@
   "sources": [
     {
       "source_id": "info.directory",
+      "owner": "Hermes",
       "service": "info",
       "operation": "directory",
       "service_domain": "INFO",
@@ -44,16 +45,18 @@
         {"raw_field": "yyfwmc", "canonical_field": "resource.title", "transform": "strip HTML and trim", "required": true, "disposition": "MAPPED", "note": "Display name only."},
         {"raw_field": "href", "canonical_field": null, "transform": "sanitize URL and remove secret-looking query parameters", "required": false, "disposition": "RETAINED_SOURCE_ONLY", "note": "Entry URL is not a canonical resource field."},
         {"raw_field": "ywlbmc/fwejlbmc_xs", "canonical_field": null, "transform": "strip HTML and trim", "required": false, "disposition": "RETAINED_SOURCE_ONLY", "note": "Category is not in resource-v1."},
-        {"raw_field": "yyfwjs", "canonical_field": null, "transform": "redact and truncate", "required": false, "disposition": "RETAINED_SOURCE_ONLY", "note": "Description is display metadata."}
+        {"raw_field": "yyfwjs", "canonical_field": null, "transform": "redact and truncate", "required": false, "disposition": "RETAINED_SOURCE_ONLY", "note": "Description is display metadata."},
+        {"raw_field": "fzbmmc", "canonical_field": null, "transform": "strip HTML and trim", "required": false, "disposition": "RETAINED_SOURCE_ONLY", "note": "Department is display metadata; resource-v1 has no department field."}
       ],
       "errors": ["AUTH_REQUIRED", "FORBIDDEN", "RATE_LIMITED", "MAINTENANCE", "PORTAL_NOT_JSON", "PORTAL_DIRECTORY_FAILED", "PORTAL_SCHEMA_CHANGED"],
-      "unresolved": ["Directory row is not business capability evidence.", "Category and description are retained source-only in v1."],
+      "unresolved": ["Directory row is not business capability evidence.", "Category, department and description are retained source-only in v1."],
       "write_side_effects": "NONE",
       "raw_payload_included": false,
       "synthetic": false
     },
     {
       "source_id": "learn.semesters",
+      "owner": "Hermes",
       "service": "learn",
       "operation": "semesters",
       "service_domain": "LEARN",
@@ -90,6 +93,7 @@
     },
     {
       "source_id": "learn.courses",
+      "owner": "Hermes",
       "service": "learn",
       "operation": "courses",
       "service_domain": "LEARN",
@@ -114,11 +118,11 @@
         "notes": "One semester response; query filtering happens after the source read."
       },
       "field_mappings": [
-        {"raw_field": "wlkcid/id", "canonical_field": "course.source_record_id", "transform": "require non-empty identifier", "required": true, "disposition": "MAPPED", "note": "Missing id must become MISSING_STABLE_ID, not a hashed title."},
-        {"raw_field": "kcm/zywkcm/ywkcm", "canonical_field": "course.title", "transform": "decode text and trim", "required": true, "disposition": "MAPPED", "note": "Title is display-only."},
+        {"raw_field": "wlkcid/id", "canonical_field": "course.source_record_id", "transform": "require non-empty identifier", "required": true, "disposition": "MAPPED", "note": "Missing id may never be replaced by a hashed title; the current read adapter fails closed with InterfaceDriftError and 3.2 must expose MISSING_STABLE_ID."},
+        {"raw_field": "kcm/zywkcm/ywkcm", "canonical_field": "course.title", "transform": "decode text and trim", "required": true, "disposition": "MAPPED", "note": "Display-only; the current adapter defaults a missing title to empty, so 3.2 must reject or mark UNKNOWN."},
         {"raw_field": "jsm/teacherName", "canonical_field": "course.teacher_names", "transform": "decode and split provider-supplied names only when the source does so", "required": false, "disposition": "MAPPED", "note": "Never infer teacher identity from title."},
         {"raw_field": "semester path segment", "canonical_field": "course.semester_id", "transform": "use requested or current semester identifier", "required": true, "disposition": "DERIVED", "note": "Required for a stable course identity."},
-        {"raw_field": "role", "canonical_field": "course.role", "transform": "student course list maps to STUDENT", "required": true, "disposition": "DERIVED", "note": "Teacher roles are not read here."}
+        {"raw_field": "role", "canonical_field": "course.role", "transform": "student course list maps to STUDENT; the current adapter returns lowercase 'student', which 3.2 must normalize", "required": true, "disposition": "DERIVED", "note": "Teacher roles are not read here."}
       ],
       "errors": ["AUTH_REQUIRED", "InterfaceDriftError", "INVALID_LEARN_IDENTIFIER"],
       "unresolved": ["Same-title courses are not merged; the caller must choose by stable id.", "Teacher role mapping is not available."],
@@ -128,6 +132,7 @@
     },
     {
       "source_id": "learn.notices",
+      "owner": "Hermes",
       "service": "learn",
       "operation": "notices",
       "service_domain": "LEARN",
@@ -143,7 +148,7 @@
       "code_refs": ["src/learn_assistant/providers/learn_read.py:99-129", "src/learn_assistant/providers/learn_read_parsers.py:55-64"],
       "pagination": {
         "kind": "PAGE",
-        "page_parameter": "iDisplayStart",
+        "page_parameter": null,
         "offset_parameter": "iDisplayStart",
         "page_size_parameter": "iDisplayLength",
         "total_field": "iTotalDisplayRecords/iTotalRecords",
@@ -153,6 +158,7 @@
       },
       "field_mappings": [
         {"raw_field": "ggid/id", "canonical_field": null, "transform": "validate identifier", "required": true, "disposition": "RETAINED_SOURCE_ONLY", "note": "No canonical notice model in v1; do not force into resource."},
+        {"raw_field": "wlkcid", "canonical_field": null, "transform": "validate it matches the requested course", "required": true, "disposition": "RETAINED_SOURCE_ONLY", "note": "Course association is retained source-only until a notice model exists."},
         {"raw_field": "bt", "canonical_field": null, "transform": "HTML-unescape and trim", "required": true, "disposition": "RETAINED_SOURCE_ONLY", "note": "Notice title remains source-only."},
         {"raw_field": "ggnr", "canonical_field": null, "transform": "base64 decode, sanitize HTML, retain text only", "required": false, "disposition": "RETAINED_SOURCE_ONLY", "note": "Body state READ/UNKNOWN is retained in the read result."},
         {"raw_field": "fbsj/fbsjStr", "canonical_field": null, "transform": "retain source timestamp", "required": false, "disposition": "RETAINED_SOURCE_ONLY", "note": "No canonical publication field."},
@@ -166,6 +172,7 @@
     },
     {
       "source_id": "learn.assignments",
+      "owner": "Hermes",
       "service": "learn",
       "operation": "assignments",
       "service_domain": "LEARN",
@@ -181,7 +188,7 @@
       "code_refs": ["src/learn_assistant/providers/learn_read.py:130-176", "src/learn_assistant/providers/web.py:458-530"],
       "pagination": {
         "kind": "PAGE",
-        "page_parameter": "iDisplayStart",
+        "page_parameter": null,
         "offset_parameter": "iDisplayStart",
         "page_size_parameter": "iDisplayLength",
         "total_field": "iTotalDisplayRecords/iTotalRecords",
@@ -193,7 +200,7 @@
         {"raw_field": "xszyid/zyid/id", "canonical_field": "assignment.source_record_id", "transform": "require identifier", "required": true, "disposition": "MAPPED", "note": "Missing id is an upstream contract failure."},
         {"raw_field": "zyid/baseId", "canonical_field": "assignment.base_record_id", "transform": "retain detail id when different", "required": false, "disposition": "MAPPED", "note": "Does not replace the stable assignment id."},
         {"raw_field": "wlkcid", "canonical_field": "assignment.course_uid", "transform": "join to a verified course record; never synthesize a course uid from title", "required": false, "disposition": "DERIVED", "note": "Course association requires a stable course id."},
-        {"raw_field": "bt/title", "canonical_field": "assignment.title", "transform": "decode and trim", "required": true, "disposition": "MAPPED", "note": "Display-only."},
+        {"raw_field": "bt/title", "canonical_field": "assignment.title", "transform": "decode and trim", "required": true, "disposition": "MAPPED", "note": "Display-only; the current adapter may default a missing title to empty, so 3.2 must reject or mark UNKNOWN."},
         {"raw_field": "jzsj/deadline", "canonical_field": "assignment.deadline", "transform": "normalize ISO 8601 with Asia/Shanghai", "required": false, "disposition": "MAPPED", "note": "Missing deadline stays null."},
         {"raw_field": "bjjzsj", "canonical_field": "assignment.late_deadline", "transform": "normalize ISO 8601", "required": false, "disposition": "MAPPED", "note": "Late deadline is separate."},
         {"raw_field": "scsj/submitTime", "canonical_field": null, "transform": "normalize and retain", "required": false, "disposition": "RETAINED_SOURCE_ONLY", "note": "Submitted timestamp is not in assignment-v1; submission-v1 owns it."},
@@ -201,7 +208,9 @@
         {"raw_field": "cj/grade", "canonical_field": "assignment.grade_value", "transform": "retain number; null stays null", "required": false, "disposition": "MAPPED", "note": "Missing grade is never zero."},
         {"raw_field": "djzcj/ywdjzcj", "canonical_field": "assignment.grade_text", "transform": "retain text", "required": false, "disposition": "MAPPED", "note": "Grade-level text is not a numeric score."},
         {"raw_field": "pynr", "canonical_field": null, "transform": "decode and retain feedback text", "required": false, "disposition": "RETAINED_SOURCE_ONLY", "note": "Feedback is not in assignment-v1."},
-        {"raw_field": "zyfjid", "canonical_field": "assignment.attachments_state", "transform": "hint true plus no resolved list means UNRESOLVED", "required": false, "disposition": "DERIVED", "note": "Hint is not an attachment."}
+        {"raw_field": "zyfjid", "canonical_field": "assignment.attachments_state", "transform": "hint true plus no resolved list means UNRESOLVED", "required": false, "disposition": "DERIVED", "note": "Hint is not an attachment."},
+        {"raw_field": "zywcfs/completionType", "canonical_field": null, "transform": "decode and retain", "required": false, "disposition": "RETAINED_SOURCE_ONLY", "note": "Completion type is not in assignment-v1."},
+        {"raw_field": "zytjfs/submissionType", "canonical_field": null, "transform": "decode and retain", "required": false, "disposition": "RETAINED_SOURCE_ONLY", "note": "Submission type is not a verified write contract."}
       ],
       "errors": ["AUTH_REQUIRED", "InterfaceDriftError", "ASSIGNMENT_COURSE_MISMATCH", "ASSIGNMENT_NOT_FOUND_IN_CURRENT_LIST"],
       "unresolved": ["No upload, draft-save or final-submit endpoint is verified.", "Assignment feedback is retained source-only."],
@@ -211,6 +220,7 @@
     },
     {
       "source_id": "learn.course_files",
+      "owner": "Hermes",
       "service": "learn",
       "operation": "course_files",
       "service_domain": "LEARN",
@@ -228,11 +238,11 @@
         "kind": "PAGE",
         "page_parameter": "page",
         "offset_parameter": null,
-        "page_size_parameter": "rows/size",
+        "page_size_parameter": "rows",
         "total_field": "records",
         "next_field": null,
         "max_pages": 100,
-        "notes": "Categories: 100 rows per page. Unclassified list uses size=200; reaching 200 marks completeness unknown."
+        "notes": "Categories use rows=100; the unclassified list uses size=200; reaching 200 marks completeness unknown."
       },
       "field_mappings": [
         {"raw_field": "kjflid/id", "canonical_field": null, "transform": "validate and retain category", "required": false, "disposition": "RETAINED_SOURCE_ONLY", "note": "Category is not a resource identity."},
@@ -241,11 +251,28 @@
         {"raw_field": "category row[9]", "canonical_field": "resource.byte_size", "transform": "integer; 0 allowed", "required": false, "disposition": "MAPPED", "note": "Zero is a real source value, not unknown."},
         {"raw_field": "category row[13]", "canonical_field": "resource.mime_type", "transform": "lowercase MIME; fallback application/octet-stream", "required": false, "disposition": "MAPPED", "note": "Fallback is explicit, not verified."},
         {"raw_field": "category row[6]", "canonical_field": "resource.source_updated_at", "transform": "normalize timestamp", "required": false, "disposition": "MAPPED", "note": "Source timestamp."},
+        {"raw_field": "wlkcid", "canonical_field": "resource.course_uid", "transform": "join to a verified course record; null when the course id is unavailable", "required": false, "disposition": "DERIVED", "note": "Course relation is not part of the resource title."},
         {"raw_field": "unclassified wjid/id", "canonical_field": "resource.source_record_id", "transform": "validate identifier", "required": true, "disposition": "MAPPED", "note": "Stable file id."},
         {"raw_field": "unclassified bt", "canonical_field": "resource.title", "transform": "decode and trim", "required": true, "disposition": "MAPPED", "note": "Display name."},
         {"raw_field": "unclassified wjdx", "canonical_field": "resource.byte_size", "transform": "integer", "required": false, "disposition": "MAPPED", "note": "Zero allowed."},
         {"raw_field": "unclassified wjlx", "canonical_field": "resource.mime_type", "transform": "lowercase MIME", "required": false, "disposition": "MAPPED", "note": "Fallback is explicit."},
-        {"raw_field": "unclassified scsj", "canonical_field": "resource.source_updated_at", "transform": "normalize timestamp", "required": false, "disposition": "MAPPED", "note": "Source timestamp."}
+        {"raw_field": "unclassified scsj", "canonical_field": "resource.source_updated_at", "transform": "normalize timestamp", "required": false, "disposition": "MAPPED", "note": "Source timestamp."},
+        {"raw_field": "category row[7]", "canonical_field": "attachment.source_record_id", "transform": "validate identifier", "required": true, "disposition": "MAPPED", "note": "Same source file id used by resource-v1; attachment-v1 is a separate view."},
+        {"raw_field": "category row[1]", "canonical_field": "attachment.display_name", "transform": "decode and trim", "required": true, "disposition": "MAPPED", "note": "Display name only; never identity."},
+        {"raw_field": "category row[9]", "canonical_field": "attachment.byte_size", "transform": "integer; 0 allowed", "required": false, "disposition": "MAPPED", "note": "Source size; download is not implied."},
+        {"raw_field": "category row[13]", "canonical_field": "attachment.mime_type", "transform": "lowercase MIME; fallback application/octet-stream", "required": false, "disposition": "MAPPED", "note": "Fallback is explicit."},
+        {"raw_field": "unclassified wjid/id", "canonical_field": "attachment.source_record_id", "transform": "validate identifier", "required": true, "disposition": "MAPPED", "note": "Same source file id used by resource-v1."},
+        {"raw_field": "unclassified bt", "canonical_field": "attachment.display_name", "transform": "decode and trim", "required": true, "disposition": "MAPPED", "note": "Display name only."},
+        {"raw_field": "unclassified wjdx", "canonical_field": "attachment.byte_size", "transform": "integer; 0 allowed", "required": false, "disposition": "MAPPED", "note": "Source size; download is not implied."},
+        {"raw_field": "unclassified wjlx", "canonical_field": "attachment.mime_type", "transform": "lowercase MIME; fallback application/octet-stream", "required": false, "disposition": "MAPPED", "note": "Fallback is explicit."},
+        {"raw_field": "source_id + file id", "canonical_field": "attachment.attachment_uid", "transform": "derive <source_id>:ATTACHMENT:<source_record_id>; never hash the display name or relative path", "required": true, "disposition": "DERIVED", "note": "Attachment identity is stable only when the source file id exists."},
+        {"raw_field": "wlkcid", "canonical_field": "attachment.course_uid", "transform": "join to a verified course record; null when the course id is unavailable", "required": false, "disposition": "DERIVED", "note": "Do not synthesize a course uid from the title."},
+        {"raw_field": "list read", "canonical_field": "attachment.download_state", "transform": "LIST_READ after the file list is read; DOWNLOADED only after a verified local download with SHA256", "required": true, "disposition": "DERIVED", "note": "Reading metadata is not downloading the file."},
+        {"raw_field": "source id presence", "canonical_field": "attachment.identity_state", "transform": "STABLE with a source file id; MISSING_STABLE_ID otherwise", "required": true, "disposition": "DERIVED", "note": "A display name is never identity."},
+        {"raw_field": "not downloaded", "canonical_field": "attachment.sha256", "transform": "null until a local download is verified", "required": false, "disposition": "DERIVED", "note": "Never invent a hash."},
+        {"raw_field": "not downloaded", "canonical_field": "attachment.media_id", "transform": "null until a media-reference-v1 record exists", "required": false, "disposition": "DERIVED", "note": "No local media reference yet."},
+        {"raw_field": "policy", "canonical_field": "attachment.external_transfer_allowed", "transform": "always false", "required": true, "disposition": "DERIVED", "note": "Source attachments never become externally transferable by default."},
+        {"raw_field": "source_id", "canonical_field": "attachment.source_evidence_id", "transform": "retain the source row id", "required": true, "disposition": "DERIVED", "note": "Traceability back to this registry row."}
       ],
       "errors": ["AUTH_REQUIRED", "InterfaceDriftError", "UNCATEGORIZED_FILES_COMPLETENESS_UNKNOWN", "CATEGORY_FILE_ROW_CHANGED"],
       "unresolved": ["Unclassified list capped at 200 rows; completeness is unknown at the cap.", "Category membership is retained source-only."],
@@ -255,6 +282,7 @@
     },
     {
       "source_id": "learn.calendar",
+      "owner": "Hermes",
       "service": "learn",
       "operation": "calendar",
       "service_domain": "LEARN",
@@ -295,6 +323,7 @@
     },
     {
       "source_id": "library.catalog_search",
+      "owner": "Hermes",
       "service": "library",
       "operation": "catalog_search",
       "service_domain": "LIBRARY",
@@ -337,6 +366,7 @@
     },
     {
       "source_id": "library.catalog_detail",
+      "owner": "Hermes",
       "service": "library",
       "operation": "catalog_detail",
       "service_domain": "LIBRARY",
@@ -377,6 +407,7 @@
     },
     {
       "source_id": "library.database_links",
+      "owner": "Hermes",
       "service": "library",
       "operation": "database_links",
       "service_domain": "LIBRARY",
@@ -416,6 +447,7 @@
     },
     {
       "source_id": "library.loans",
+      "owner": "Hermes",
       "service": "library",
       "operation": "loans",
       "service_domain": "LIBRARY",
@@ -431,7 +463,7 @@
       "code_refs": ["src/thu_assistant/library.py:292-382"],
       "pagination": {
         "kind": "PAGE",
-        "page_parameter": "offset",
+        "page_parameter": null,
         "offset_parameter": "offset",
         "page_size_parameter": "bulk",
         "total_field": null,
@@ -456,6 +488,7 @@
     },
     {
       "source_id": "library.seat_availability",
+      "owner": "Hermes",
       "service": "library",
       "operation": "seat_availability",
       "service_domain": "LIBRARY",
@@ -493,6 +526,7 @@
     },
     {
       "source_id": "library.room_availability",
+      "owner": "Hermes",
       "service": "library",
       "operation": "room_availability",
       "service_domain": "LIBRARY",
@@ -531,6 +565,7 @@
     },
     {
       "source_id": "sports.scenes",
+      "owner": "Hermes",
       "service": "sports",
       "operation": "scenes",
       "service_domain": "SPORTS",
@@ -568,6 +603,7 @@
     },
     {
       "source_id": "sports.availability",
+      "owner": "Hermes",
       "service": "sports",
       "operation": "availability",
       "service_domain": "SPORTS",
@@ -607,6 +643,7 @@
     },
     {
       "source_id": "sports.orders",
+      "owner": "Hermes",
       "service": "sports",
       "operation": "orders",
       "service_domain": "SPORTS",
@@ -652,6 +689,7 @@
     },
     {
       "source_id": "madmodel.catalog",
+      "owner": "Hermes",
       "service": "madmodel",
       "operation": "catalog",
       "service_domain": "MADMODEL",
@@ -690,6 +728,7 @@
     },
     {
       "source_id": "madmodel.generate",
+      "owner": "Hermes",
       "service": "madmodel",
       "operation": "generate",
       "service_domain": "MADMODEL",
@@ -728,6 +767,7 @@
     },
     {
       "source_id": "model.image_input",
+      "owner": "Hermes",
       "service": "madmodel",
       "operation": "image_input",
       "service_domain": "MADMODEL",
@@ -760,6 +800,7 @@
     },
     {
       "source_id": "visitors.form",
+      "owner": "Hermes",
       "service": "visitors",
       "operation": "visit_form",
       "service_domain": "INFO",
@@ -792,6 +833,7 @@
     },
     {
       "source_id": "academics.timetable",
+      "owner": "Hermes",
       "service": "academics",
       "operation": "timetable",
       "service_domain": "LEARN",
@@ -824,6 +866,7 @@
     },
     {
       "source_id": "academics.exams",
+      "owner": "Hermes",
       "service": "academics",
       "operation": "exams",
       "service_domain": "LEARN",
@@ -856,6 +899,7 @@
     },
     {
       "source_id": "academics.grades",
+      "owner": "Hermes",
       "service": "academics",
       "operation": "grades",
       "service_domain": "LEARN",
@@ -888,6 +932,7 @@
     },
     {
       "source_id": "learn.submission",
+      "owner": "Hermes",
       "service": "learn",
       "operation": "assignment_submission",
       "service_domain": "LEARN",
@@ -920,6 +965,7 @@
     },
     {
       "source_id": "library.renewal",
+      "owner": "Hermes",
       "service": "library",
       "operation": "renewal",
       "service_domain": "LIBRARY",
@@ -935,7 +981,7 @@
       "code_refs": ["src/thu_assistant/library.py:301-321"],
       "pagination": {
         "kind": "PAGE",
-        "page_parameter": "offset",
+        "page_parameter": null,
         "offset_parameter": "offset",
         "page_size_parameter": "bulk",
         "total_field": null,
@@ -946,7 +992,9 @@
       "field_mappings": [
         {"raw_field": "renew", "canonical_field": "order.renewal_state", "transform": "Y->ELIGIBLE, N->NOT_ELIGIBLE, other->UNKNOWN", "required": false, "disposition": "MAPPED", "note": "Eligibility only."},
         {"raw_field": "renewstatuses.renewstatus", "canonical_field": "renewal.eligibility_hint", "transform": "join plain text", "required": false, "disposition": "MAPPED", "note": "Hint only."},
-        {"raw_field": "duedate/duehour", "canonical_field": "order.due_at", "transform": "retain before renewal", "required": false, "disposition": "MAPPED", "note": "Must not change until verified execution."}
+        {"raw_field": "duedate/duehour", "canonical_field": "order.due_at", "transform": "retain before renewal", "required": false, "disposition": "MAPPED", "note": "Must not change until verified execution."},
+        {"raw_field": "loanid", "canonical_field": "renewal.loan_uid", "transform": "derive library.loans:ORDER:<loanid> from the joined loan record", "required": true, "disposition": "DERIVED", "note": "Renewal identity must link to the source loan, not a session label."},
+        {"raw_field": "source_id + loanid", "canonical_field": "renewal.renewal_uid", "transform": "derive <source_id>:RENEWAL:<loan_uid>", "required": true, "disposition": "DERIVED", "note": "The renewal uid must contain the loan uid exactly."}
       ],
       "errors": ["AUTH_REQUIRED", "LIBRARY_LOAN_PAGE_FAILED", "LIBRARY_WRITES_DISABLED"],
       "unresolved": ["No verified renewal execution endpoint.", "No verified success receipt or new due date.", "Eligibility must not be reported as success."],
@@ -956,6 +1004,7 @@
     },
     {
       "source_id": "library.seat_booking",
+      "owner": "Hermes",
       "service": "library",
       "operation": "seat_booking",
       "service_domain": "LIBRARY",
@@ -991,6 +1040,7 @@
     },
     {
       "source_id": "library.room_booking",
+      "owner": "Hermes",
       "service": "library",
       "operation": "room_booking",
       "service_domain": "LIBRARY",
@@ -1026,6 +1076,7 @@
     },
     {
       "source_id": "sports.booking",
+      "owner": "Hermes",
       "service": "sports",
       "operation": "booking",
       "service_domain": "SPORTS",
@@ -1061,6 +1112,7 @@
     },
     {
       "source_id": "sports.cancel",
+      "owner": "Hermes",
       "service": "sports",
       "operation": "cancel",
       "service_domain": "SPORTS",
@@ -1096,6 +1148,7 @@
   ],
   "x-compatibility-sample": {
     "source_id": "synthetic.courses",
+    "owner": "Hermes",
     "service": "learn",
     "operation": "courses",
     "service_domain": "LEARN",
@@ -1132,6 +1185,7 @@
       "why": "raw authenticated payload is never allowed",
       "value": {
         "source_id": "synthetic.courses",
+        "owner": "Hermes",
         "service": "learn",
         "operation": "courses",
         "service_domain": "LEARN",
@@ -1157,6 +1211,7 @@
       "why": "a planned source cannot claim live evidence",
       "value": {
         "source_id": "synthetic.planned",
+        "owner": "Hermes",
         "service": "academics",
         "operation": "timetable",
         "service_domain": "LEARN",
