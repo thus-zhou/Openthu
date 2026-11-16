@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -14,7 +15,36 @@ def clean(value: str) -> str:
     for marker in (str(root), os.environ.get("USERPROFILE", ""), os.environ.get("TEMP", "")):
         if marker:
             text = text.replace(marker, "<local>")
-    return text.replace("\r", "\\r")[:400]
+    return text.replace("\r", "\\r")[:300]
+
+
+def run(label: str, argv, *, timeout: int = 8):
+    env = keys._minimal_windows_env()
+    env["OPENTHU_ACL_PATH"] = str(target)
+    try:
+        result = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            check=False,
+            env=env,
+            stdin=subprocess.DEVNULL,
+        )
+    except subprocess.TimeoutExpired as exc:
+        print(label, "TIMEOUT", timeout)
+        print(label, "partial_out", clean((exc.stdout or "") if isinstance(exc.stdout, str) else ""))
+        print(label, "partial_err", clean((exc.stderr or "") if isinstance(exc.stderr, str) else ""))
+        return None
+    except Exception as exc:
+        print(label, "ERROR", type(exc).__name__, clean(str(exc)))
+        return None
+    print(label, "rc", result.returncode)
+    print(label, "stdout", clean(result.stdout))
+    print(label, "stderr", clean(result.stderr))
+    return result
 
 
 root = Path(tempfile.mkdtemp(prefix="openthu-acl-"))
@@ -22,13 +52,21 @@ root = Path(tempfile.mkdtemp(prefix="openthu-acl-"))
 target = root / "keys" / "master.key"
 target.write_bytes(b"x" * 42)
 print("env_keys", sorted(keys._minimal_windows_env()))
-print("powershell_exists", Path(keys._powershell()).is_file())
+print("where_powershell", shutil.which("powershell"))
+print("where_pwsh", shutil.which("pwsh"))
+print("windows_powershell_exists", Path(keys._powershell()).is_file())
+print("pwsh7_exists", Path(r"C:\Program Files\PowerShell\7\pwsh.exe").is_file())
+
+run("powershell_hi", [keys._powershell(), "-NoProfile", "-NonInteractive", "-Command", "Write-Output hi"], timeout=8)
+run("pwsh_hi", [r"C:\Program Files\PowerShell\7\pwsh.exe", "-NoProfile", "-NonInteractive", "-Command", "Write-Output hi"], timeout=8)
+run("icacls_help", ["icacls"], timeout=8)
 
 scripts = {
     "getacl": (
+        "Import-Module Microsoft.PowerShell.Security -ErrorAction Stop; "
         "[Console]::Out.Write(([System.Security.Principal.WindowsIdentity]::"
         "GetCurrent().User.Value) + \"`n\" + (Get-Acl -LiteralPath "
-        "$env:OPENTHU_ACL_PATH).Sddl)"
+        "$env:OPENTHU_ACL_PATH -ErrorAction Stop).Sddl)"
     ),
     "getitem": (
         "[Console]::Out.Write(([System.Security.Principal.WindowsIdentity]::"
@@ -38,43 +76,15 @@ scripts = {
 }
 sid = ""
 for label, script in scripts.items():
-    env = keys._minimal_windows_env()
-    env["OPENTHU_ACL_PATH"] = str(target)
-    result = subprocess.run(
-        [keys._powershell(), "-NoProfile", "-NonInteractive", "-Command", script],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=30,
-        check=False,
-        env=env,
-    )
-    lines = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
-    if lines and not sid:
-        sid = lines[0]
-    print(label, "rc", result.returncode, "lines", len(lines))
-    print(label, "stdout", clean(result.stdout))
-    print(label, "stderr", clean(result.stderr))
+    result = run(label, [keys._powershell(), "-NoProfile", "-NonInteractive", "-Command", script], timeout=8)
+    if result and result.stdout:
+        lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        if lines:
+            sid = lines[0]
 
-for label, args in (
-    ("inherit", ["icacls", str(target), "/inheritance:r"]),
-    ("grant", ["icacls", str(target), "/grant:r", f"*{sid}:F"]),
-):
-    env = keys._minimal_windows_env()
-    result = subprocess.run(
-        args,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=30,
-        check=False,
-        env=env,
-    )
-    print(label, "rc", result.returncode)
-    print(label, "stdout", clean(result.stdout))
-    print(label, "stderr", clean(result.stderr))
+if sid:
+    run("inherit", ["icacls", str(target), "/inheritance:r"])
+    run("grant", ["icacls", str(target), "/grant:r", f"*{sid}:F"])
 
 for label, call in (
     ("snapshot", lambda: keys._windows_acl_snapshot(target)),
