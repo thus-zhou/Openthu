@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/sources/data-models/renewal.schema.json",
+  "title": "Openthu v0.2 library renewal result",
+  "description": "Renewal eligibility, execution and the resulting due date are separate facts. An eligible hint does not prove a renewal succeeded, and a failed execution must not change the recorded due date.",
+  "x-contract-version": "renewal-v1",
+  "x-owner": "2.3/Hermes",
+  "x-status": "frozen",
+  "x-semantics": "Internal renewal result model for the future 5.1 adapter. The existing loans read exposes a renewable hint and hint strings only; it does not expose a verified execution endpoint.",
+  "x-identity-rule": "renewal_uid = <source_id>:RENEWAL:<loan_uid>; the loan_uid remains the source transaction identity. Eligibility and execution are independent axes.",
+  "x-unknown-values": {
+    "eligibility": "UNKNOWN",
+    "eligibility_hint": null,
+    "due_date_before": null,
+    "due_date_after": null,
+    "null_meaning": "not observed; never infer a new due date from eligibility"
+  },
+  "type": "object",
+  "required": [
+    "renewal_uid",
+    "loan_uid",
+    "source_id",
+    "eligibility",
+    "eligibility_hint",
+    "execution_state",
+    "due_date_before",
+    "due_date_after",
+    "verified",
+    "automatic_replay_allowed",
+    "source_evidence_id",
+    "synthetic"
+  ],
+  "properties": {
+    "renewal_uid": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{1,80}:RENEWAL:[A-Za-z0-9_.:-]{1,180}$",
+      "maxLength": 280
+    },
+    "loan_uid": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{1,80}:(?:ORDER|LOAN):[A-Za-z0-9_.:-]{1,180}$",
+      "maxLength": 280
+    },
+    "source_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{2,120}$"
+    },
+    "eligibility": {
+      "type": "string",
+      "enum": ["ELIGIBLE", "NOT_ELIGIBLE", "UNKNOWN"]
+    },
+    "eligibility_hint": {
+      "type": ["string", "null"],
+      "maxLength": 500
+    },
+    "execution_state": {
+      "type": "string",
+      "enum": ["NOT_ATTEMPTED", "ACCEPTED", "REJECTED", "FAILED", "UNKNOWN"]
+    },
+    "due_date_before": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "due_date_after": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "verified": {
+      "type": "boolean"
+    },
+    "automatic_replay_allowed": {
+      "const": false
+    },
+    "source_evidence_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 200}
+    },
+    "synthetic": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {"execution_state": {"const": "ACCEPTED"}},
+        "required": ["execution_state"]
+      },
+      "then": {
+        "properties": {
+          "verified": {"const": true},
+          "due_date_after": {"type": "string"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"execution_state": {"const": "FAILED"}},
+        "required": ["execution_state"]
+      },
+      "then": {
+        "properties": {"verified": {"const": false}}
+      }
+    }
+  ],
+  "x-compatibility-sample": {
+    "renewal_uid": "library.renewal:RENEWAL:SESSION-SYNTHETIC-LOAN-1",
+    "loan_uid": "library.loans:ORDER:SYNTHETIC-LOAN-1",
+    "source_id": "library.renewal",
+    "eligibility": "ELIGIBLE",
+    "eligibility_hint": "合成资格提示：可续借",
+    "execution_state": "FAILED",
+    "due_date_before": "2026-12-01T23:59:00+08:00",
+    "due_date_after": "2026-12-01T23:59:00+08:00",
+    "verified": false,
+    "automatic_replay_allowed": false,
+    "source_evidence_id": "library.renewal",
+    "warnings": ["RENEWAL_EXECUTION_FAILED"],
+    "synthetic": true
+  },
+  "x-rejection-samples": [
+    {
+      "why": "a failed renewal cannot claim a verified new due date",
+      "value": {
+        "renewal_uid": "library.renewal:RENEWAL:SESSION-SYNTHETIC-LOAN-1",
+        "loan_uid": "library.loans:ORDER:SYNTHETIC-LOAN-1",
+        "source_id": "library.renewal",
+        "eligibility": "ELIGIBLE",
+        "eligibility_hint": "合成资格提示：可续借",
+        "execution_state": "FAILED",
+        "due_date_before": "2026-12-01T23:59:00+08:00",
+        "due_date_after": "2026-12-05T23:59:00+08:00",
+        "verified": true,
+        "automatic_replay_allowed": false,
+        "source_evidence_id": "library.renewal",
+        "synthetic": true
+      }
+    },
+    {
+      "why": "an accepted renewal requires a verified new due date",
+      "value": {
+        "renewal_uid": "library.renewal:RENEWAL:SESSION-SYNTHETIC-LOAN-1",
+        "loan_uid": "library.loans:ORDER:SYNTHETIC-LOAN-1",
+        "source_id": "library.renewal",
+        "eligibility": "ELIGIBLE",
+        "eligibility_hint": "合成资格提示：可续借",
+        "execution_state": "ACCEPTED",
+        "due_date_before": "2026-12-01T23:59:00+08:00",
+        "due_date_after": null,
+        "verified": false,
+        "automatic_replay_allowed": false,
+        "source_evidence_id": "library.renewal",
+        "synthetic": true
+      }
+    }
+  ]
+}

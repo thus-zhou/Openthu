@@ -73,11 +73,18 @@
       "module_status": {
         "2.1": "pending",
         "2.2": "pending",
-        "2.3": "pending"
+        "2.3": "accepted"
       },
       "status": "ready",
       "integration_commit": null,
       "accepted_at": null,
+      "module_acceptance": {
+        "2.3": {
+          "accepted_at": "2026-11-16",
+          "delivery_commit": "the commit containing this record",
+          "evidence": "29 sources; 10 models; 8 tasks; 14 readiness rows; 7 fixtures; validator ok=true; no live campus calls"
+        }
+      },
       "entry_condition": "all batch 1 modules accepted and integrated",
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     },

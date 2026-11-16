@@ -1,0 +1,43 @@
+{
+  "fixture_id": "missing-stable-id",
+  "synthetic": true,
+  "description": "Two same-title courses have no stable source record id. They must not be merged and no course_uid may be synthesized from the title.",
+  "schema": "contracts/v0.2/sources/data-models/course.schema.json",
+  "records": [
+    {
+      "source_id": "learn.courses",
+      "source_record_id": null,
+      "course_uid": null,
+      "semester_id": "2026-2027-1",
+      "title": "同名课程",
+      "teacher_names": ["合成教师甲"],
+      "role": "STUDENT",
+      "identity_state": "MISSING_STABLE_ID",
+      "dedupe_state": "NOT_DEDUPED",
+      "observed_at": "2026-11-16T12:00:00+00:00",
+      "source_evidence_id": "learn.courses",
+      "warnings": ["MISSING_STABLE_SOURCE_ID"],
+      "synthetic": true
+    },
+    {
+      "source_id": "learn.courses",
+      "source_record_id": null,
+      "course_uid": null,
+      "semester_id": "2026-2027-1",
+      "title": "同名课程",
+      "teacher_names": ["合成教师乙"],
+      "role": "STUDENT",
+      "identity_state": "MISSING_STABLE_ID",
+      "dedupe_state": "NOT_DEDUPED",
+      "observed_at": "2026-11-16T12:00:00+00:00",
+      "source_evidence_id": "learn.courses",
+      "warnings": ["MISSING_STABLE_SOURCE_ID"],
+      "synthetic": true
+    }
+  ],
+  "expected": {
+    "course_uids_are_null": true,
+    "merged_by_title": false,
+    "synthesized_identifier": false
+  }
+}

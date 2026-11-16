@@ -1,0 +1,25 @@
+{
+  "fixture_id": "model-catalog-mismatch",
+  "synthetic": true,
+  "description": "The catalog lists a model as image-capable, but the current proxy request protocol is not verified. The capability conclusion must remain UNVERIFIED.",
+  "schema": "contracts/v0.2/sources/data-models/model-image-capability.schema.json",
+  "record": {
+    "model_id": "synthetic-model-a",
+    "source_id": "model.image_input",
+    "catalog_state": "LISTED",
+    "catalog_support_image": true,
+    "protocol_state": "UNVERIFIED",
+    "capability_state": "UNVERIFIED",
+    "reason_code": "IMAGE_PROTOCOL_NOT_VERIFIED",
+    "evidence_level": "OFFLINE_CONTRACT",
+    "checked_at": "2026-11-16T12:00:00+00:00",
+    "source_evidence_id": "model.image_input",
+    "warning": "目录标记支持图片不等于当前代理可传输图片",
+    "synthetic": true
+  },
+  "expected": {
+    "catalog_flag_is_not_runtime_evidence": true,
+    "capability_state": "UNVERIFIED",
+    "available": false
+  }
+}

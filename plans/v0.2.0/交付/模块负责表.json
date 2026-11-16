@@ -99,7 +99,15 @@
         "跨平台认证加密存储、随机主密钥、权限/链接检查、旧 DPAPI 只读兼容"
       ],
       "integration_order": 3,
-      "status": "pending"
+      "status": "accepted",
+      "accepted_at": "2026-11-16",
+      "delivery_commit": "713e527",
+      "evidence": [
+        "AES-256-GCM envelope, Windows DPAPI and POSIX owner-only key backends",
+        "22 Linux module tests passed, 3 Windows-only tests deferred to CI",
+        "clean delivery-tree full offline suite: Python 467 passed/5 skipped, Node 54 passed",
+        "check: 335 files, 0 findings; plan and contract validators ok"
+      ]
     },
     {
       "id": "2.3",
@@ -128,7 +136,15 @@
         "校园来源证据、字段映射、阻塞登记和合成来源夹具"
       ],
       "integration_order": 4,
-      "status": "pending"
+      "status": "accepted",
+      "accepted_at": "2026-11-16",
+      "delivery_commit": "the commit containing this record",
+      "evidence": [
+        "29 source rows, 10 domain models, 8 source tasks, 14 adapter-readiness rows, 7 synthetic fixtures",
+        "contracts/v0.2/sources/validate.py: ok=true; 9 schema samples, 21 rejection samples",
+        "tests/test_source_contracts.py: 3 passed",
+        "shared-tree check: 335 files, 0 findings; test: 470 Python passed/5 skipped, 54 Node passed; warning in a 2.1 diagnostics thread test"
+      ]
     },
     {
       "id": "3.1",

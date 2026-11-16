@@ -148,7 +148,23 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "校园来源证据、字段映射、阻塞登记和合成来源夹具",
-      "evidence": []
+      "output_contracts": [
+        "course-v1",
+        "resource-v1",
+        "grade-v1",
+        "order-v1",
+        "attachment-v1",
+        "assignment-v1",
+        "submission-v1",
+        "renewal-v1",
+        "model-image-capability-v1"
+      ],
+      "evidence": [
+        "Source registry: 29 sources, 8 source tasks, 14 adapter-readiness rows.",
+        "Domain model manifest: 10 models; event reuses calendar-event-v1.",
+        "Validator: 9 schema samples, 21 rejection samples, 7 fixtures, ok=true.",
+        "Tests: tests/test_source_contracts.py passed; no live campus, model, payment or submission calls."
+      ]
     },
     {
       "id": "3.1",

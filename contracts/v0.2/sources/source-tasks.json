@@ -1,0 +1,268 @@
+{
+  "x-schema-version": 1,
+  "x-contract-version": "source-tasks-v1",
+  "x-owner": "2.3/Hermes",
+  "x-status": "frozen",
+  "x-semantics": "Open source-evidence tasks for capabilities whose production adapter must not be guessed. A task is not a promise that the capability is available; it records exactly what evidence is missing.",
+  "x-unknown-values": {
+    "entry_ref": null,
+    "blocking_reason": null,
+    "null_meaning": "not yet verified; the capability remains blocked or limited"
+  },
+  "tasks": [
+    {
+      "task_id": "task.academics.timetable",
+      "capability": "个人课表",
+      "module": "4.1",
+      "source_ids": ["academics.timetable"],
+      "owner": "Hermes / local evidence owner",
+      "status": "BLOCKED",
+      "checked_at": "2026-11-16",
+      "question": "Which official source exposes a student's personal timetable with a stable term, course, week-pattern, room and occurrence identity?",
+      "known_evidence": [
+        "The registrar teaching calendar via Learn SSO returns nq/kssj/jssj/nr/dd/fl rows.",
+        "The same adapter explicitly says its scope is a selected registrar teaching calendar and not all teaching or exam arrangements."
+      ],
+      "evidence_refs": [
+        "src/learn_assistant/providers/learn_read.py:234-269",
+        "docs/CAPABILITIES.md"
+      ],
+      "missing_evidence": [
+        "Official endpoint or page for the personal timetable.",
+        "Term identifier, course identifier and week/period semantics.",
+        "Room and occurrence identity.",
+        "Read permission and completeness scope."
+      ],
+      "forbidden_inferences": [
+        "Do not derive a personal timetable from the registrar teaching calendar.",
+        "Do not infer a course or week from a title or array position.",
+        "Do not guess an endpoint from an unrelated page."
+      ],
+      "start_conclusion": "BLOCKED_SOURCE_EVIDENCE",
+      "next_action": "Have the authorized local owner capture the official timetable page structure and field inventory, then store only sanitized field names, synthetic samples and summary hashes.",
+      "blocking_reason": "No verified timetable source or field mapping exists."
+    },
+    {
+      "task_id": "task.academics.exams",
+      "capability": "考试安排",
+      "module": "4.1",
+      "source_ids": ["academics.exams"],
+      "owner": "Hermes / local evidence owner",
+      "status": "BLOCKED",
+      "checked_at": "2026-11-16",
+      "question": "Which official source exposes exam session, date, time, room, seat and release state for the current student?",
+      "known_evidence": [
+        "The registrar teaching calendar is explicitly not a complete exam source.",
+        "No exam parser, endpoint or fixture exists in the repository."
+      ],
+      "evidence_refs": [
+        "src/learn_assistant/providers/learn_read.py:268-269",
+        "docs/CAPABILITIES.md"
+      ],
+      "missing_evidence": [
+        "Official exam endpoint or page.",
+        "Exam identifier, course association and date/time precision.",
+        "Room/seat and release or cancellation state.",
+        "Completeness and permission semantics."
+      ],
+      "forbidden_inferences": [
+        "Do not infer exams from the teaching calendar.",
+        "Do not pad a date-only exam to midnight.",
+        "Do not treat a missing exam row as no exam."
+      ],
+      "start_conclusion": "BLOCKED_SOURCE_EVIDENCE",
+      "next_action": "Collect a sanitized exam field inventory from the authorized local owner; keep raw responses out of the repository.",
+      "blocking_reason": "No verified exam source or result shape exists."
+    },
+    {
+      "task_id": "task.academics.grades",
+      "capability": "课程成绩",
+      "module": "4.1",
+      "source_ids": ["academics.grades"],
+      "owner": "Hermes / local evidence owner",
+      "status": "BLOCKED",
+      "checked_at": "2026-11-16",
+      "question": "Which official source exposes course grades with semester, course identity, grade scale, credits and publication state?",
+      "known_evidence": [
+        "Assignment grade fields exist in the Learn read adapter, but they are assignment-level and not course grades.",
+        "No course-grade endpoint, parser or schema instance exists."
+      ],
+      "evidence_refs": [
+        "src/learn_assistant/models.py:28-54",
+        "docs/CAPABILITIES.md"
+      ],
+      "missing_evidence": [
+        "Official course-grade source.",
+        "Course and semester identifiers that join to a stable course record.",
+        "Grade scale, credits and publication/withheld state.",
+        "Whether a missing value means unpublished, withheld or not applicable."
+      ],
+      "forbidden_inferences": [
+        "Do not convert a missing grade to zero.",
+        "Do not compute GPA, rank or credit totals from incomplete data.",
+        "Do not treat assignment grades as course grades."
+      ],
+      "start_conclusion": "BLOCKED_SOURCE_EVIDENCE",
+      "next_action": "Collect a sanitized course-grade field inventory and define the grade-v1 sample against it; no real transcript export in the repository.",
+      "blocking_reason": "No verified course-grade source or publication semantics exist."
+    },
+    {
+      "task_id": "task.learn.submission",
+      "capability": "作业上传与正式提交",
+      "module": "5.3",
+      "source_ids": ["learn.submission"],
+      "owner": "Hermes / local evidence owner",
+      "status": "BLOCKED",
+      "checked_at": "2026-11-16",
+      "question": "What are the official upload, draft-save, final-submit, version-overwrite and result-query boundaries?",
+      "known_evidence": [
+        "Assignment lists and details are read-only.",
+        "The local core has file validation and a preparation path, but no verified campus upload or final submit.",
+        "No draft-save or result-query endpoint is registered."
+      ],
+      "evidence_refs": [
+        "src/learn_assistant/providers/learn_read.py:143-176",
+        "src/learn_assistant/core.py:330-380"
+      ],
+      "missing_evidence": [
+        "Upload endpoint and multipart/field contract.",
+        "Draft-save versus final-submit endpoints and their distinct responses.",
+        "Version overwrite semantics and server-side receipt.",
+        "Result-query endpoint and exact status fields.",
+        "Permission and deadline rules."
+      ],
+      "forbidden_inferences": [
+        "A successful upload is not a saved draft.",
+        "A saved draft is not a final submission.",
+        "A local preparation is not a campus write.",
+        "An uncertain submit must never be replayed automatically."
+      ],
+      "start_conclusion": "BLOCKED_SOURCE_EVIDENCE",
+      "next_action": "Inspect the official form and response shapes without submitting a real assignment; record synthetic fixtures and a precise host-authorization requirement.",
+      "blocking_reason": "Only read-side assignment support exists; write endpoints and result semantics are unverified."
+    },
+    {
+      "task_id": "task.library.renewal",
+      "capability": "图书馆续借",
+      "module": "5.1",
+      "source_ids": ["library.renewal", "library.loans"],
+      "owner": "Hermes / local evidence owner",
+      "status": "BLOCKED",
+      "checked_at": "2026-11-16",
+      "question": "What distinguishes renewal eligibility, execution acceptance, execution failure and the new due date?",
+      "known_evidence": [
+        "Active loans expose renew=Y/N and renewal_hints text.",
+        "No renewal execution endpoint, success receipt or new-due-date read is implemented."
+      ],
+      "evidence_refs": [
+        "src/thu_assistant/library.py:301-321"
+      ],
+      "missing_evidence": [
+        "Renewal execution endpoint and exact request body.",
+        "Success, rejection and failure response semantics.",
+        "New due date and revision/version fields.",
+        "Eligibility rules and account restrictions."
+      ],
+      "forbidden_inferences": [
+        "An eligible hint is not a successful renewal.",
+        "Do not change the due date before an execution result is verified.",
+        "Do not retry an uncertain renewal automatically."
+      ],
+      "start_conclusion": "BLOCKED_SOURCE_EVIDENCE",
+      "next_action": "Collect sanitized renewal form and result shapes without clicking renew; define the renewal-v1 acceptance fixture with a failed execution and unchanged due date.",
+      "blocking_reason": "Eligibility hints exist; execution and result semantics do not."
+    },
+    {
+      "task_id": "task.model.image_input",
+      "capability": "模型图片输入",
+      "module": "4.5",
+      "source_ids": ["model.image_input", "madmodel.catalog", "madmodel.generate"],
+      "owner": "Hermes / local evidence owner",
+      "status": "BLOCKED",
+      "checked_at": "2026-11-16",
+      "question": "Does the current authenticated madmodel proxy accept image content, and if so in what request shape and under which model/limits?",
+      "known_evidence": [
+        "The official catalog exposes a supportImage boolean and lists models with availability LISTED_NOT_PROBED.",
+        "The current generation payload is text-only."
+      ],
+      "evidence_refs": [
+        "src/thu_assistant/models.js:5-58",
+        "src/thu_assistant/models.js:83-136",
+        "src/thu_assistant/models.py:89-98"
+      ],
+      "missing_evidence": [
+        "Actual image content-part or media request shape.",
+        "Which catalog models accept images through the current proxy.",
+        "Media byte, pixel and count limits enforced by the platform.",
+        "Response shape and error semantics for rejected images."
+      ],
+      "forbidden_inferences": [
+        "Catalog supportImage=true does not prove the proxy can transport images.",
+        "Do not probe by sending a personal image.",
+        "Do not mark image input AVAILABLE until the protocol is verified."
+      ],
+      "start_conclusion": "BLOCKED_SOURCE_EVIDENCE",
+      "next_action": "Use official documentation or a synthetic image probe authorized by the owner; otherwise keep capability_state=UNVERIFIED and implement only local media validation.",
+      "blocking_reason": "The catalog flag and the actual transport protocol are different evidence axes."
+    },
+    {
+      "task_id": "task.visitors.form",
+      "capability": "亲友来访报备",
+      "module": "4.4",
+      "source_ids": ["visitors.form"],
+      "owner": "Hermes / local evidence owner",
+      "status": "BLOCKED",
+      "checked_at": "2026-11-16",
+      "question": "What is the current official visitor form contract, permission model and result state?",
+      "known_evidence": [
+        "Only an official entry URL is registered.",
+        "No visitor adapter, form parser or result fixture exists."
+      ],
+      "evidence_refs": [
+        "src/thu_assistant/services.json:13",
+        "docs/CAPABILITIES.md"
+      ],
+      "missing_evidence": [
+        "Current form fields and validation rules.",
+        "Account permission and approval flow.",
+        "Submission result, cancellation and status query semantics."
+      ],
+      "forbidden_inferences": [
+        "Seeing a form is not an implemented adapter.",
+        "Do not submit a real visitor application to create evidence."
+      ],
+      "start_conclusion": "BLOCKED_SOURCE_EVIDENCE",
+      "next_action": "Keep the generic browser handoff; collect official form documentation if the capability is later prioritized.",
+      "blocking_reason": "The form contract and permission model are not verified."
+    },
+    {
+      "task_id": "task.learn.calendar_scope",
+      "capability": "教学日历",
+      "module": "5.4",
+      "source_ids": ["learn.calendar"],
+      "owner": "Hermes",
+      "status": "LIMITED",
+      "checked_at": "2026-11-16",
+      "question": "What is the exact scope and status semantics of the registrar teaching calendar exposed through Learn SSO?",
+      "known_evidence": [
+        "The adapter reads 27-day windows and requires nq/kssj/jssj/nr.",
+        "It labels the scope as a selected registrar teaching calendar, not all teaching or exam arrangements."
+      ],
+      "evidence_refs": [
+        "src/learn_assistant/providers/learn_read.py:234-269"
+      ],
+      "missing_evidence": [
+        "Whether every returned row is a class session, an exam or another teaching arrangement.",
+        "The meaning of the fl field.",
+        "Coverage across terms and graduate/undergraduate variants."
+      ],
+      "forbidden_inferences": [
+        "Do not map fl directly to calendar-event status.",
+        "Do not treat this calendar as a full timetable or exam schedule."
+      ],
+      "start_conclusion": "CONTRACT_READY_WITH_LIMITS",
+      "next_action": "Use only the verified nq/kssj/jssj/nr/dd fields for event projection and keep fl source-only; document the scope warning in every result.",
+      "blocking_reason": null
+    }
+  ]
+}
