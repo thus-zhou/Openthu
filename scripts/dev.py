@@ -110,7 +110,12 @@ def main():
         if not npm:
             parser.error('Node.js 24 and npm are required; install Node.js 24 from https://nodejs.org/ and retry')
         registry=config.network.npm_registry
-        return subprocess.call([npm,'ci','--ignore-scripts','--no-audit','--no-fund','--registry='+registry],cwd=ROOT/'src/thu_assistant')
+        argv=diagnostics_module().executable_argv(
+            npm,
+            ['ci','--ignore-scripts','--no-audit','--no-fund','--registry='+registry],
+            platform_name=os.name,
+        )
+        return subprocess.call(argv,cwd=ROOT/'src/thu_assistant')
     with tempfile.TemporaryDirectory(prefix='openthu-offline-') as tmp:
         env=environment(Path(tmp))
         if args.command in ('check','smoke'):

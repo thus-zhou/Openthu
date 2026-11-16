@@ -77,6 +77,22 @@ def _version_tuple(text):
     return tuple(int(part) for part in safe.split("."))
 
 
+def executable_argv(path, args, *, platform_name=None):
+    """Build a fixed argv for a resolved executable, including Windows .cmd.
+
+    ``shell=True`` is never used.  A Windows batch wrapper is invoked through
+    the system command processor with a quoted, fixed argument list; nothing
+    from a diagnostic fix string is executed.
+    """
+    platform_name = platform_name or os.name
+    suffix = Path(str(path)).suffix.lower()
+    if platform_name == "nt" and suffix in (".cmd", ".bat"):
+        comspec = os.environ.get("COMSPEC") or "cmd.exe"
+        command = subprocess.list2cmdline([str(path), *args])
+        return [comspec, "/d", "/s", "/c", command]
+    return [str(path), *args]
+
+
 def _command_version(path):
     """Run one executable with a fixed argument and bounded output.
 
@@ -88,7 +104,7 @@ def _command_version(path):
     """
     try:
         process = subprocess.Popen(
-            [str(path), "--version"],
+            executable_argv(path, ["--version"]),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=False,

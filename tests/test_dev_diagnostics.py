@@ -5,8 +5,11 @@ import importlib.util
 import json
 from pathlib import Path
 from types import SimpleNamespace
+import os
 import subprocess
 import sys
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -235,6 +238,30 @@ def test_doctor_json_exposes_categories_and_stable_exit():
     statuses = {row["status"] for row in payload["checks"]}
     assert statuses <= {"pass", "warning", "fail", "not_applicable"}
     assert (result.returncode == 0) == payload["ok"]
+
+
+def test_executable_argv_quotes_windows_cmd_without_shell():
+    module = load_diagnostics()
+    argv = module.executable_argv(
+        r"D:\Program Files\nodejs\npm.cmd",
+        ["ci", "--registry=https://registry.npmjs.org"],
+        platform_name="nt",
+    )
+    assert argv[0].lower().endswith("cmd.exe") or argv[0].lower().endswith("cmd")
+    assert argv[1:3] == ["/d", "/s"]
+    assert argv[3] == "/c"
+    assert "npm.cmd" in argv[4]
+    assert "Program Files" in argv[4]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX shell fixture")
+def test_command_version_handles_an_executable_path_with_spaces(tmp_path):
+    module = load_diagnostics()
+    script = tmp_path / "fake node" / "node"
+    script.parent.mkdir()
+    script.write_text("#!/bin/sh\nprintf 'v24.18.0\\n'\n", encoding="utf-8")
+    script.chmod(0o755)
+    assert module._command_version(str(script)) == "24.18.0"
 
 
 def test_dev_entry_advertises_doctor_and_config_without_site_packages():
