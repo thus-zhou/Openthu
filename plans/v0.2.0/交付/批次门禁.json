@@ -275,9 +275,13 @@
         },
         "5.4": {
           "accepted_at": "2026-11-17",
-          "delivery_commit": "90dcdb5",
+          "delivery_commit": "6145ed2",
           "implementation_commit": "4172bce",
-          "evidence": "57 module tests and 203 related regression tests at 90dcdb5; audit 5.4-audit P0=0/P1=4/P2=12 closed; pure export, academic window filtering, full snapshot paging and monotonic SEQUENCE; 29 codes registered."
+          "evidence": "58 module tests and 203 related regression tests at 6145ed2; audit 5.4-audit P0=0/P1=4/P2=12 closed; pure export, academic window filtering, full snapshot paging and monotonic SEQUENCE; the follow-up keeps malformed academic events in the excluded report (6145ed2) and adds the MCP description regression (16083d9); 29 codes registered.",
+          "followup_commits": [
+            "16083d9",
+            "6145ed2"
+          ]
         }
       },
       "checks": [
@@ -291,7 +295,7 @@
         "live campus/model/business calls: 0/0/0",
         "GitHub Actions at ac99326: push run 44033470110 and pull_request run 44033475654; ubuntu-24.04 and windows-2025 both success"
       ],
-      "gate_note": "5.1 accepted at 6788e1a; 5.2 at 53d5957 with audit fix f0b2444; 5.3 at b49f86d; 5.4 at 90dcdb5. The single batch-5 integration commit ac99326 carries X1-X4 (learn switch isolation, renewal reconciliation shape, batch-5 seam tests, ledger correction) and is the first fully green joint tree: push 44033470110 and PR 44033475654 are green on ubuntu-24.04 and windows-2025 with 493 files/0 findings and 1267/7 Linux, 1261/13 Windows, Node 66. Batch 6 is ready."
+      "gate_note": "5.1 accepted at 6788e1a; 5.2 at 53d5957 with audit fix f0b2444; 5.3 at b49f86d; 5.4 at 6145ed2 (90dcdb5 audit fix plus the 16083d9/6145ed2 follow-up). The batch-5 integration tree carries X1-X4 (learn switch isolation, renewal reconciliation shape, batch-5 seam tests, ledger correction)."
     },
     {
       "batch": 6,
@@ -362,5 +366,5 @@
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     }
   ],
-  "gate_note": "Batches 1-5 accepted and reconnected. Batch 5 integration commit ac99326 (X1-X4): 493 files/0 findings, 29 MCP tools, Linux Python 1267/7, Windows 1261/13, Node 66/0, zero live calls. Push 44033470110 and PR 44033475654 are green on both platforms. Batch 6 is ready."
+  "gate_note": "Batches 1-5 accepted and reconnected. Batch 5 integration tree includes the 5.4 follow-up 6145ed2; X1-X4 are fixed on the integration branch and the batch-5 seam test is in the suite. Batch 6 is ready."
 }

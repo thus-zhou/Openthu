@@ -777,19 +777,24 @@
       "integration_order": 16,
       "status": "accepted",
       "accepted_at": "2026-11-17",
-      "delivery_commit": "90dcdb5",
+      "delivery_commit": "6145ed2",
       "audit_baseline_commit": "f9e9918",
       "audit_fix": "5.4-audit: P0=0; P1-1..P1-4 and P2-1..P2-12 closed through 90dcdb5 with named regressions; pure export, academic window, full paging and monotonic SEQUENCE.",
       "evidence": [
-        "57 module tests and 203 related regression tests at 90dcdb5; audit fixes P1-1..P1-4 and P2-1..P2-12 verified by named cases",
+        "58 module tests and 203 related regression tests at 6145ed2; audit P1-1..P1-4 and P2-1..P2-12 verified by named cases",
         "export_calendar is a pure local write; agenda collects every snapshot page; academic events respect the request window; per-UID SEQUENCE never resets",
-        "batch-5 joint tree: check 492 files/0 findings, Linux Python 1262 passed/7 skipped/0 failed, Node 66 passed; 0 live campus/model/business calls"
+        "follow-up 6145ed2 keeps malformed academic events visible to the excluded report and 16083d9 pins the opt-in get_todos description",
+        "batch-5 joint tree: check 493 files/0 findings, Linux and Windows full offline suites green, Node 66 passed; 0 live campus/model/business calls"
       ],
       "cross_module_handoffs": [
         "contracts/v0.2/error-classification.json and src/thu_assistant/source_state.py (1.1/3.2): 29 additive EVENT_*/AGENDA_*/SNAPSHOT_*/EXPORT_* codes, no existing code changed.",
         "src/thu_assistant/mcp_stdio.py (6.1): wording-only get_todos description update; no tool added, the 29-tool surface is unchanged.",
         "6.1/8.1: THU-TODOS-1 container and record_id-in-AAD migration remains a later storage step; 5.4 did not change the cache format.",
         "6.2/7.1: read calendar_events/views/conflicts only and apply their own HTML escaping."
+      ],
+      "followup_commits": [
+        "16083d9",
+        "6145ed2"
       ]
     },
     {

@@ -645,10 +645,10 @@
       ],
       "completion_standard": "统一日程、增量事件、稳定事件编号和 ICS 导出",
       "evidence": [
-        "accepted at 90dcdb5 after the 5.4 audit (P0=0, P1=4, P2=12 fixed); 57 module tests and 203 related regression tests",
+        "accepted at 6145ed2 after the 5.4 audit (P0=0, P1=4, P2=12 fixed); 58 module tests and 203 related regression tests",
         "export_calendar is a pure local write and export_agenda is the explicit read-then-export path; academic events respect the request window; agenda collects every snapshot page",
-        "per-UID sequence keeps iCalendar SEQUENCE monotonic across rebuild, scope change and no-key paths; incomplete sources reject or mark the export",
-        "batch-5 joint tree: check 492 files/0 findings, Linux Python 1262 passed/7 skipped/0 failed, Node 66 passed; 0 live campus/model/business calls",
+        "per-UID sequence keeps iCalendar SEQUENCE monotonic across rebuild, scope change and no-key paths; malformed academic events stay in the excluded report (follow-up 6145ed2)",
+        "batch-5 joint tree: check 493 files/0 findings, Linux and Windows full offline suites green, Node 66 passed; 0 live campus/model/business calls",
         "batch-5 reconnection and two-platform CI are recorded by the integration owner; no delivery PR, main merge or release"
       ]
     },
