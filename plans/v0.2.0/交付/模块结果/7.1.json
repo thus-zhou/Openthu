@@ -9,10 +9,11 @@
   "baseline_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
   "integration_parent_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
   "branch_base_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
-  "delivery_commit": "181216cda0eba7d68b70f0012db200ca3d09c315",
+  "delivery_commit": "1c5eb774b36eca41092579c0a26ce247fbc51eec",
   "implementation_commits": [
     "21b4d7d37d1ebcda5a6676ef8bb040ef833e2c8e",
-    "181216cda0eba7d68b70f0012db200ca3d09c315"
+    "181216cda0eba7d68b70f0012db200ca3d09c315",
+    "1c5eb774b36eca41092579c0a26ce247fbc51eec"
   ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/7.1",
@@ -195,7 +196,7 @@
         "test (ubuntu-24.04, 3.13)",
         "test (windows-2025)"
       ],
-      "note": "All three jobs succeeded; the Windows job ran the 63 browser cases as well. The run is on tree 4f0f59f (a record commit); the code is 181216c after 21b4d7d.",
+      "note": "All three jobs succeeded on code 181216c; the final UI tweak 1c5eb77 only hides the cancel-all row when nothing is pending and is covered by the module suite. The Windows job ran the 63 browser cases as well.",
       "code_commit": "181216c"
     }
   },
