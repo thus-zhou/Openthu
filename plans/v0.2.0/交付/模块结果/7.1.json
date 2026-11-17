@@ -191,16 +191,16 @@
       "background_processes": 0
     },
     "github_actions": {
-      "run_id": 44144269571,
-      "commit": "bfde78a38f6ca38f9f47179c4af8da9c94c3119d",
-      "code_commit": "bfde78a38f6ca38f9f47179c4af8da9c94c3119d",
+      "run_id": 44149654282,
+      "commit": "8034df101f3741c41cf20b4182db935464b1c9e6",
+      "code_commit": "e2b45facd3b9ff311ab4071b973277f63ed748ef",
       "status": "success",
       "jobs": [
         "test (ubuntu-24.04)",
         "test (ubuntu-24.04, 3.13)",
         "test (windows-2025)"
       ],
-      "note": "All three jobs succeeded on bfde78a, the final code commit (audit repair 2f8d87c plus the table-reuse consistency change). The Windows job ran the 77 browser cases. This supersedes runs 44122811569, 44137435823 and 44141199925; a metadata-only record update follows this tested commit."
+      "note": "All three jobs succeeded on 8034df1, which contains the P1-1/P1-2 wiring and packaging fix e2b45fa plus the accepted record. The Windows job ran the 77 browser cases and the CLI/distribution checks. A metadata-only record update follows this tested tree; the batch integration later re-ran both platforms at fb6edb1."
     }
   },
   "boundaries": [
@@ -242,6 +242,16 @@
       "to": "8.1/release",
       "request": "Review the 7.1 audit repair commits that touch `src/thu_assistant/__main__.py`, `pyproject.toml` and `MANIFEST.in`; keep the static_dir wiring and web_assets package-data patterns in the candidate build.",
       "why": "The repair closed P1-1/P1-2 across module ownership boundaries at the owner request; 8.1 owns the integrated candidate and should verify the seams remain in the release artifact."
+    },
+    {
+      "to": "6.2/8.1",
+      "request": "Preserve facade-specific exception codes in the local API error body instead of collapsing them to a generic 502, so the dashboard can keep the capability-gap wording without treating a transient failure as not-enabled. Resolved in the batch integration: 7.3's P1-4 fix makes the four local reads return a classified envelope (HTTP 200, status ERROR, specific code) instead of 502.",
+      "why": "7.1 only maps HTTP 501 to NOT_ENABLED and shows 502 as a real error; a specific code lets the UI distinguish a capability gap from a transient failure."
+    },
+    {
+      "to": "4.2/8.1",
+      "request": "The frozen /resources query has no `kind` parameter; 7.1 can only filter the loaded pages and says 'current loaded range'. If server-side type filtering is added, the contract and tests must change with it.",
+      "why": "Dashboard-only filtering must not be presented as a complete result set."
     }
   ],
   "rollback": "Stop the dashboard entry and remove src/thu_assistant/web_assets/ plus tests/test_web_assets.py. There is no storage, data-structure or package-metadata migration; MCP/CLI and existing authentication data are untouched. After rollback 6.2's JSON API remains and `/` returns LOCAL_API_UI_NOT_INSTALLED.",
