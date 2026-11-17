@@ -17,7 +17,8 @@
   "paths": [
     "src/thu_assistant/sports_actions.py",
     "src/thu_assistant/sports_transport.py",
-    "tests/test_sports_actions.py"
+    "tests/test_sports_actions.py",
+    "contracts/v0.2/sources/source-registry.json"
   ],
   "contracts": [
     "business-facade-v1",
@@ -210,6 +211,7 @@
     "5.4/7.1: consume platform.refresh, platform.amounts, refund_* and checked_at for redacted todo/kanban summaries; platform intentionally excludes member accounts and payment credentials.",
     "4.4/8.1: the sports-action-v1 input schema is unchanged; a structured quantity/total plan field would need an actions.py change owned by 4.4/6.1 and is outside this module.",
     "3.2/4.3: 5.2 only consumes the precheck object and does not modify sports.py or queries.py; the order read and four-axis semantics stay on the 4.3 contract.",
+    "2.3/integration: source-registry code_refs for sports.scenes, sports.availability, sports.orders, sports.booking and sports.cancel were refreshed to the actual line ranges after the 5.2 edits; sources, tasks and evidence levels are unchanged.",
     "7.3: document the capability table, fen units and the cancellation-success-versus-refund-arrival evidence level.",
     "integration: tests/test_sports_actions.py is a new exclusive path; run it separately from the 5.1 library actions suite during the batch reconnection, then run the full offline suite."
   ]
