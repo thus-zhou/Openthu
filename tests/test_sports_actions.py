@@ -15,7 +15,7 @@ from thu_assistant import precheck
 from thu_assistant import sports as s
 from thu_assistant import sports_actions as a
 from thu_assistant import sports_transport as net
-from thu_assistant.actions import ActionEngine
+from thu_assistant.actions import ActionEngine, RequestGate, RequestSpec
 from thu_assistant.bridge import CampusError
 from thu_assistant.queries import describe
 from synthetic_store import make_action_store
@@ -38,6 +38,9 @@ ROW = {'resvUuid': 'rec', 'sceneUuid': 'scene', 'sceneName': '合成项目',
        'orderStatus': 4, 'paidAmount': 0, 'totalAmount': 0,
        'orderRefundStatus': 0, 'cancelBeforeStartTime': 10,
        'resvMemberVos': [{'userId': 'selfid', 'spotsNum': 1}]}
+# The canonical effective order: SCHEDULED in the read layer and the contract
+# compatibility sample (RESV_EFFECT + approval pass + PAID).
+SCHEDULED_ROW = {**ROW, 'resvStatus': 'RESV_EFFECT'}
 
 
 class Fake:
@@ -51,6 +54,9 @@ class Fake:
         self.rows = []
         self.records_pages = None      # optional {page: raw payload}
         self.records_error = None      # optional error code for the order list
+        self.records_handler = None    # optional callable(params) for special walks
+        self.detail_pay_type = 'PAY_ONLINE'
+        self.errors = {}               # optional {path: error code}
         self.captcha = '0'
         self.detail_amount = 0
         self.detail_override = None
@@ -65,6 +71,8 @@ class Fake:
     def call(self, path, params=None):
         params = params or {}
         self.calls.append((path, deepcopy(params)))
+        if path in self.errors:
+            raise CampusError(self.errors[path])
         if path == s.SCENE:
             return {'data': self.scenes}
         if path == s.LOCATION:
@@ -75,6 +83,8 @@ class Fake:
                     if f['sessionVo'][0]['sceneUseType'] == params['sceneUseType']]
             return {'count': len(rows), 'data': rows if params['pageNum'] == 1 else []}
         if path == s.RECORDS:
+            if self.records_handler is not None:
+                return self.records_handler(params)
             if self.records_error:
                 raise CampusError(self.records_error)
             if self.records_pages is not None:
@@ -89,7 +99,7 @@ class Fake:
                              'data': {'moduleData': {}, 'resvExtendStatus': row['resvExtendStatus'],
                                       'resvRecStatus': row['resvStatus']},
                              'orderInfo': {'payableAmount': self.detail_amount,
-                                           'payType': 'PAY_ONLINE'}}}
+                                           'payType': self.detail_pay_type}}}
         if path == net.USER:
             return {'data': {'id': 'selfid'}}
         if path == net.CAPTCHA:
@@ -539,3 +549,399 @@ def test_capability_table_stays_within_the_existing_two_operations():
     assert 'MULTI_TICKET_PURCHASE' in table['not_supported']
     # No new sports-specific tool/operation name is introduced.
     assert not any(name in json.dumps(table) for name in ('sports_pay', 'sports_refund', 'sports_ticket'))
+
+
+# --- P1-1: the canonical effective order must reach the cancel loop ---------
+
+def test_effective_order_gets_an_official_cancel_plan(tmp_path, monkeypatch):
+    fake = Fake()
+    fake.rows = [deepcopy(SCHEDULED_ROW)]
+    engine, _ = make_engine(tmp_path, monkeypatch, fake, 'cancel_reservation')
+    monkeypatch.setattr(a, 'dispatch_exact', lambda *args: pytest.fail('must not dispatch'))
+    plan = engine.prepare('sports', 'cancel_reservation', {'record_id': 'rec'})
+    assert 'OFFICIAL_CANCEL_CONTROL' in plan['preview']['handoff']
+    assert plan['preview']['original_status'] == 'SCHEDULED'
+    assert 'site_ids' not in plan['preview']
+    assert plan['preview']['target'].startswith('合成项目')
+    result = engine.execute(plan['plan_id'], AUTH)
+    assert result['status'] == 'AWAITING_OFFICIAL'
+
+
+def test_cancel_plan_is_bound_to_the_site_list_without_publishing_it(tmp_path, monkeypatch):
+    fake = Fake()
+    fake.rows = [deepcopy(ROW)]
+    engine, _ = make_engine(tmp_path, monkeypatch, fake, 'cancel_reservation')
+    monkeypatch.setattr(a, 'dispatch_exact', lambda *args: pytest.fail('must not dispatch'))
+    plan = engine.prepare('sports', 'cancel_reservation', {'record_id': 'rec'})
+    fake.rows[0]['siteVoList'][0]['uuid'] = 'other-court'
+    result = engine.execute(plan['plan_id'], AUTH)
+    assert result['status'] == 'FAILED'
+    assert result['reason'] == 'PRECONDITIONS_CHANGED_PREPARE_AGAIN'
+
+
+def test_effective_paid_order_adds_refund_confirmation_and_reads_back(tmp_path, monkeypatch):
+    fake = Fake()
+    fake.rows = [deepcopy(SCHEDULED_ROW)]
+    fake.rows[0]['paidAmount'] = 200
+    engine, _ = make_engine(tmp_path, monkeypatch, fake, 'cancel_reservation')
+    monkeypatch.setattr(a, 'dispatch_exact', lambda *args: pytest.fail('must not dispatch'))
+    plan = engine.prepare('sports', 'cancel_reservation', {'record_id': 'rec'})
+    flags = set(plan['preview']['handoff'].split(','))
+    assert {'OFFICIAL_CANCEL_CONTROL', 'CONFIRM_REFUND_CONSEQUENCES'} <= flags
+    assert engine.execute(plan['plan_id'], AUTH)['status'] == 'AWAITING_OFFICIAL'
+    # The user cancels on the official page; the readback proves the record.
+    fake.rows[0].update(resvExtendStatus=2, orderRefundStatus=4)
+    result = engine.result(plan['plan_id'])
+    assert result['status'] == 'SUCCEEDED'
+    assert result['platform']['refund_status'] == 'REFUNDING'
+    assert result['platform']['refund_arrived_verified'] is False
+
+
+def test_ended_or_cancelled_order_is_refused():
+    ended = Fake()
+    ended.rows = [{**SCHEDULED_ROW, 'resvStatus': 'RESV_END'}]
+    with pytest.raises(CampusError, match='SPORTS_CANCELLATION_NOT_AVAILABLE'):
+        a.cancel_preview(ended, {'record_id': 'rec'})
+    cancelled = Fake()
+    cancelled.rows = [{**ROW, 'resvExtendStatus': 2}]
+    with pytest.raises(CampusError, match='SPORTS_CANCELLATION_NOT_AVAILABLE'):
+        a.cancel_preview(cancelled, {'record_id': 'rec'})
+
+
+def test_extended_bit_256_hands_off_instead_of_refusing():
+    fake = Fake()
+    fake.rows = [{**SCHEDULED_ROW, 'resvExtendStatus': 257}]
+    business, _ = a.cancel_preview(fake, {'record_id': 'rec'})
+    assert 'OFFICIAL_CANCEL_CONTROL' in business['handoff']
+    assert 'bit 256' in a.capabilities()['assumptions'][0]
+
+
+# --- P1-2 / P2-5 / P2-6: dispatch observation and the dispatch fact ---------
+
+class WirePage:
+    """Synthetic reservation page for dispatch_exact."""
+
+    def __init__(self, outcome='FETCHED', observe=None, prepare_error=False):
+        self.main_frame = object()
+        self.outcome = outcome
+        self.observe = observe            # None, 'match' or 'wrong'
+        self.prepare_error = prepare_error
+        self.signed = None
+        self.body = None
+        self.removed = False
+
+    def route(self, pattern, guard):
+        self.pattern = pattern
+        self.guard = guard
+
+    def unroute(self, *args):
+        self.removed = True
+
+    def evaluate(self, script, args=None):
+        if args is not None:
+            if self.prepare_error:
+                raise RuntimeError('prepare failed')
+            self.body = json.dumps(args['params'])
+            self.signed = (net.ORIGIN + net.PREFIX + args['path']
+                           + '?appId=1&nonce=n&sign=s&timeStamp=1')
+            return {'url': self.signed, 'body': self.body}
+        if self.observe == 'match':
+            self.guard(SimpleNamespace(
+                request=SimpleNamespace(url=self.signed, frame=self.main_frame,
+                                        method='POST', post_data=self.body),
+                continue_=lambda: None, abort=lambda: None))
+        elif self.observe == 'wrong':
+            self.guard(SimpleNamespace(
+                request=SimpleNamespace(url=self.signed + 'x', frame=self.main_frame,
+                                        method='POST', post_data=self.body),
+                continue_=lambda: None, abort=lambda: None))
+        return self.outcome
+
+
+def create_gate(body):
+    return RequestGate([RequestSpec(net.ORIGIN + net.PREFIX + net.CREATE, 'POST',
+                                    json.dumps(body))])
+
+
+def test_dispatch_exact_unobserved_fetch_is_never_not_sent():
+    page = WirePage(outcome='FETCHED', observe=None)
+    reader = SimpleNamespace(page=page)
+    body = {'sceneUuid': 'scene'}
+    gate = create_gate(body)
+    with pytest.raises(CampusError, match='SPORTS_DISPATCH_UNOBSERVED'):
+        a.dispatch_exact(reader, net.CREATE, body, gate)
+    assert gate.sent == 0 and page.removed
+
+
+def test_dispatch_exact_no_pending_script_is_not_sent():
+    page = WirePage(outcome='NO_PENDING', observe=None)
+    reader = SimpleNamespace(page=page)
+    body = {'sceneUuid': 'scene'}
+    with pytest.raises(a.NotDispatched):
+        a.dispatch_exact(reader, net.CREATE, body, create_gate(body))
+    assert page.removed
+
+
+def test_dispatch_exact_observed_abort_is_not_sent():
+    page = WirePage(outcome='FETCHED', observe='wrong')
+    reader = SimpleNamespace(page=page)
+    body = {'sceneUuid': 'scene'}
+    with pytest.raises(a.NotDispatched):
+        a.dispatch_exact(reader, net.CREATE, body, create_gate(body))
+
+
+def test_dispatch_exact_marks_the_gate_when_it_is_consumed():
+    page = WirePage(outcome='FETCHED', observe='match')
+    reader = SimpleNamespace(page=page)
+    body = {'sceneUuid': 'scene'}
+    gate = create_gate(body)
+    marks = []
+    a.dispatch_exact(reader, net.CREATE, body, gate, on_sent=lambda: marks.append('sent'))
+    assert gate.sent == 1 and marks == ['sent']
+
+
+def test_dispatch_exact_prepare_failure_is_not_sent():
+    page = WirePage(prepare_error=True)
+    reader = SimpleNamespace(page=page)
+    body = {'sceneUuid': 'scene'}
+    with pytest.raises(a.NotDispatched):
+        a.dispatch_exact(reader, net.CREATE, body, create_gate(body))
+
+
+def test_dispatch_pre_read_failure_is_not_sent(monkeypatch):
+    fake = Fake()
+    fake.errors[s.SCENE] = 'RATE_LIMITED'
+    monkeypatch.setattr(a, 'Reader', lambda browsers: fake)
+    adapter = a.SportsAction(None, net.CREATE)
+    record = {'account': 'test-account', 'business': dict(ARGS),
+              'expires_at': time.time() + 600,
+              'authorization': {'evidence': {'expires_at': time.time() + 600}}}
+    gate = create_gate({'sceneUuid': 'scene'})
+    with pytest.raises(a.NotDispatched):
+        adapter.dispatch(record, gate)
+
+
+def test_unobserved_request_becomes_unknown_and_the_ledger_says_so(tmp_path, monkeypatch):
+    fake = Fake()
+    fake.page = WirePage(outcome='FETCHED', observe=None)
+    engine, _ = make_engine(tmp_path, monkeypatch, fake)
+    plan = engine.prepare('sports', 'create_reservation', ARGS)
+    result = engine.execute(plan['plan_id'], AUTH)
+    assert result['status'] == 'UNKNOWN'
+    assert result['reason'] == 'REMOTE_RESULT_NOT_PROVEN'
+    assert result['effects'] == [{'step': 'official_request', 'status': 'UNKNOWN'}]
+    assert result['next_actions'] == ['CHECK_RESULT_ONLY_DO_NOT_RESEND']
+
+
+def test_lost_response_after_consume_keeps_sent(tmp_path, monkeypatch):
+    fake = Fake()
+    page = WirePage(outcome='FETCHED', observe=None)
+
+    def evaluate(script, args=None):
+        value = WirePage.evaluate(page, script, args)
+        if args is None:
+            page.guard(SimpleNamespace(
+                request=SimpleNamespace(url=page.signed, frame=page.main_frame,
+                                        method='POST', post_data=page.body),
+                continue_=lambda: None, abort=lambda: None))
+            raise TimeoutError('lost response')
+        return value
+
+    page.evaluate = evaluate
+    fake.page = page
+    engine, _ = make_engine(tmp_path, monkeypatch, fake)
+    plan = engine.prepare('sports', 'create_reservation', ARGS)
+    first = engine.execute(plan['plan_id'], AUTH)
+    # The gate was consumed once; the timeout leaves UNKNOWN with SENT recorded.
+    assert first['status'] == 'UNKNOWN'
+    assert first['effects'] == [{'step': 'official_request', 'status': 'SENT'}]
+
+
+# --- P2-1 / P2-2 / P2-4 / P2-13: evidence semantics -------------------------
+
+def test_eligibility_is_not_claimed_as_verified(tmp_path, monkeypatch):
+    table = a.capabilities()
+    assert 'UNVERIFIED' in table['prechecks']['eligibility']
+    assert a.eligibility_check({'eligibility': {'state': 'UNVERIFIED'}}) is True
+    assert a.eligibility_check({'eligibility': {'state': 'INELIGIBLE'}}) is False
+    fake = Fake()
+    engine, _ = make_engine(tmp_path, monkeypatch, fake)
+    plan, _ = unresolved_create(engine, monkeypatch)
+    record_now(fake)
+    platform = engine.result(plan['plan_id'])['platform']
+    assert platform['eligibility'] == {'state': 'UNVERIFIED', 'verified': False,
+                                       'authority': 'PLATFORM_RESPONSE'}
+
+
+def paid_fake():
+    fake = Fake()
+    fake.fields[0]['sessionVo'][0]['userFeeDetails'] = {
+        'chargingUnitPrice': 300, 'payableAmount': 300, 'payType': 3}
+    fake.detail_amount = 300
+    return fake
+
+
+def test_free_plan_reports_its_implicit_zero_total(tmp_path, monkeypatch):
+    fake = Fake()
+    engine, _ = make_engine(tmp_path, monkeypatch, fake)
+    plan, _ = unresolved_create(engine, monkeypatch)
+    assert '免费计划按 0 元核对' in plan['preview']['fee']
+    record_now(fake)
+    amounts = engine.result(plan['plan_id'])['platform']['amounts']
+    assert amounts['expected_total_fen'] == 0
+    assert amounts['total_verified'] is True
+    assert amounts['total_source_parsed'] is True
+
+
+def test_paid_plan_without_a_plan_amount_says_it_was_not_compared(tmp_path, monkeypatch):
+    fake = paid_fake()
+    engine, _ = make_engine(tmp_path, monkeypatch, fake)
+    plan = engine.prepare('sports', 'create_reservation', {**ARGS, 'payment_method': 'PAY_ONLINE'})
+    assert '未提供计划金额，未做比对' in plan['preview']['fee']
+    assert engine.execute(plan['plan_id'], AUTH)['status'] == 'AWAITING_OFFICIAL'
+    record_now(fake, resvStatus='RESV_EFFECT')
+    result = engine.result(plan['plan_id'])
+    assert result['status'] == 'SUCCEEDED'
+    assert result['platform']['amounts']['expected_total_fen'] is None
+    assert result['platform']['amounts']['total_verified'] is False
+
+
+def test_explicit_plan_amount_is_compared_and_stated(tmp_path, monkeypatch):
+    fake = paid_fake()
+    engine, _ = make_engine(tmp_path, monkeypatch, fake)
+    plan = engine.prepare('sports', 'create_reservation',
+                          {**ARGS, 'payment_method': 'PAY_ONLINE', 'expected_total_fen': 300})
+    assert '已按计划金额核对' in plan['preview']['fee']
+    engine.execute(plan['plan_id'], AUTH)
+    record_now(fake, resvStatus='RESV_EFFECT')
+    amounts = engine.result(plan['plan_id'])['platform']['amounts']
+    assert amounts['expected_total_fen'] == 300 and amounts['total_verified'] is True
+
+
+def test_numeric_pay_type_is_recorded_not_fatal(tmp_path, monkeypatch):
+    fake = paid_fake()
+    fake.detail_pay_type = 3
+    engine, _ = make_engine(tmp_path, monkeypatch, fake)
+    plan = engine.prepare('sports', 'create_reservation',
+                          {**ARGS, 'payment_method': 'PAY_ONLINE', 'expected_total_fen': 300})
+    engine.execute(plan['plan_id'], AUTH)
+    record_now(fake, resvStatus='RESV_EFFECT')
+    result = engine.result(plan['plan_id'])
+    assert result['status'] == 'SUCCEEDED'
+    payment = result['platform']['payment_method']
+    assert payment['source_pay_type'] == 3
+    assert payment['matches_plan'] is False
+    assert payment['verified'] is False
+
+
+def test_refresh_and_checked_at_are_consumer_compatible(tmp_path, monkeypatch):
+    fake = Fake()
+    engine, _ = make_engine(tmp_path, monkeypatch, fake)
+    plan, _ = unresolved_create(engine, monkeypatch)
+    record_now(fake)
+    platform = engine.result(plan['plan_id'])['platform']
+    assert platform['refresh']['service_id'] == 'sports'
+    assert platform['refresh']['operation'] == 'order_detail'
+    assert platform['checked_at'].endswith('+00:00')
+    assert platform['checked_at_zone'] == 'UTC'
+
+
+# --- P2-3 / P2-8 / P2-17 / P2-18: failure states and reads ------------------
+
+@pytest.mark.parametrize('order_status', [8, 16])
+def test_expired_or_cancelled_payment_fails_the_plan(tmp_path, monkeypatch, order_status):
+    fake = Fake()
+    engine, _ = make_engine(tmp_path, monkeypatch, fake)
+    plan, _ = unresolved_create(engine, monkeypatch)
+    record_now(fake, orderStatus=order_status)
+    assert engine.result(plan['plan_id'])['status'] == 'FAILED'
+
+
+def test_unrelated_malformed_order_does_not_block_reconciliation(tmp_path, monkeypatch):
+    fake = Fake()
+    engine, _ = make_engine(tmp_path, monkeypatch, fake)
+    plan, _ = unresolved_create(engine, monkeypatch)
+    fake.rows = [{**deepcopy(ROW), 'gmtCreate': datetime.now(s.TZ).isoformat()},
+                 {'resvUuid': 'old', 'sceneUuid': 'other', 'resvTime': None,
+                  'siteVoList': []}]
+    assert engine.result(plan['plan_id'])['status'] == 'SUCCEEDED'
+
+
+def test_malformed_candidate_row_keeps_the_result_unknown(tmp_path, monkeypatch):
+    fake = Fake()
+    engine, _ = make_engine(tmp_path, monkeypatch, fake)
+    plan, _ = unresolved_create(engine, monkeypatch)
+    fake.rows = [{**deepcopy(ROW), 'gmtCreate': datetime.now(s.TZ).isoformat()},
+                 {'resvUuid': 'bad', 'sceneUuid': 'scene', 'resvTime': None,
+                  'siteVoList': [{'uuid': 'court'}]}]
+    assert engine.result(plan['plan_id'])['status'] == 'UNKNOWN'
+
+
+def test_malformed_gmtcreate_is_not_a_crash(tmp_path, monkeypatch):
+    fake = Fake()
+    engine, _ = make_engine(tmp_path, monkeypatch, fake)
+    plan, _ = unresolved_create(engine, monkeypatch)
+    fake.rows = [{**deepcopy(ROW), 'gmtCreate': 'not-a-timestamp'}]
+    assert engine.result(plan['plan_id'])['status'] == 'UNKNOWN'
+
+
+def test_one_transient_short_page_is_retried_before_prepare_fails(tmp_path, monkeypatch):
+    fake = Fake()
+    reads = {'page1': 0}
+
+    def handler(params):
+        if params['pageNum'] == 1:
+            reads['page1'] += 1
+            if reads['page1'] == 1:
+                return {'count': 2, 'data': []}
+        return {'count': 0, 'data': []}
+
+    fake.records_handler = handler
+    engine, _ = make_engine(tmp_path, monkeypatch, fake)
+    plan = engine.prepare('sports', 'create_reservation', ARGS)
+    assert plan['status'] == 'PREPARED'
+    assert reads['page1'] == 2
+
+
+def test_persistent_short_page_still_blocks_prepare():
+    fake = Fake()
+    fake.records_handler = lambda params: {'count': 2, 'data': []}
+    with pytest.raises(CampusError, match='SPORTS_ORDER_SEARCH_INCOMPLETE'):
+        a.creation_preview(fake, ARGS)
+
+
+def test_read_switch_off_suspends_pending_reconciliation(tmp_path, monkeypatch):
+    fake = Fake()
+    engine, _ = make_engine(tmp_path, monkeypatch, fake)
+    plan, sent = unresolved_create(engine, monkeypatch)
+    record_now(fake)
+    monkeypatch.setenv('THU_SPORTS_READ', '0')
+    before = [path for path, _ in fake.calls].count(s.RECORDS)
+    shown = engine.result(plan['plan_id'])
+    assert shown['status'] == 'UNKNOWN'
+    assert [path for path, _ in fake.calls].count(s.RECORDS) == before
+    assert sent == [1]
+
+
+# --- P2-10 / P2-11: error registry and capability isolation -----------------
+
+def test_every_sports_error_code_used_by_the_adapter_is_registered():
+    import pathlib
+    import re
+    from thu_assistant import source_state
+    codes = set()
+    for name in ('sports_actions.py', 'sports_transport.py'):
+        text = (pathlib.Path(a.__file__).parent / name).read_text(encoding='utf-8')
+        codes |= set(re.findall(r"'(SPORTS_[A-Z0-9_]+)'", text))
+    assert codes
+    assert codes <= set(source_state.ERROR_CODES), sorted(codes - set(source_state.ERROR_CODES))
+
+
+def test_capabilities_return_is_isolated_from_the_module_contract():
+    first = a.capabilities()
+    first['modes']['SPORT_PERSON']['official_handoff'].append('INJECTED')
+    first['operations'].append('injected')
+    second = a.capabilities()
+    assert 'INJECTED' not in second['modes']['SPORT_PERSON']['official_handoff']
+    assert second['operations'] == ['create_reservation', 'cancel_reservation']
+    assert 'INJECTED' not in a.MODE_CONTRACT['SPORT_PERSON']['official_handoff']

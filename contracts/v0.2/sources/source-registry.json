@@ -656,7 +656,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Own reservation list and detail; payment, approval and refund are kept as separate axes.",
       "entry_ref": "https://www.sports.tsinghua.edu.cn/venue/index.html#/personal?type=0",
-      "code_refs": ["src/thu_assistant/sports.py:283-412", "src/thu_assistant/sports_actions.py:444-586"],
+      "code_refs": ["src/thu_assistant/sports.py:283-412"],
       "pagination": {
         "kind": "PAGE",
         "page_parameter": "pageNum",

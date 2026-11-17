@@ -5,12 +5,13 @@ re-interpreting platform fields.  A plan is bound to the exact snapshot it was
 shown from; a later read that cannot reproduce that snapshot invalidates the
 plan instead of dispatching at a new price or against a closed session.
 """
+import copy
 import json
 import os
 import re
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlsplit
 
 from .actions import RequestSpec, NotDispatched, digest, sports_enabled
@@ -54,23 +55,39 @@ ELIGIBILITY_FLAGS = frozenset({'OFFICIAL_CAPTCHA', 'OFFICIAL_FORM', 'CONFIRM_PAR
 FEE_FLAGS = frozenset({'CONFIRM_TOTAL_AND_PAYMENT_METHOD', 'CONFIRM_REFUND_CONSEQUENCES'})
 RULE_FLAGS = frozenset({'CONFIRM_CANCELLATION_RULE', 'CONFIRM_CANCELLATION_DEADLINE'})
 REFUND_ACCEPTED = frozenset({'REQUESTED', 'REFUNDING', 'PENDING', 'MANUAL'})
+PAYMENT_FAILURES = frozenset({'PAYMENT_EXPIRED', 'PAYMENT_CANCELLED'})
+
+
+def sports_read_enabled():
+    """THU_SPORTS_READ=0 suspends adapter reads, including pending readback."""
+    return os.environ.get('THU_SPORTS_READ', '1') != '0'
 
 
 def capabilities():
     """The sports action capability table handed to the public facade (6.1)."""
-    return {'adapter_version': 'sports-action-v1',
-            'operations': ['create_reservation', 'cancel_reservation'],
-            'modes': {name: dict(value) for name, value in MODE_CONTRACT.items()},
-            'amount': {'unit': 'FEN', 'currency': 'CNY', 'quantity_unit_per_mode': True,
-                       'total_source': 'SESSION_PAYABLE_AMOUNT_ONLY',
-                       'multiplies_unit_price_never': True},
-            'reconciliation': {'horizon_seconds': RECONCILE_HORIZON_SECONDS,
-                               'order_page_size': 50, 'max_pages': 50,
-                               'requires_unique_remote_record': True},
-            'official_handoff': sorted(ELIGIBILITY_FLAGS | FEE_FLAGS | RULE_FLAGS),
-            'not_supported': ['MULTI_TICKET_PURCHASE', 'AUTOMATIC_PAYMENT',
-                              'CAPTCHA_SOLVING', 'IDENTITY_BYPASS',
-                              'REPLAY_UNCERTAIN_WRITE']}
+    return copy.deepcopy({
+        'adapter_version': 'sports-action-v1',
+        'operations': ['create_reservation', 'cancel_reservation'],
+        'modes': {name: dict(value) for name, value in MODE_CONTRACT.items()},
+        'amount': {'unit': 'FEN', 'currency': 'CNY', 'quantity_unit_per_mode': True,
+                   'total_source': 'SESSION_PAYABLE_AMOUNT_ONLY',
+                   'multiplies_unit_price_never': True},
+        'prechecks': {'availability': 'READ_FROM_SOURCE',
+                      'fees': 'SOURCE_DECLARED_ONLY',
+                      'rules': 'SOURCE_DECLARED_ONLY',
+                      'eligibility': 'UNVERIFIED_BY_ADAPTER_PLATFORM_IS_AUTHORITY'},
+        'payment_method': {'request_domain': 'UNVERIFIED',
+                           'response_domain': 'UNVERIFIED',
+                           'verification': 'SOFT_MATCH_NOT_BLOCKING'},
+        'reconciliation': {'horizon_seconds': RECONCILE_HORIZON_SECONDS,
+                           'order_page_size': 50, 'max_pages': 50,
+                           'requires_unique_remote_record': True},
+        'official_handoff': sorted(ELIGIBILITY_FLAGS | FEE_FLAGS | RULE_FLAGS),
+        'not_supported': ['MULTI_TICKET_PURCHASE', 'AUTOMATIC_PAYMENT',
+                          'CAPTCHA_SOLVING', 'IDENTITY_BYPASS',
+                          'REPLAY_UNCERTAIN_WRITE'],
+        'assumptions': ['resvExtendStatus bit 256 is a defensive handoff and has no source sample'],
+    })
 
 
 def inputs(business, operation):
@@ -80,15 +97,34 @@ def inputs(business, operation):
                                              if operation == CREATE and 'expected_total_fen' in business else {})
 
 
-def collect_orders(reader):
+def collect_orders(reader, attempts=2):
     """Read every own-order page without hiding a partial list.
 
     A short, repeated or changed page stops the walk with ``complete=False`` so
     a caller can never treat a partial list as proof that no similar order
-    exists.
+    exists.  One transient short page is retried once before the caller is
+    asked to wait, because a single upstream hiccup must not block every new
+    reservation.
     """
-    return s.collect_pages(lambda number: s.order_page(reader, number, 50, strict=False),
-                           'resvUuid')
+    result = None
+    for _ in range(max(1, attempts)):
+        result = s.collect_pages(lambda number: s.order_page(reader, number, 50, strict=False),
+                                 'resvUuid')
+        if result['complete']:
+            return result
+    return result
+
+
+def eligibility_check(summary):
+    """The adapter performs no eligibility read; only INELIGIBLE blocks.
+
+    ``precheck`` reports sports account eligibility as UNVERIFIED because a
+    read cannot prove it.  The platform's own acceptance or rejection is the
+    authority, so an UNVERIFIED account may proceed and an INELIGIBLE one is
+    not planned.  The capability table records this explicitly.
+    """
+    state = (summary.get('eligibility') or {}).get('state')
+    return state != 'INELIGIBLE'
 
 
 def stable_view(block):
@@ -156,10 +192,6 @@ def selected_slot(reader, arguments):
             s.require(len(matches) == 1, 'SPORTS_SESSION_NOT_FOUND')
             s.require(sum((x['start_at'], x['end_at']) == (matches[0]['start_at'], matches[0]['end_at'])
                           for x in site['sessions']) == 1, 'SPORTS_SESSION_TIME_AMBIGUOUS')
-            # The site and the session must both belong to the requested project
-            # and mode; a same-named site in another project is not a match.
-            s.require(site['scene_id'] == arguments['scene_id'] and site['mode'] == arguments['mode'],
-                      'SPORTS_MODE_MISMATCH')
             return result['scene'], site, matches[0], built['summary']
         if not result.get('next_page'):
             break
@@ -232,12 +264,19 @@ def _creation_preview(reader, args):
     quantity = MODE_CONTRACT[mode]['ticket_quantity']
     unit = MODE_CONTRACT[mode]['quantity_unit']
     unit_text, total_text = s.fen_display(fee), s.fen_display(total)
+    explicit_total = 'expected_total_fen' in args
     if total is None:
         amount_text = (f'数量 {quantity} {unit}，总额须在官方结算页确认；'
                        f'来源仅声明单价 {unit_text} 元')
+    elif explicit_total:
+        amount_text = (f'数量 {quantity} {unit}，来源声明单价 {unit_text} 元，'
+                       f'应付总额已按计划金额核对：{total_text} 元')
+    elif args['payment_method'] == 'FREE':
+        amount_text = (f'数量 {quantity} {unit}，来源声明单价 {unit_text} 元，'
+                       f'应付总额（免费计划按 0 元核对）：{total_text} 元')
     else:
         amount_text = (f'数量 {quantity} {unit}，来源声明单价 {unit_text} 元，'
-                       f'应付总额已核对：{total_text} 元')
+                       f'应付总额 {total_text} 元（未提供计划金额，未做比对）')
     rule_text = ('平台取消提前量（分钟）：' + str(rules['cancelBeforeStart']['value'])
                  if (rules.get('cancelBeforeStart') or {}).get('state') == 'DECLARED'
                  else '取消期限须在官方页面核实')
@@ -264,7 +303,7 @@ def _creation_preview(reader, args):
         'availability': summary['availability']['state'] == 'FREE'
         and summary['availability']['source_complete'] is True
         and slot['precheck']['availability']['state'] == 'FREE',
-        'eligibility': True,
+        'eligibility': eligibility_check(summary),
         'fees': (slot['precheck']['fees'] or {}).get('state') == 'QUOTED',
         'rules': (rules.get('cancelBeforeStart') or {}).get('state') == 'DECLARED',
     }
@@ -289,14 +328,17 @@ def _cancel_preview(reader, args):
     s.require(row['status'] in ('SCHEDULED', 'PENDING_PAYMENT', 'PENDING_APPROVAL')
               and datetime.fromisoformat(row['start_at']) > datetime.now(s.TZ),
               'SPORTS_CANCELLATION_NOT_AVAILABLE')
-    # Refunds, individual tickets, and uncertain controls belong on the
-    # official confirmation page where the platform presents exact consequences.
+    # A normally effective order (RESV_EFFECT + approval pass) is cancellable on
+    # the official page; it must not be refused before the plan exists.  Only
+    # ended, cancelled, expired or unmapped orders are refused above.  Refunds,
+    # individual tickets and uncertain controls stay on the official page.
     handoff = []
-    if (row['platform_status'] != 'RESV_UNEFFECT' and row['approval_status'] != 'RESV_WAIT_APPROVE'
-            or type(row['extended_status']) is int and row['extended_status'] & 256
-            or row['payment_status'] == 'PROCESSING'):
-        raise CampusError('SPORTS_CANCELLATION_NOT_AVAILABLE')
+    if row['platform_status'] == 'RESV_EFFECT':
+        handoff.append('OFFICIAL_CANCEL_CONTROL')
     if row['mode'] != 'SPORT_GROUP' or type(raw.get('resvProperty')) is not int or raw['resvProperty'] != 0:
+        handoff.append('OFFICIAL_CANCEL_CONTROL')
+    # Bit 256 is a defensive handoff, not a verified source field (P2-12).
+    if type(row['extended_status']) is int and row['extended_status'] & 256:
         handoff.append('OFFICIAL_CANCEL_CONTROL')
     paid = row['paid_amount_fen']
     if (type(paid) is not int or paid != 0 or row['refund_status'] != 'NONE'
@@ -313,7 +355,7 @@ def _cancel_preview(reader, args):
     if not valid_cutoff or datetime.now(s.TZ) >= datetime.fromisoformat(row['start_at']) - timedelta(minutes=cutoff):
         handoff.append('CONFIRM_CANCELLATION_DEADLINE')
     business = {**args, 'target': row['scene_name'] + ' / ' + '、'.join(x['name'] for x in row['sites']),
-                'scene_id': row['scene_id'], 'site_ids': json.dumps([x['site_id'] for x in row['sites']]),
+                'scene_id': row['scene_id'],
                 'start_time': row['start_at'], 'end_time': row['end_at'],
                 'original_status': row['status'],
                 'fee': (f'已付 {s.fen_display(paid)} 元；付款状态 {row["payment_status"]}'
@@ -333,20 +375,35 @@ def cancel_preview(reader, args):
     return business, body
 
 
-def dispatch_exact(reader, path, body, gate):
-    """Bind the official signed URL to the one allowed unsigned business request."""
+def dispatch_exact(reader, path, body, gate, on_sent=None):
+    """Bind the official signed URL to the one allowed unsigned business request.
+
+    ``on_sent`` runs at the moment the single-use gate accepts the exact
+    request, before the browser may send it, so the dispatch fact is durable
+    even if the process dies while the response is pending.
+    """
     if path not in (CREATE,CANCEL):
         raise NotDispatched()
-    prepared = reader.page.evaluate(WIRE, {'path':path,'method':'POST','params':body,'prepare':True})
+    try:
+        prepared = reader.page.evaluate(WIRE, {'path':path,'method':'POST','params':body,'prepare':True})
+    except Exception:
+        # Preparing the signed URL performs no request; nothing has been sent.
+        raise NotDispatched() from None
     url = urlsplit(prepared['url'])
     canonical = ORIGIN+PREFIX+path
     if (url.scheme+'://'+url.netloc+url.path != canonical or set(k for k,_ in parse_qsl(url.query)) != SIGN
             or json.loads(prepared['body']) != body):
         raise NotDispatched()
+    observed = False
+    callback = on_sent or getattr(reader, 'on_sent', None)
     def guard(route):
+        nonlocal observed
+        observed = True
         req = route.request
         if (req.url == prepared['url'] and req.frame == reader.page.main_frame and
                 gate.consume(canonical,req.method,req.post_data)):
+            if callback:
+                callback()
             return route.continue_()
         return route.abort()
     # One short-lived page route, bound to the exact signed URL, method, frame
@@ -354,15 +411,27 @@ def dispatch_exact(reader, path, body, gate):
     pattern = re.compile('^'+re.escape(prepared['url'])+'$')
     reader.page.route(pattern,guard)
     try:
-        reader.page.evaluate("""async () => {
+        outcome = reader.page.evaluate("""async () => {
           const p=window.__thuSportPending;delete window.__thuSportPending;
+          if(!p)return 'NO_PENDING';
           const c=new AbortController(),t=setTimeout(()=>c.abort(),18000);
-          try{await fetch(p.url,{...p.init,signal:c.signal})}finally{clearTimeout(t)}
+          try{await fetch(p.url,{...p.init,signal:c.signal});return 'FETCHED'}
+          catch(e){return 'FETCH_ERROR'}finally{clearTimeout(t)}
         }""")
     finally:
         reader.page.unroute(pattern,guard)
-    if not gate.sent:
+    if gate.sent:
+        return
+    if outcome == 'NO_PENDING':
+        # The page never started a fetch, so nothing left the browser.
         raise NotDispatched()
+    if not observed:
+        # The fetch resolved without the route guard seeing it (for example a
+        # service worker handled it).  The request may have left the page, so it
+        # must not be reported as "definitely not sent".
+        raise CampusError('SPORTS_DISPATCH_UNOBSERVED')
+    # The guard observed the request and aborted it; nothing was sent.
+    raise NotDispatched()
 
 
 class SportsAction:
@@ -416,25 +485,47 @@ class SportsAction:
         with Reader(self.browsers) as reader:
             if not sports_enabled() or reader.session['account_id'] != record['account']:
                 raise NotDispatched()
-            business, body = self.read_preview(reader, record['business'])[:2]
+            try:
+                business, body = self.read_preview(reader, record['business'])[:2]
+            except CampusError:
+                # The re-read happens before the request gate; a rate limit or
+                # source change here proves no request was sent.
+                raise NotDispatched() from None
             if (business != record['business'] or business['handoff'] or time.time() >= record['expires_at']
                     or time.time() >= record['authorization']['evidence']['expires_at']):
                 raise NotDispatched()
             # Record the dispatch fact before the request can leave the page:
-            # NOT_SENT while preparing, then SENT once the gate accepted the
-            # exact request.  A lost response keeps SENT, never "not sent".
+            # NOT_SENT while preparing, then SENT at the moment the single-use
+            # gate accepts the exact request.  A lost response or a process
+            # death keeps SENT, never "not sent".
             if ledger:
                 ledger.declare(self.effect_step)
+                reader.on_sent = lambda: ledger.sent(self.effect_step)
             try:
                 dispatch_exact(reader, self.path, body, gate)
+            except CampusError as exc:
+                if ledger:
+                    if gate.sent:
+                        ledger.sent(self.effect_step)
+                    elif exc.code == 'SPORTS_DISPATCH_UNOBSERVED':
+                        # The request may have left without the route observing
+                        # it; the ledger must not claim it was not sent.
+                        ledger.unknown(self.effect_step)
+                raise
             except BaseException:
                 if ledger and gate.sent:
                     ledger.sent(self.effect_step)
                 raise
+            finally:
+                reader.on_sent = None
             if ledger and gate.sent:
                 ledger.sent(self.effect_step)
 
     def reconcile(self, record):
+        if not sports_read_enabled():
+            # THU_SPORTS_READ=0 disables sports reads; a pending plan keeps its
+            # UNKNOWN state without opening a browser or reading orders.
+            return {'records': [], 'complete': False}
         with Reader(self.browsers) as reader:
             s.require(reader.session['account_id'] == record['account'], 'ACTION_ACCOUNT_MISMATCH')
             if self.path == CANCEL:
@@ -457,15 +548,34 @@ class SportsAction:
                 and detail['data'].get('resvExtendStatus') == row['extended_status']
                 and row['scene_id'] == business['scene_id']
                 and row['start_at'] == business['start_time']
-                and row['end_at'] == business['end_time']
-                and [x['site_id'] for x in row['sites']] == json.loads(business['site_ids'])):
-            # The record exists but is not (yet) the cancelled one this plan
-            # asked for.  Keep the plan unresolved; never infer from a button
-            # or an empty list.
+                and row['end_at'] == business['end_time']):
+            # The record id is the plan's own record; scene and exact time must
+            # still agree.  The site list was bound in the plan fingerprint at
+            # prepare time, so it is not duplicated into the public preview.
             return {'records': [], 'complete': True}
         return {'records': [self.evidence(record, row, 'SUCCEEDED',
                                           source_complete=found['collection']['complete'])],
                 'complete': True}
+
+    @staticmethod
+    def candidate_like(record, raw):
+        """True when a row is close enough that its parse failure matters."""
+        b = record['business']
+        if not isinstance(raw, dict) or str(raw.get('sceneUuid')) != b['scene_id']:
+            return False
+        sites = raw.get('siteVoList')
+        return (isinstance(sites, list)
+                and any(isinstance(x, dict) and str(x.get('uuid')) == b['site_id'] for x in sites))
+
+    @staticmethod
+    def action_state(row):
+        """Map the four source axes to the transaction state for this plan."""
+        if row['payment_status'] in PAYMENT_FAILURES:
+            # An expired or cancelled payment is a definite failure of this
+            # plan even though the read layer keeps the overall status UNKNOWN.
+            return 'FAILED'
+        return {'PENDING_PAYMENT': 'PENDING_PAYMENT', 'PENDING_APPROVAL': 'PENDING_APPROVAL',
+                'SCHEDULED': 'SUCCEEDED', 'CANCELLED': 'FAILED'}.get(row['status'])
 
     def _reconcile_create(self, reader, record):
         business = record['business']
@@ -475,7 +585,10 @@ class SportsAction:
             try:
                 row = s.normalize_order(raw)
             except CampusError:
-                unverified += 1
+                # Only a row that could be this plan's order blocks the match;
+                # an unrelated malformed historical row is ignored.
+                if self.candidate_like(record, raw):
+                    unverified += 1
                 continue
             if not self.matches(record, raw, row):
                 continue
@@ -492,7 +605,7 @@ class SportsAction:
             charge = detail.get('orderInfo') if isinstance(detail.get('orderInfo'), dict) else {}
             total = charge.get('payableAmount', raw.get('totalAmount'))
             expected = business.get('expected_total_fen',
-                                    0 if business['payment_method'] == 'FREE' else None)
+                                    0 if business.get('payment_method') == 'FREE' else None)
             if type(total) is not int or total < 0:
                 unverified += 1
                 continue
@@ -502,22 +615,22 @@ class SportsAction:
             if expected is not None and total != expected:
                 unverified += 1
                 continue
-            if (business['payment_method'] != 'FREE'
-                    and charge.get('payType', raw.get('payType')) != business['payment_method']):
-                unverified += 1
-                continue
-            if (business['payment_method'] != 'FREE' and row['status'] == 'SCHEDULED'
+            # payType request/response domains are not verified (P2-4).  A
+            # mismatch is recorded in the evidence but does not block the
+            # record identity, amount and time match.
+            observed_pay_type = charge.get('payType', raw.get('payType'))
+            if (business.get('payment_method') != 'FREE' and row['status'] == 'SCHEDULED'
                     and row['payment_status'] != 'PAID'):
                 unverified += 1
                 continue
-            state = {'PENDING_PAYMENT': 'PENDING_PAYMENT', 'PENDING_APPROVAL': 'PENDING_APPROVAL',
-                     'SCHEDULED': 'SUCCEEDED', 'CANCELLED': 'FAILED'}.get(row['status'])
+            state = self.action_state(row)
             if not state:
                 unverified += 1
                 continue
             records.append(self.evidence(record, row, state,
                                          source_complete=collection['complete'],
-                                         total_verified=expected is not None))
+                                         total_verified=expected is not None,
+                                         observed_pay_type=observed_pay_type))
         # Exactly one matching remote record may decide the plan.  A partial
         # list, a second similar record, or a detail that does not agree keeps
         # the result unknown instead of choosing an arbitrary row.
@@ -541,7 +654,11 @@ class SportsAction:
             return False
         if b['mode'] == 'SPORT_PERSON' and members[0].get('spotsNum') != 1:
             return False
-        created = s.stamp(raw.get('gmtCreate'))
+        created = None
+        try:
+            created = s.stamp(raw.get('gmtCreate'))
+        except CampusError:
+            return False
         dispatched = record.get('dispatch_at')
         if not created or not isinstance(dispatched, (int, float)):
             return False
@@ -553,12 +670,18 @@ class SportsAction:
                 and created_ts <= time.time() + 60)
 
     @staticmethod
-    def evidence(record, row, state, *, source_complete, total_verified=False):
-        checked = datetime.now(s.TZ).isoformat(timespec='seconds')
+    def evidence(record, row, state, *, source_complete, total_verified=False,
+                 observed_pay_type=None):
+        checked = datetime.now(timezone.utc).isoformat(timespec='seconds')
         url = redact_official_url(record['business'].get('official_url'))
         refund = row['refund_status']
+        business = record['business']
+        expected = business.get('expected_total_fen',
+                                0 if business.get('payment_method') == 'FREE' else None)
+        payment_matches = (None if observed_pay_type is None
+                           else observed_pay_type == business.get('payment_method'))
         return {'account': record['account'], 'operation': record['operation'],
-                'business': record['business'],
+                'business': business,
                 'service_id': 'sports', 'record_id': row['reservation_id'], 'state': state,
                 'platform': {
                     'reservation_id': row['reservation_id'],
@@ -570,6 +693,12 @@ class SportsAction:
                     'payment_deadline_state': ('PLATFORM_DECLARED' if row['payment_deadline']
                                                else 'NOT_REPORTED'),
                     'payment_receipt_verified': False,
+                    'payment_method': {'source_pay_type': observed_pay_type,
+                                       'matches_plan': payment_matches,
+                                       'verified': False,
+                                       'domain': 'UNVERIFIED_SOURCE_ENUM'},
+                    'eligibility': {'state': 'UNVERIFIED', 'verified': False,
+                                    'authority': 'PLATFORM_RESPONSE'},
                     'refund_status': refund,
                     'refund_accepted': refund in REFUND_ACCEPTED,
                     'refund_settled_by_platform': refund == 'REFUNDED',
@@ -579,11 +708,13 @@ class SportsAction:
                     'amounts': {'unit': 'FEN', 'currency': 'CNY',
                                 'paid_fen': row['paid_amount_fen'],
                                 'total_fen': row['total_amount_fen'],
+                                'total_source_parsed': row['total_amount_fen'] is not None,
                                 'total_verified': bool(total_verified),
-                                'expected_total_fen': record['business'].get('expected_total_fen')},
+                                'expected_total_fen': expected},
                     'official_url': url, 'checked_at': checked,
+                    'checked_at_zone': 'UTC',
                     'source_complete': bool(source_complete),
-                    'refresh': {'operation': 'sports.order_detail',
+                    'refresh': {'service_id': 'sports', 'operation': 'order_detail',
                                 'record_id': row['reservation_id'],
                                 'suggested_after_seconds': REFRESH_AFTER_SECONDS,
                                 'official_url': url}}}
