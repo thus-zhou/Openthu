@@ -405,6 +405,10 @@ class BrowserManager:
             fields=[{'type':f['type'],'value':'[REDACTED]','checked':f.get('checked'),
                 'selected_count':len(f.get('selected') or [])} for f in payload['fields']],
             authorizationRequired='A specific human instruction plus trusted host evidence and a registered site adapter are required.')
+        if result.get('reason')!='ADAPTER_REQUIRED':
+            from .consent import VERSION as HOST_AUTHORIZATION_VERSION
+            result.update(authorization_protocol=HOST_AUTHORIZATION_VERSION,
+                local_confirmation_command='python -m thu_assistant.consent --plan '+result['plan_id'])
         return result
 
     def execute(self,plan_id,authorization):
