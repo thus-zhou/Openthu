@@ -17,13 +17,11 @@ availability, and an unrecognised unit is never converted by guessing.
 """
 from __future__ import annotations
 
-from datetime import date
-
 from . import cache_policy, domain_models, source_state
 
 VERSION = 'library-sports-precheck-v1'
 TIMEZONE_NAME = 'Asia/Shanghai'
-UNITS = ('MINUTE', 'DAY', 'FEN', 'PERSON', 'COUNT', 'FLAG', 'TEXT')
+UNITS = ('MINUTE', 'FEN', 'PERSON', 'COUNT', 'FLAG', 'TEXT')
 INT_UNITS = {'MINUTE', 'FEN', 'PERSON', 'COUNT'}
 
 # Platform rule fields and the unit the source declares for them.  A field not
@@ -106,12 +104,6 @@ def rule_value(value, unit, *, raw_field, source=None, checked_at=None, note='')
         valid = isinstance(value, (bool, int)) and value in (True, False, 0, 1)
         if valid:
             value = bool(value)
-    elif unit == 'DAY':
-        try:
-            date.fromisoformat(value)
-            valid = isinstance(value, str)
-        except (TypeError, ValueError):
-            valid = False
     else:
         valid = isinstance(value, str) and bool(value.strip())
         if valid:
