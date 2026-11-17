@@ -35,7 +35,7 @@ python scripts/dev.py test
 - `openthu health [--service ID]`：本地能力健康；只报告静态登记，不探测真实站点。
 - `openthu query --service ID --operation OP [--parameters JSON|@file] [--cursor C] [--page-size N]`：执行一个已登记的只读查询。
 - `openthu agenda [--export PATH] [--format ics|markdown|json]`：按需读取统一日程；导出只写本地文件，必须给绝对路径。
-- `openthu dashboard [--host 127.0.0.1] [--port N]`：启动本地只读看板；提供者未安装时返回 `LOCAL_DASHBOARD_UNAVAILABLE`。
+- `openthu dashboard [--host 127.0.0.1] [--port N] [--check]`：启动本地只读看板，先输出监听地址与实例号再常驻；`--check` 启动一次、输出同样信息后立即停止；提供者未安装时返回 `LOCAL_DASHBOARD_UNAVAILABLE`。
 
 迁移说明：原来的位置参数 `operation` 现在是子命令，全局参数必须写在子命令之后；成功输出新增顶层 `command` 字段；错误对象从 `{"code": ...}` 扩展为带 `category`、`retryable`、`automatic_replay_allowed`、`user_action` 的分类错误。旧调用如 `openthu read --url ...` 仍按原字段返回。
 
