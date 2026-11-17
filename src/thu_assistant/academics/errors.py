@@ -14,6 +14,10 @@ _DETAIL = re.compile(r'^[A-Za-z0-9_.:=,+-]{0,200}$')
 
 # code -> (category, retryable, user_action, public message)
 CODES = {
+    'ACADEMICS_ERROR': (
+        'INTERNAL', False, 'CONTACT_SUPPORT',
+        '学业读取发生未分类的本地错误，操作未完成。',
+    ),
     'ACADEMICS_SOURCE_BLOCKED': (
         'NOT_IMPLEMENTED', False, 'CONTACT_SUPPORT',
         '该学业能力的来源契约尚未核对，当前版本不提供生产读取。',

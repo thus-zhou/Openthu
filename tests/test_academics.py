@@ -871,3 +871,42 @@ def test_rehearsal_rejects_a_transport_that_omits_synthetic_marker():
     liar.synthetic = True
     with pytest.raises(AcademicsError):
         AcademicsReader().read_synthetic('exams', liar, semester=SEMESTER)
+
+
+def test_base_academics_error_is_registered():
+    error = AcademicsError().as_error()
+    assert error['code'] == 'ACADEMICS_ERROR'
+    assert error['category'] == 'INTERNAL'
+    assert error['automatic_replay_allowed'] is False
+
+
+def test_duplicate_source_page_is_not_double_counted():
+    collected = academics.collect_pages([
+        {'number': 1, 'rows': [{'exam_id': 'EX-1'}]},
+        {'number': 1, 'rows': [{'exam_id': 'EX-2'}]},
+    ])
+    assert collected['pages_read'] == 1
+    assert collected['source_complete'] is False
+    assert 'DUPLICATE_SOURCE_PAGE' in collected['source_errors']
+    assert len(collected['rows']) == 1
+
+
+def test_invalid_rows_reduce_completeness_without_a_fabricated_value():
+    bad = fixture('invalid-rows.json')['exam_rows'][0]
+    transport = synthetic_transport([{'number': 1, 'rows': [row(exam_rows(), 'exam_id', 'EX-1'), bad]}])
+    result = AcademicsReader().read_synthetic('exams', transport, semester=SEMESTER)
+    assert result['status'] == 'PARTIAL'
+    assert result['complete'] is False
+    assert len(result['items']) == 1
+    assert result['items'][0]['date'] == '2027-01-05'
+    assert result['rejected'][0]['code'] == 'END_BEFORE_START'
+
+
+def test_date_only_events_use_date_kind():
+    item = entry('TT-1')
+    date_only = expansion('TT-1', with_periods=False)
+    converted = calendar_events('timetable', [item], expansions=[date_only])
+    assert converted['events']
+    assert all(event['time']['kind'] == 'DATE' for event in converted['events'])
+    assert [event['time']['date'] for event in converted['events']] == \
+        [occurrence['date'] for occurrence in date_only['occurrences']]

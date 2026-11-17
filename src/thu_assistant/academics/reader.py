@@ -204,6 +204,9 @@ def collect_pages(pages, *, missing_pages=(), errors=()):
             problems.add('ACADEMICS_INVALID_ARGUMENTS')
             continue
         declared += 1
+        if page['number'] in read:
+            problems.add('DUPLICATE_SOURCE_PAGE')
+            continue
         if page.get('failed') is True or not isinstance(page.get('rows'), list):
             missing.add(page['number'])
             continue
