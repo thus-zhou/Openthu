@@ -100,6 +100,19 @@ def gateway_environment(env: dict[str, str] | None = None) -> dict[str, str]:
     result["OPENTHU_LEARN_SESSION_DIR"] = str(learn_dir)
     result["THU_LEARN_SESSION_DIR"] = str(learn_dir)
     result["THU_ACCESS_STATE_DIR"] = source.get("THU_ACCESS_STATE_DIR") or str(state / "THUAccess")
+
+    # Resolve the two repository-level runtime helpers from the installed
+    # layout descriptor (wheel) or the live checkout.  Without this the child
+    # gateway would have to guess a path relative to its own directory, which
+    # only works inside a src/ checkout.
+    if not result.get("THU_ACCESS_HELPER"):
+        helper = paths.resolve_resource("source.windows_auth")
+        if helper.available and helper.path is not None:
+            result["THU_ACCESS_HELPER"] = str(helper.path)
+    if not result.get("THU_MADMODEL_DIR"):
+        vendor = paths.resolve_resource("source.madmodel_proxy")
+        if vendor.available and vendor.path is not None:
+            result["THU_MADMODEL_DIR"] = str(vendor.path.parent)
     return result
 
 

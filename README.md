@@ -4,7 +4,7 @@
 
 这是独立社区项目，与清华大学官方无隶属关系。软件可由所有人下载、修改和分发（MIT）；各校园服务仍以使用者自身账号、资格和官方规则为准。
 
-**当前版本：0.1.0 预览版。** 云端支持开发和离线测试；真实校园会话目前依赖 Windows DPAPI。预约和取消已有适配及模拟验证，真实写入仍需按具体事项验收。
+**版本：已发布 0.1.0 预览版；仓库当前打包 0.2.0，属于未发布候选。** 云端支持开发和离线测试；真实校园会话目前依赖 Windows DPAPI。预约和取消已有适配及模拟验证，真实写入仍需按具体事项验收。
 
 ## 开始使用
 
@@ -57,14 +57,14 @@ python scripts/dev.py test
 
 常用环境变量包括 `OPENTHU_STATE_DIR`、`OPENTHU_DOWNLOAD_DIR`、`OPENTHU_TEMP_DIR`、`OPENTHU_LOG_DIR`、`OPENTHU_NODE`、`OPENTHU_PYTHON`、`OPENTHU_NPM_REGISTRY`、`OPENTHU_LISTEN_HOST`、`OPENTHU_LISTEN_PORT`、`OPENTHU_PAGE_SIZE` 和 `OPENTHU_REFRESH_SECONDS`。旧调用者的 `THU_ASSISTANT_STATE_DIR`、`THU_NODE`、`THU_PYTHON` 仍作为低优先级别名可用；规范化环境变量优先。
 
-状态、下载、临时和日志目录必须是绝对路径，支持 `~` 展开并会规范化。默认状态目录在代码库之外；用户自选位置不得指向源码包、程序资源、`.git` 或密钥子目录，相对路径会被拒绝。状态目录迁移只提供预览和目标，本版本不搬移任何真实会话或凭据。配置对象公开摘要只含来源标签和安全的非路径值。
+状态、下载、临时和日志目录必须是绝对路径，支持 `~` 展开并会规范化。默认状态目录在代码库之外；用户自选位置不得指向源码包、程序资源、`.git` 或密钥子目录，相对路径会被拒绝。旧状态只通过 `python scripts/migrate_state.py preview` 只读预览；`apply` 需要逐项明确 `replace`/`keep`，只复制不移动，失败保留原文件与日志，下载与日志保持原位。配置对象公开摘要只含来源标签和安全的非路径值。
 
 ## 获取方式与能力边界
 
 | 获取方式 | 包含内容 | 适用场景 |
 |---|---|---|
 | 完整源码包（`git clone` 或 GitHub Release 源码归档） | Python/Node 源码、`vendor/madmodel-proxy`、`runtime/windows`、合成测试 | 云端离线开发、Windows 真实运行、贡献代码 |
-| Python wheel（`python -m build` 生成的 `.whl`） | Python 包、静态服务目录、兼容命令 | 静态目录与库调用；不含 Node 运行依赖（`node_modules`）、认证依赖和 Windows 辅助，不能完成真实校园认证 |
+| Python wheel / sdist（`python scripts/package_release.py build` 生成） | Python 包、静态服务目录、兼容命令，以及 `thu_assistant/_bundled/` 内的 Windows 认证辅助、固定上游 Proxy 与许可证 | 静态目录、库调用与认证辅助解析；`node_modules` 与离线测试不在包内，需要时自行 `npm ci --ignore-scripts`，安装后用 `openthu-doctor` 自检 |
 | 云端离线开发检出 | 完整源码、Python 3.12、Node.js 24、Playwright Chromium | `doctor` / `check` / `test` / `smoke`；不访问校园账户，不保存 Windows 凭据 |
 
 真实校园认证目前依赖 Windows DPAPI。云端开发机只做开发与离线验证，不应导入或改用明文凭据。

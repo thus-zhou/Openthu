@@ -1,0 +1,7 @@
+# Runtime dependencies, pinned to the versions validated for this release.
+# The browser client is optional: install the "browser" extra (or the pinned
+# line below) only when real browser automation is needed.  The Chromium
+# download is always a separate, explicit step.
+cryptography==50.0.2
+Pillow==13.0.0
+requests==2.33.0

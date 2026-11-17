@@ -31,7 +31,7 @@ if str(_SRC) not in sys.path:
 from thu_assistant import configuration as configuration_module  # noqa: E402
 from thu_assistant import paths as path_resolver  # noqa: E402
 
-MIN_PYTHON = (3, 10)
+MIN_PYTHON = (3, 12)
 VALIDATED_PYTHON = (3, 12)
 MIN_NODE = 24
 DEV_PACKAGES = ("pytest", "requests", "playwright", "build", "openthu")
@@ -39,7 +39,7 @@ PINNED_NODE_PACKAGE = "tough-cookie"
 MAX_DIAGNOSTIC_OUTPUT = 4096
 
 FIX_PYTHON = (
-    "安装 Python 3.12（最低 3.10），在项目目录运行 python -m venv .venv，"
+    "安装 Python 3.12 或 3.13，在项目目录运行 python -m venv .venv，"
     "激活后执行 python -m pip install -r requirements-dev.txt 和 python -m pip install -e ."
 )
 FIX_PYTHON_DEPS = "python -m pip install -r requirements-dev.txt；python -m pip install -e ."
@@ -48,8 +48,8 @@ FIX_NODE_DEPS = "python scripts/dev.py setup-node"
 FIX_PLAYWRIGHT = "python -m playwright install chromium"
 FIX_PLAYWRIGHT_LINUX = "python -m playwright install --with-deps chromium"
 FIX_SOURCE = (
-    "使用 GitHub Release 的完整源码包或 git clone；"
-    "Python wheel 不含 vendor/ 与 runtime/windows/。"
+    "完整 wheel 与 sdist 自带 thu_assistant/_bundled/（Windows 认证辅助与固定上游代码）；"
+    "缺失说明安装不完整，请重新安装或改用完整源码包。"
 )
 FIX_WINDOWS_AUTH = (
     "真实登录请在 Windows 完整源码包中运行；"
@@ -167,15 +167,24 @@ def _distribution_version(name):
         return None
 
 
-def _browser_available():
+def _browser_state():
+    """Report the browser capability precisely instead of "installed or not".
+
+    A missing Python client and a missing Chromium binary need different
+    fixes, so the diagnostic names the one that is actually missing.
+    """
     try:
         from playwright.sync_api import sync_playwright
-
+    except Exception:
+        return {"available": False, "reason": "client-missing"}
+    try:
         with sync_playwright() as playwright:
             executable = playwright.chromium.executable_path
-            return bool(executable and Path(executable).is_file())
+            if executable and Path(executable).is_file():
+                return {"available": True, "reason": "ok"}
     except Exception:
-        return False
+        return {"available": False, "reason": "launch-failed"}
+    return {"available": False, "reason": "binary-missing"}
 
 
 def _read_json(path):
@@ -237,6 +246,105 @@ def _row(
         "fix": fix,
         "blocking": bool(blocking),
     }
+
+
+def _capabilities(checks) -> dict:
+    """Collapse per-check status into one state per user-facing capability.
+
+    ``unavailable`` means the capability cannot be used at all; ``degraded``
+    means it works with a documented limitation.  The diagnostic therefore
+    names the missing capability instead of printing a generic "install
+    failed" line.
+    """
+    order = ("development", "readonly", "browser", "production-auth", "packaging", "config")
+    result: dict[str, str] = {}
+    for name in order:
+        rows = [row for row in checks if row.get("capability") == name]
+        if not rows:
+            continue
+        statuses = {row.get("status") for row in rows}
+        if "fail" in statuses:
+            result[name] = "unavailable"
+        elif "warning" in statuses:
+            result[name] = "degraded"
+        elif "pass" in statuses:
+            result[name] = "available"
+        else:
+            result[name] = "not_applicable"
+    return result
+
+
+def _browser_report(state) -> dict:
+    """Normalise an injected bool or a structured browser probe result."""
+    if isinstance(state, dict):
+        return {
+            "available": bool(state.get("available")),
+            "reason": str(state.get("reason") or "unavailable"),
+        }
+    return {"available": bool(state), "reason": "ok" if state else "unavailable"}
+
+
+def _release_layout(package_dir: Path, source):
+    """Check the installed program files against the bundled layout descriptor.
+
+    Mixing an old package tree with a newer resource layout (or the reverse)
+    is exactly the failure an in-place upgrade can produce, so it is reported
+    instead of being discovered later as a mysterious import error.
+    """
+    layout = path_resolver.bundled_layout(package_root_value=package_dir)
+    if layout is None:
+        if source is not None:
+            return _row(
+                "release-layout",
+                "发行布局",
+                "packaging",
+                "pass",
+                "源码检出布局：资源按仓库路径解析，无包内布局描述",
+            )
+        return _row(
+            "release-layout",
+            "发行布局",
+            "packaging",
+            "fail",
+            "安装包缺少包内资源布局（thu_assistant/_bundled/layout.json）；"
+            "该安装不完整，认证辅助不可用",
+            fix=FIX_SOURCE,
+            blocking=True,
+        )
+    try:
+        from thu_assistant.version import __version__ as running_version
+    except Exception:
+        running_version = None
+    declared = str(layout.get("product_version") or "")
+    if not declared or running_version is None:
+        return _row(
+            "release-layout",
+            "发行布局",
+            "packaging",
+            "fail",
+            "包内布局描述缺少版本信息，无法核对程序与资源是否配套",
+            fix=FIX_SOURCE,
+            blocking=True,
+        )
+    if declared != running_version:
+        return _row(
+            "release-layout",
+            "发行布局",
+            "packaging",
+            "fail",
+            "程序版本 " + str(running_version) + " 与资源布局 " + declared + " 不一致；请重新安装",
+            available_version=declared,
+            fix=FIX_SOURCE,
+            blocking=True,
+        )
+    return _row(
+        "release-layout",
+        "发行布局",
+        "packaging",
+        "pass",
+        "完整安装布局：程序版本与包内认证资源一致（" + declared + "）",
+        available_version=declared,
+    )
 
 
 def _node_runtime(package_dir: Path):
@@ -352,6 +460,11 @@ def _source_package(package_dir: Path, source):
         for row in manifest
         if row["required"] and not row["available"] and row["scope"] == "package"
     ]
+    bundled = [
+        row["id"]
+        for row in manifest
+        if row["scope"] == "source" and row.get("location") == "bundled"
+    ]
     source_missing = [
         row["relative_path"]
         for row in manifest
@@ -368,13 +481,29 @@ def _source_package(package_dir: Path, source):
             blocking=True,
         )
     if source is None:
+        if not source_missing and bundled:
+            return _row(
+                "source-package",
+                "源码包完整性",
+                "packaging",
+                "pass",
+                "完整安装布局：认证辅助与固定上游代码随包安装，不依赖源码目录"
+                "（离线测试仍只在源码包中）",
+                available_version=str(len(bundled)) + " 项",
+            )
         return _row(
             "source-package",
             "源码包完整性",
             "packaging",
-            "warning",
-            "当前是包安装布局；不含源码认证辅助与离线测试，不代表安装损坏",
+            "fail",
+            (
+                "安装包缺少认证运行资源：" + "、".join(str(item) for item in source_missing)
+                if source_missing
+                else "安装包没有包内认证运行资源（_bundled 布局缺失）"
+            )
+            + "；请重新安装完整 wheel",
             fix=FIX_SOURCE,
+            blocking=True,
         )
     if source_missing:
         return _row(
@@ -510,7 +639,7 @@ def collect(
     root = Path(root)
     which = which or shutil.which
     distribution_version = distribution_version or _distribution_version
-    browser_available = browser_available or _browser_available
+    browser_available = browser_available or _browser_state
     if config is None and config_error is None:
         try:
             config = configuration_module.load_config(
@@ -655,19 +784,20 @@ def collect(
 
     node_path = _configured_node(config, which)
     if not node_path:
+        node_text = None
+        node_ok = False
         checks.append(
             _row(
                 "node",
                 "Node.js",
                 "development",
                 "fail",
-                "未找到 node 命令",
+                "未找到 node 命令：校园网关、浏览器办理与真实认证无法启动"
+                "（静态目录和离线库调用仍可用）",
                 fix=FIX_NODE,
                 blocking=True,
             )
         )
-        node_text = None
-        node_ok = False
     else:
         node_probe = command_probe(node_path)
         node_text = node_probe.get("version")
@@ -758,7 +888,8 @@ def collect(
     checks.append(_node_runtime(package_dir))
     checks.append(_readonly_catalog(package_dir))
 
-    if browser_available():
+    browser_state = _browser_report(browser_available())
+    if browser_state["available"]:
         checks.append(
             _row(
                 "playwright-browser",
@@ -768,6 +899,29 @@ def collect(
                 "Chromium 已安装（浏览器相关测试可用）",
             )
         )
+    elif browser_state["reason"] == "client-missing":
+        checks.append(
+            _row(
+                "playwright-browser",
+                "Playwright Chromium",
+                "browser",
+                "warning",
+                "浏览器能力不可用：未安装 Playwright 客户端；静态目录、离线库调用与命令行仍可用",
+                fix=FIX_PLAYWRIGHT if platform_name == "nt" else FIX_PLAYWRIGHT_LINUX,
+            )
+        )
+    elif browser_state["reason"] == "binary-missing":
+        checks.append(
+            _row(
+                "playwright-browser",
+                "Playwright Chromium",
+                "browser",
+                "warning",
+                "浏览器能力不可用：Playwright 客户端已安装但缺少 Chromium 可执行文件；"
+                "校园页面操作不可用，离线开发仍可继续",
+                fix=FIX_PLAYWRIGHT if platform_name == "nt" else FIX_PLAYWRIGHT_LINUX,
+            )
+        )
     else:
         checks.append(
             _row(
@@ -775,13 +929,14 @@ def collect(
                 "Playwright Chromium",
                 "browser",
                 "warning",
-                "未找到可执行的 Chromium；浏览器相关测试不可用，离线开发仍可继续",
+                "浏览器能力不可用：Chromium 启动失败（浏览器相关测试不可用，离线开发仍可继续）",
                 fix=FIX_PLAYWRIGHT if platform_name == "nt" else FIX_PLAYWRIGHT_LINUX,
             )
         )
 
     checks.append(_windows_auth(package_dir, source, node_ok, platform_name))
     checks.append(_source_package(package_dir, source))
+    checks.append(_release_layout(package_dir, source))
     checks.append(_config_row(config, config_error))
     checks.append(_storage_row(config, config_error))
 
@@ -803,6 +958,7 @@ def collect(
             "not_applicable": len(not_applicable),
             "blocking": len(blocking_failures),
         },
+        "capabilities": _capabilities(checks),
         "checks": checks,
         "note": (
             "报告只含逻辑检查项、状态、脱敏版本、仓库相对资源名和修复命令，"
@@ -840,6 +996,20 @@ def format_report(report):
             lines.append("       修复：" + row["fix"])
     summary = report["summary"]
     lines.append("")
+    capabilities = report.get("capabilities") or {}
+    if capabilities:
+        labels = {
+            "available": "可用",
+            "degraded": "降级",
+            "unavailable": "不可用",
+            "not_applicable": "不适用",
+        }
+        lines.append(
+            "能力状态："
+            + "；".join(
+                name + "=" + labels.get(state, state) for name, state in capabilities.items()
+            )
+        )
     if report["ok"]:
         lines.append(
             "结论：环境可用（共 "

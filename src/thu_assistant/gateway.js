@@ -9,8 +9,20 @@ const { once } = require('node:events');
 const { createRequire } = require('node:module');
 const { validateUrl, assertReadUrl, toTunnel, safeUrl, redact, sanitizeJson } = require('./security');
 const { createSecureCrypto, resolveCryptoConfig } = require('./crypto-bridge');
-const helper = require(process.env.THU_ACCESS_HELPER || path.join(__dirname, '../../runtime/windows/access.js'));
-const up = createRequire(path.join(process.env.THU_MADMODEL_DIR || path.join(__dirname, '../../vendor/madmodel-proxy'), 'package.json'));
+// The complete install ships the Windows helper and the pinned upstream proxy
+// inside this package; a source checkout keeps them at the repository root.
+// Pick the first location that exists instead of assuming one directory depth.
+function firstExisting(candidates){for(const candidate of candidates){try{if(fs.existsSync(candidate))return candidate;}catch{/* keep looking */}}return candidates[candidates.length-1];}
+const helperPath = process.env.THU_ACCESS_HELPER || firstExisting([
+  path.join(__dirname, '_bundled', 'runtime', 'windows', 'access.js'),
+  path.join(__dirname, '../../runtime/windows/access.js'),
+]);
+const madmodelDir = process.env.THU_MADMODEL_DIR || firstExisting([
+  path.join(__dirname, '_bundled', 'vendor', 'madmodel-proxy'),
+  path.join(__dirname, '../../vendor/madmodel-proxy'),
+]);
+const helper = require(helperPath);
+const up = createRequire(path.join(madmodelDir, 'package.json'));
 const auth = up('./madmodel-auth');
 const credentials = up('./platform/credentials');
 const locks = up('./platform/process-lock');
@@ -53,7 +65,7 @@ function importLearning(jar,token){
   const cookies=jar.browserCookies(['https://learn.tsinghua.edu.cn/']);
   const env={...process.env};
   if(activeSession?.store?.account)env.THU_LEARN_ACCOUNT=activeSession.store.account;
-  try{return JSON.parse(execFileSync(process.env.THU_PYTHON||'python',[path.join(path.dirname(process.env.THU_ACCESS_HELPER||path.join(__dirname, '../../runtime/windows/access.js')),'import-session.py')],
+  try{return JSON.parse(execFileSync(process.env.THU_PYTHON||'python',[path.join(path.dirname(helperPath),'import-session.py')],
     {input:JSON.stringify({cookies,csrf:token}),encoding:'utf8',windowsHide:true,stdio:['pipe','pipe','pipe'],timeout:45000,env}));}
   catch{throw fail('LEARN_PLUGIN_IMPORT_FAILED');}
 }

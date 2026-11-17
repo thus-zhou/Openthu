@@ -12,7 +12,7 @@ python scripts/dev.py doctor
 
 | 检查项 | 内容与修复入口 |
 |---|---|
-| Python | 版本（最低版本读取 `pyproject.toml`，当前为 3.10）与虚拟环境提示 |
+| Python | 版本（最低版本读取 `pyproject.toml`，当前为 3.12）与虚拟环境提示 |
 | Python 开发依赖 | `requirements-dev.txt` 与可编辑安装的 `openthu` |
 | Node.js / npm | Node.js 24+ 与 npm 是否可执行 |
 | 锁文件运行依赖 | `package-lock.json` 固定的 tough-cookie 是否已由 `setup-node` 安装且版本一致 |
@@ -49,8 +49,10 @@ python scripts/dev.py doctor
 | 来源 | 内容 | 能做什么 / 不能做什么 |
 |---|---|---|
 | 完整源码包（`git clone` 或 Release 源码归档） | Python/Node 源码、`vendor/madmodel-proxy`、`runtime/windows`、合成测试、开发脚本 | 可做云端离线开发、Windows 真实认证与运行、贡献；真实写入仍需按具体事项验收 |
-| Python wheel（`python -m build` 生成的 `.whl`） | Python 包、静态服务目录、兼容命令 | 可做静态目录与库调用；不含 Node 运行依赖（`node_modules`）、`vendor/`、`runtime/windows/`，不能完成真实校园认证 |
+| Python wheel / sdist | Python 包、静态服务目录、兼容命令，以及打包进 `thu_assistant/_bundled/` 的 Windows 认证辅助、固定上游 Proxy 与许可证 | 可做静态目录、库调用和认证辅助解析；`node_modules` 与离线测试不在包内，需要时自行 `npm ci --ignore-scripts`；安装后用 `openthu-doctor` 自检 |
 | 云端离线开发检出 | 完整源码、Python、Node.js 24、Chromium | 可运行 `doctor` / `check` / `smoke` / `test`；不访问校园账户，不保存或导入 Windows 凭据 |
+
+wheel 与源码包的差别只在 `node_modules`、离线测试和开发脚本；认证辅助与固定上游代码由同一份 `build_support/distribution.json` 生成，不再各自维护一份。`doctor` 的 `release-layout` 检查会核对程序版本与包内资源配置是否配套，混装旧版本会直接阻止启动。
 
 ## 云端开发
 
@@ -74,6 +76,12 @@ Node 依赖默认从官方 npm registry 安装，版本和完整性哈希由锁�
 
 ## 下载与构建
 
-GitHub Releases 提供完整源码包、校验文件及构建包。完整源码归档包含认证依赖、Windows 辅助代码和测试；单独 Python wheel 不包含仓库级认证依赖，实时功能请使用完整源码包。两者的能力边界见上文“安装来源与能力边界”；`doctor` 的源码包完整性检查会提示缺少 `vendor/` 或 `runtime/windows/` 的检出。
+GitHub Releases 提供完整源码包、校验文件及构建包。完整源码归档包含认证依赖、Windows 辅助代码和测试；wheel 与 sdist 通过同一份资源清单把认证辅助与固定上游代码装进 `thu_assistant/_bundled/`，`node_modules` 和离线测试仍只在源码包中。两者的能力边界见上文“安装来源与能力边界”；`doctor` 的 `release-layout` 与源码包完整性检查会提示混装或缺少的资源。
 
-`python -m build` 构建 Python 包；`python scripts/package_release.py` 在 `dist/` 生成源码归档与 SHA256。预发布不能视为所有校园系统都已可用。
+```sh
+python scripts/package_release.py build         # dist/：源码 zip/tar.gz、sdist、wheel、SHA256SUMS、release-manifest.json
+python scripts/package_release.py verify        # 重新核对版本、校验和、包内资源与许可证
+python scripts/package_release.py install-check # 在仓库外的临时虚拟环境安装 wheel 并启动 MCP
+```
+
+构建从已提交的 Git 内容取文件：工作区换行、文件时间或未跟踪的缓存/日志/密钥不会进入任何归档；跟踪树不干净时构建直接拒绝。版本号来自 `src/thu_assistant/version.py`，包元数据、`release-manifest.json`、`SHA256SUMS` 与候选说明必须一致。预发布不能视为所有校园系统都已可用。
