@@ -3,18 +3,24 @@
   "title": "公共业务门面与 MCP CLI 集成",
   "batch": 6,
   "owner": "Hermes",
-  "status": "implemented",
-  "status_note": "Implementation and module tests are complete. Auditing and batch reconnection have not run, so this record deliberately does not say accepted.",
+  "status": "accepted",
+  "status_note": "Audit 6.1-audit closed: no P0; all eight P1 and all fifteen P2 findings fixed or explicitly downgraded with a recorded reason.",
   "baseline_commit": "bb1f963",
   "integration_parent_commit": "bb1f963",
   "batch5_integration_commit": "0779fff",
-  "delivery_commit": "e136421",
+  "delivery_commit": "aee2559",
   "implementation_commits": [
-    "e136421"
+    "e136421",
+    "ccb14e2",
+    "aee2559"
   ],
+  "audit_baseline_commit": "ccb14e2",
+  "audit_report": ".local/audits/6.1-audit.md",
+  "accepted_at": "2026-11-17",
   "record_commit": "the commit containing this record file",
   "branch": "hermes/6.1",
   "worktree": "~/projects/Openthu/.local/worktrees/6.1",
+  "worktree_note": "Recorded relative to the user home because the contract privacy validator rejects absolute home-directory paths; the absolute path stays in the execution session.",
   "version_pr": null,
   "paths": [
     "src/thu_assistant/facade/__init__.py",
@@ -28,8 +34,11 @@
     "src/thu_assistant/__main__.py",
     "src/thu_assistant/source_state.py",
     "contracts/v0.2/error-classification.json",
+    "contracts/v0.2/local-read-api.schema.json",
+    "README.md",
     "tests/test_facade.py",
-    "tests/test_cli.py"
+    "tests/test_cli.py",
+    "tests/test_facade_audit.py"
   ],
   "contracts": [
     "business-facade-v1",
@@ -41,42 +50,37 @@
     "calendar-event-v1",
     "local-read-api-v1"
   ],
+  "contract_revision": {
+    "file": "contracts/v0.2/local-read-api.schema.json",
+    "change": "/resources documents the semester parameter (the 4.2 index is per semester and cannot resolve a default); additive, recorded in x-revisions.",
+    "compatible": true
+  },
   "outputs": [
     "the frozen six-method business facade: query, health, prepare, execute, result and cancel",
     "a capability registration built from each module's own report; a module file existing is never evidence of availability",
     "registration states AVAILABLE/DISABLED/BLOCKED/MISSING with reason, owner, adapter version, authorization class, side effects, evidence level, prepare_allowed and executable",
-    "one registration list for describe_service state, the prepare/execute gates and the health report",
+    "one registration list for describe_service state, the prepare/execute gates and the health report; an unregistered read is refused instead of falling back to QueryEngine",
+    "campus.page is registered so the only executable page read has a public capability block",
     "agenda, agenda_changes and resources registered as local reads inside the existing query_service entry; the 29 legacy MCP tools and their arguments stay unchanged",
     "agenda pages a materialised window with a process-local snapshot cursor; agenda_changes keeps the incremental change_cursor separate from the paging next_cursor",
-    "resources reads an injected local index and reports a capped read as not complete with RESOURCE_SEARCH_LIMIT_APPLIED",
-    "read entries refuse write operation names and method/headers/token/cookie proxy fields, including nested ones",
-    "blocked campus writes are refused before any preflight, adapter call or browser page is touched",
+    "resources uses the 4.2 provider's own max_search_limit, reports a capped read as not complete with RESOURCE_SEARCH_LIMIT_APPLIED, and emits a frozen-envelope verification level",
+    "read entries refuse write operation names and method/headers/token/cookie proxy fields, including nested ones; url is accepted only for the registered campus.page read",
+    "blocked campus writes are refused before any preflight, adapter call or browser page is touched; switched-off writes raise their registered switch code",
     "legacy framework operations without an adapter keep their ADAPTER_REQUIRED plan shape and error code",
-    "health is a static capability report (live_probe=false); one failing service becomes UNKNOWN without stopping the others",
-    "request ids bound to queue state, transport cancellation, media cleanup and the result envelope",
-    "queued cancel takes effect immediately, running cancel is recorded as CANCELLATION_REQUESTED and cleanup runs exactly once; a finished request is never replayed",
-    "CLI subcommands describe/health/query/agenda/dashboard beside the unchanged legacy commands and flags; agenda can export a local calendar file",
+    "health aggregates PARTIAL/BLOCKED/DISABLED/MISSING and reports every catalog service plus facade-only services",
+    "request ids are typed (1 and \"1\" differ) and bound to queue state, transport cancellation, media cleanup and the result envelope",
+    "queued cancel takes effect immediately, running cancel stays CANCELLED after the handler returns, failures are FAILED, and cleanup runs exactly once",
+    "CLI subcommands describe/health/query/agenda/dashboard beside the unchanged legacy commands and flags; README documents the migration",
     "openthu dashboard fixes host/port/facade as its provider contract and fails closed with LOCAL_DASHBOARD_UNAVAILABLE until 6.2 supplies local_api",
-    "every MCP error carries the classified fields and a sanitised capability block when a registered capability is unavailable",
+    "every MCP error keeps a provider's registered code and carries the classified fields; the request-limit error is classified too",
     "13 new error codes registered in contracts/v0.2/error-classification.json and mirrored in source_state.ERROR_CODES"
   ],
   "capability_registry": {
     "total_entries": 80,
-    "services": 19,
-    "available_reads": "every registered read operation of info, learn, library, sports and campus",
-    "available_local_reads": [
-      "agenda",
-      "agenda_changes"
-    ],
-    "available_writes": [
-      "library.create_seat_reservation",
-      "library.create_room_reservation",
-      "library.cancel_reservation",
-      "sports.create_reservation",
-      "sports.cancel_reservation"
-    ],
+    "services": 20,
+    "available_reads": "every registered read operation of info, learn, library, sports, campus plus local.agenda/agenda_changes",
     "blocked": {
-      "library.renew_loan": "SOURCE_CONTRACT_UNVERIFIED (prepare allowed, execute refused)",
+      "library.renew_loan": "SOURCE_CONTRACT_UNVERIFIED (prepare allowed, execute refused); DISABLED when THU_LIBRARY_RENEW=0",
       "learn.submit_assignment": "BLOCKED_SOURCE_EVIDENCE (write switch THU_LEARN_SUBMIT off by default)",
       "academics.exams": "BLOCKED_SOURCE_EVIDENCE",
       "academics.timetable": "BLOCKED_SOURCE_EVIDENCE",
@@ -84,18 +88,18 @@
       "local.model_image_input": "MODEL_IMAGE_INPUT_UNAVAILABLE"
     },
     "missing": {
-      "local.resources": "RESOURCE_PROVIDER_UNAVAILABLE",
-      "local.resources_export": "RESOURCE_PROVIDER_UNAVAILABLE",
-      "local.media_prepare": "MEDIA_PROVIDER_UNAVAILABLE",
+      "local.resources": "RESOURCE_PROVIDER_UNAVAILABLE until a 4.2 provider is injected",
+      "local.resources_export": "NO_PUBLIC_ENTRY (4.2 export_summary is a host API)",
+      "local.media_prepare": "NO_PUBLIC_ENTRY (3.3 registration is a host API)",
       "legacy framework create/cancel": "ADAPTER_REQUIRED"
     }
   },
   "checks": {
     "module_tests": {
-      "passed": 46,
+      "passed": 68,
       "failed": 0,
-      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_facade.py tests/test_cli.py",
-      "breakdown": "tests/test_facade.py 38, tests/test_cli.py 8"
+      "breakdown": "tests/test_facade.py 37, tests/test_cli.py 8, tests/test_facade_audit.py 23",
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_facade.py tests/test_cli.py tests/test_facade_audit.py"
     },
     "related_regression": {
       "passed": 370,
@@ -128,20 +132,37 @@
     },
     "dev_check": {
       "ok": true,
-      "files_checked": 503,
+      "files_checked": 504,
       "findings": 0,
       "mcp_tools": 29,
       "command": "python scripts/dev.py check",
-      "note": "record tree: delivery commit e136421 plus this record"
+      "note": "delivery tree aee2559 before this record commit"
     },
     "full_offline_suite_linux": {
-      "python_passed": 1314,
+      "python_passed": 1336,
       "python_skipped": 7,
       "python_failed": 0,
       "node_passed": 66,
       "node_failed": 0,
       "command": "python scripts/dev.py test",
-      "evidence_tree": "clean checkout of e136421 after `python scripts/dev.py setup-node`"
+      "evidence_tree": "aee2559 after `python scripts/dev.py setup-node`"
+    },
+    "audit_probes": {
+      "command": "PYTHONPATH=src python ../../audits/6.1-probes.py <name>",
+      "p1_health_partial": "library/sports/learn/local overall=PARTIAL, academics=BLOCKED, info=OK",
+      "p1_query_unregistered": "campus.page registered with a full public block; unknown reads refused",
+      "p1_describe_academics": "describe_service('academics') returns three BLOCKED operations; health=BLOCKED",
+      "p1_resources_real_limit": "real ResourceCenter search succeeds with limit=50 and the facade reads it",
+      "p1_resources_params_ignored": "offset/limit are no longer accepted: INVALID_ARGUMENTS (expected change)",
+      "p1_capability_entry_points": "resources_export and media_prepare are MISSING/NO_PUBLIC_ENTRY/executable=false",
+      "p1_error_mapping": "MCP error equals the registered RESOURCE_INVALID_ARGUMENT/INPUT object",
+      "p1_envelope_enum": "envelope VALID, verification_level=LOCAL_EXECUTION_STATE",
+      "p2_read_switch_state": "THU_TODOS=0 -> DISABLED and FACADE_CAPABILITY_UNAVAILABLE",
+      "p2_renew_switch_state": "THU_LIBRARY_RENEW=0 -> DISABLED and LIBRARY_RENEW_DISABLED",
+      "p2_cancel_media_unknown": "cancelled=false, media_cleanup=NOT_APPLICABLE, no media call",
+      "p2_live_probe_metadata": "query results no longer carry live_probe (probe reads the removed key; expected)",
+      "p2_id_collision": "the registry still refuses the same key twice; the MCP layer now keys ids by type, covered by test_p2_8",
+      "p2_request_lifecycle": "running cancel + finish ends as CANCELLED, not FINISHED"
     },
     "live_campus_calls": 0,
     "model_calls": 0,
@@ -152,31 +173,48 @@
   "verified_cases": [
     "the facade exposes exactly the six frozen methods and 29 legacy tools",
     "a module file existing never marks a capability available: submissions and academics are BLOCKED, resources and media are MISSING",
+    "the real 4.2 ResourceCenter succeeds through the facade with its own max_search_limit and a schema-valid envelope",
+    "local agenda, agenda_changes and resources results validate against result-envelope-v1",
+    "campus.page is registered and executable; an unregistered read returns UNREGISTERED_QUERY_OPERATION without reaching QueryEngine",
+    "url is accepted only for the registered campus.page read and rejected for every other query or prepare payload",
+    "health returns OK for info, PARTIAL for library/sports/learn/local and BLOCKED for academics",
+    "every service listed by describe() can be described, including facade-only academics",
+    "resources no longer accepts offset/limit and requires semester",
+    "media_prepare and resources_export are MISSING with NO_PUBLIC_ENTRY and no facade method pretends otherwise",
+    "a non-CampusError provider code survives the MCP and CLI boundaries as RESOURCE_INVALID_ARGUMENT/INPUT",
+    "THU_TODOS=0 marks agenda DISABLED; THU_LIBRARY_RENEW=0 marks renewal DISABLED and prepare raises LIBRARY_RENEW_DISABLED",
+    "an injected env and clock drive registration state and request timestamps",
+    "export_agenda rejects non-boolean overwrite/allow_partial and an unsupported format before delegating",
+    "query results report probe=SOURCE_READ instead of reusing the static live_probe flag",
+    "the request-limit error carries category/retryable/automatic_replay_allowed/user_action",
+    "a failed request ends FAILED, a cancelled running request ends CANCELLED, and a queued cancel never calls the handler",
+    "JSON-RPC ids 1 and \"1\" are distinct request keys",
+    "cancelling an unknown request does not touch media staging",
+    "an academics report failure leaves three MISSING entries and a sanitised registration_failures record",
+    "service_ids follows a catalog refresh without a restart",
+    "the local read contract documents semester for /resources",
+    "README documents the new CLI commands, the command field and the classified error shape",
     "renewal may prepare an official handoff but execute is refused with SOURCE_CONTRACT_UNVERIFIED and zero adapter calls",
     "a blocked submission prepare is refused with its blocked scope and write switch, and the engine is never called",
-    "describe_service keeps every legacy operation field and adds a facade capability block",
     "local registers exactly agenda, agenda_changes and resources; no generic page/status fallback",
     "agenda pages a three-event window 2+1 with views over the whole window and a cursor bound to the parameters",
     "agenda_changes keeps change_cursor (evc1) distinct from the paging next_cursor (c1) and forwards the previous change cursor",
-    "resources without a provider returns RESOURCE_PROVIDER_UNAVAILABLE with the capability block",
     "a capped resource search is not complete and carries RESOURCE_SEARCH_LIMIT_APPLIED",
     "query refuses write operation names and top-level or nested method/headers/token/cookie fields",
-    "an unregistered operation keeps the legacy UNREGISTERED_QUERY_OPERATION code",
     "prepare rejects read and unknown operations without touching the engine",
     "execute refuses an unknown plan and never creates one",
     "execute routes a learn plan to the submission engine and a sports plan to the shared action engine",
     "result reads the owning engine and never dispatches",
     "prepare -> execute without host confirmation is refused (0 dispatches); after confirmation exactly one dispatch happens and a repeat only reads back",
     "legacy framework create keeps its ADAPTER_REQUIRED plan shape and error code",
-    "queued cancel runs cleanup once and reports sent_before_cancel=false",
-    "running cancel reports CANCELLATION_REQUESTED and defers cleanup until finish",
+    "queued cancel runs cleanup once and reports started_before_cancel=false",
+    "running cancel reports CANCELLATION_REQUESTED and ends CANCELLED after finish",
     "an unknown or finished request cancel is not a success and never replays",
     "the request registry refuses work beyond its active limit",
-    "cancel binds media cleanup and reports remote_effect NONE",
+    "cancel binds media cleanup for live requests and reports remote_effect NONE",
     "a query result carries the bound request id",
     "export_agenda passes an explicit absolute target to the local writer and is typed LOCAL_WRITE",
     "health is static, covers every known service and survives one failing service without leaking its text",
-    "every known service can be described without a live probe",
     "a registered learn read keeps its legacy envelope fields and reports service_domain LEARN",
     "the MCP error result carries category/retryable/automatic_replay_allowed/user_action and the capability block without paths or account data",
     "the CLI keeps the six legacy commands and flags and adds describe/health/query/agenda/dashboard",
@@ -187,23 +225,25 @@
   ],
   "limits": [
     "thu_assistant.local_api (6.2) is absent, so openthu dashboard returns LOCAL_DASHBOARD_UNAVAILABLE; host/port/facade are already fixed as its provider contract.",
-    "The 4.2 resource centre needs an injected index store; 6.1 does not create a production index, so resources and resources_export are RESOURCE_PROVIDER_UNAVAILABLE until a provider is supplied.",
+    "local.resources needs an injected 4.2 ResourceCenter; with a provider it works and is capped by that provider's max_search_limit (50 by default), reporting the cap as incomplete rather than failing.",
+    "local.resources_export and local.media_prepare are MISSING/NO_PUBLIC_ENTRY: the 4.2 export and 3.3 registration APIs exist only for the host, and 6.1 does not advertise a CLI/MCP entry for them.",
     "The 3.3/4.5 media pipeline needs an injected MediaAssets and MediaBinding; without them image calls keep MODEL_IMAGE_INPUT_UNAVAILABLE and the shipped protocol registry stays empty.",
-    "Renewal can prepare an official handoff and read a result only; execute is refused before preflight with SOURCE_CONTRACT_UNVERIFIED and no renewal request is dispatched.",
+    "Renewal can prepare an official handoff and read a result only; execute is refused before preflight with SOURCE_CONTRACT_UNVERIFIED, and THU_LIBRARY_RENEW=0 marks it DISABLED.",
     "Assignment submission, personal timetable, exams and grades remain blocked on source evidence; this module only records the gap and never fabricates an empty success.",
     "health is a static capability registration, not proof of login, source readability or business availability; every query still reads its source.",
     "agenda, agenda_changes and resources use process-local snapshots with a 600-second TTL; change_cursor and next_cursor have different meanings and cannot be exchanged.",
+    "The local read contract revision documents semester for /resources; 6.2 must supply the user-selected or configured current semester.",
     "gateway.js was not changed: no new gateway command was needed, and the existing queue/cancel/progress wiring is reused.",
-    "The module is implemented, not audited or reconnected; batch 6 stays ready and a single module does not make the batch pass."
+    "Batch 6 is not complete: 6.2 and 6.3 are still pending, so this module acceptance does not make the batch accepted."
   ],
-  "rollback": "Restore mcp_stdio.py, queries.py, __main__.py, source_state.py and contracts/v0.2/error-classification.json to bb1f963, then delete src/thu_assistant/facade/, src/thu_assistant/local_ops.py, tests/test_facade.py and tests/test_cli.py. The public tool list stays at 29 and there is no data migration. Writes can be suspended without a code rollback through THU_LIBRARY_WRITE=0, THU_SPORTS_WRITE=0, THU_LIBRARY_RENEW=0 and THU_LEARN_SUBMIT=0.",
-  "next": "Audit this module, then reconnect batch 6 with 6.2 and 6.3. 6.2 consumes facade.query/health/describe_service and supplies local_api; 6.3 packages the new package directory. Batch reconnection reruns python scripts/dev.py check and python scripts/dev.py test. This module opens no PR, does not merge main and does not publish a release.",
+  "rollback": "Restore mcp_stdio.py, queries.py, __main__.py, source_state.py, facade/, local_ops.py, README.md, contracts/v0.2/error-classification.json and contracts/v0.2/local-read-api.schema.json to bb1f963, then delete tests/test_facade.py, tests/test_cli.py and tests/test_facade_audit.py. The public tool list stays at 29 and there is no data migration. Writes can be suspended without a code rollback through THU_LIBRARY_WRITE=0, THU_SPORTS_WRITE=0, THU_LIBRARY_RENEW=0 and THU_LEARN_SUBMIT=0.",
+  "next": "Batch 6 reconnection brings in 6.2 and 6.3, reruns python scripts/dev.py check and python scripts/dev.py test at the joint tree, and records batch acceptance. 6.2 consumes facade.query/health/describe_service and supplies local_api with the semester it got from the user. This module opens no PR, does not merge main and does not publish a release.",
   "cross_module_requests": [
-    "6.2: consume facade.query, facade.health and facade.describe_service; expose serve/run/main(host, port, facade) so openthu dashboard can start the board without further facade changes.",
+    "6.2: consume facade.query, facade.health and facade.describe_service; expose serve/run/main(host, port, facade); pass the user-selected or configured semester to local.resources.",
     "6.3: src/thu_assistant/facade/ is picked up by setuptools.packages.find; if the package list becomes explicit, register the directory and local_ops.py.",
-    "Batch integrator: 6.1 exclusively owns mcp_stdio.py, queries.py, __main__.py, facade/ and local_ops.py; review the 13 new error codes in error-classification.json and source_state.py.",
+    "Batch integrator: 6.1 exclusively owns mcp_stdio.py, queries.py, __main__.py, facade/, local_ops.py, tests/test_cli.py and tests/test_facade_audit.py; review the 13 error codes and the additive local-read-api revision.",
     "8.1: the renewal request contract, assignment submission endpoint, academic sources and model image protocol remain external blockers; re-run check and the full offline suite after reconnection.",
-    "7.3: document that health is static, local reads never poll or message, and renewal/submission remain blocked."
+    "7.3: document that health is static, local reads never poll or message, resources need an injected index, and renewal/submission remain blocked."
   ],
   "error_codes_added": [
     "FACADE_CAPABILITY_UNAVAILABLE",
@@ -220,5 +260,66 @@
     "SUBMISSION_PROVIDER_UNAVAILABLE",
     "LOCAL_DASHBOARD_UNAVAILABLE"
   ],
-  "worktree_note": "Recorded relative to the user home because the contract privacy validator rejects absolute home-directory paths; the absolute path stays in the execution session."
+  "audit_fixes": {
+    "P0": [],
+    "P1": [
+      {
+        "id": "P1-1",
+        "fix": "resources reads through the provider's own max_search_limit instead of a fixed limit=200; a test with the real file-keyed ResourceCenter proves the default ceiling works",
+        "verification": "test_p1_1_real_resource_centre_uses_its_own_search_ceiling; probe p1_resources_real_limit"
+      },
+      {
+        "id": "P1-2",
+        "fix": "query refuses an unregistered operation (UNREGISTERED_QUERY_OPERATION) instead of falling back to QueryEngine; campus is a registered service and campus.page has a full public capability block; describe_service never emits a bare {'state':'UNKNOWN'}",
+        "verification": "test_p1_2_campus_page_is_registered_and_unknown_reads_are_refused; probe p1_query_unregistered"
+      },
+      {
+        "id": "P1-3",
+        "fix": "health aggregates PARTIAL when some rows are available and some blocked, plus BLOCKED/DISABLED/MISSING/UNKNOWN instead of collapsing every non-all-available service to UNKNOWN",
+        "verification": "test_p1_3_health_status_matches_the_row_state; probe p1_health_partial"
+      },
+      {
+        "id": "P1-4",
+        "fix": "describe_service builds a registry-only description for facade-only services and maps catalog misses to FACADE_SERVICE_UNKNOWN; academics is describable",
+        "verification": "test_p1_4_describe_lists_only_describable_services; probe p1_describe_academics"
+      },
+      {
+        "id": "P1-5",
+        "fix": "offset/limit removed from the local.resources schema; paging uses cursor/page_size and the provider ceiling, so no accepted parameter is silently ignored",
+        "verification": "test_p1_5_resources_schema_has_no_ignored_offset_or_limit; probe p1_resources_params_ignored now raises INVALID_ARGUMENTS (expected)"
+      },
+      {
+        "id": "P1-6",
+        "fix": "media_prepare and resources_export are MISSING with reason NO_PUBLIC_ENTRY and entry=none; the undocumented facade.export_resources method was removed, so the capability table no longer claims an entry it lacks",
+        "verification": "test_p1_6_local_write_capabilities_have_no_fake_entry; probe p1_capability_entry_points (explicit downgrade, recorded)"
+      },
+      {
+        "id": "P1-7",
+        "fix": "MCP and CLI take any string .code, not only CampusError subclasses, so 4.2/4.1 provider codes keep their registered category",
+        "verification": "test_p1_7_provider_error_code_survives_the_mcp_and_cli_boundaries, test_p1_7_cli_prints_the_registered_code_and_category; probe p1_error_mapping"
+      },
+      {
+        "id": "P1-8",
+        "fix": "local reads emit LOCAL_EXECUTION_STATE, and a missing provider checked_at falls back to the query time so the envelope stays valid",
+        "verification": "test_p1_8_local_results_validate_against_the_frozen_envelope; probe p1_envelope_enum"
+      }
+    ],
+    "P2": [
+      "P2-1 read/write switches are reflected in state: THU_TODOS=0 -> agenda DISABLED, THU_LIBRARY_RENEW=0 -> renewal DISABLED; verified by test_p2_1_read_and_renewal_switches_change_the_registered_state",
+      "P2-2 url is accepted only for the registered campus.page read; verified by test_p2_2_url_is_accepted_only_for_the_registered_page_read",
+      "P2-3 self.env drives registration and self.clock drives the request registry; verified by test_p2_3_facade_env_and_clock_are_used",
+      "P2-4 export_agenda validates overwrite/allow_partial types and the format, with the unreachable branch removed; verified by test_p2_4_export_agenda_validates_options_before_delegating",
+      "P2-5 query results use probe=SOURCE_READ and no longer overload live_probe; verified by test_p2_5_query_results_do_not_reuse_the_static_probe_flag",
+      "P2-6 the request-limit error uses source_state.public_error and carries every classified field; verified by test_p2_6_request_limit_error_is_fully_classified",
+      "P2-7 failed requests end FAILED, a running cancel survives finish as CANCELLED, and sent_before_cancel became started_before_cancel; verified by test_p2_7_failed_and_cancelled_requests_keep_distinct_states",
+      "P2-8 JSON-RPC ids are keyed with their type so 1 and \"1\" do not collide; verified by test_p2_8_integer_and_string_request_ids_are_distinct",
+      "P2-9 the stdio loop now runs through RequestRunner, and queued/running cancel is exercised end-to-end in tests rather than only on the registry; verified by test_p2_7 and test_p2_9_queued_cancel_never_reaches_the_handler",
+      "P2-10 delivery_commit is aee2559 and implementation_commits list e136421, ccb14e2 and aee2559; test counts are corrected",
+      "P2-11 README documents the new CLI commands, the command field and the classified error shape; verified by test_p2_11_readme_documents_the_new_cli_and_error_shape",
+      "P2-12 media cleanup runs only for RUNNING/CANCELLATION_REQUESTED requests; unknown ids return NOT_APPLICABLE without touching media; verified by test_p2_12_cancel_does_not_touch_unrelated_media_tasks",
+      "P2-13 a failing module report leaves MISSING entries and a sanitised registration_failures record instead of disappearing; verified by test_p2_13_academic_report_failure_keeps_a_specific_gap",
+      "P2-14 service_ids is recomputed so a catalog refresh is visible without a restart; verified by test_p2_14_service_ids_follow_a_catalog_refresh",
+      "P2-15 the local read contract now documents semester for /resources and the facade requires it; verified by test_p2_15_resources_semester_is_a_documented_provider_parameter"
+    ]
+  }
 }
