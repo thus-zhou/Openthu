@@ -627,6 +627,14 @@
         "seat/room plans persist the 4.3 precheck summary; unknown availability, map changes and rule gaps hand off instead of writing",
         "renew_loan binds one own loan, its Primo account and the exact request contract; SYNTHETIC evidence needs an explicit opt-in and the production default is an official handoff",
         "branch history has no home-directory path; no PR created, main not merged, no release published"
+      ],
+      "accepted_at": "2026-11-17",
+      "cross_module_handoffs": [
+        "contracts/v0.2/error-classification.json and src/thu_assistant/source_state.py (1.1/3.2): 15 additive LIBRARY_RENEW_*/RENEWAL_* codes, no existing code changed.",
+        "contracts/v0.2/business-facade.schema.json (1.1): renew_loan added to the operation enum only; no field was removed.",
+        "src/thu_assistant/actions.py (4.4): todo window widened to the new due date, per-operation declared prechecks, disabled_reason and reconciliation_scope added additively.",
+        "docs/ (7.3) and pyproject.toml/MANIFEST.in (6.3): renewal README packaging and five capability/handover notes; 7.3 rechecks the wording at release.",
+        "contracts/v0.2/sources/source-registry.json (2.3): library.renewal code_refs and evidence note refreshed; implementation_state stays PARTIAL."
       ]
     },
     {
@@ -767,7 +775,22 @@
         "统一日程、增量事件、稳定事件编号和 ICS 导出"
       ],
       "integration_order": 16,
-      "status": "pending"
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "90dcdb5",
+      "audit_baseline_commit": "f9e9918",
+      "audit_fix": "5.4-audit: P0=0; P1-1..P1-4 and P2-1..P2-12 closed through 90dcdb5 with named regressions; pure export, academic window, full paging and monotonic SEQUENCE.",
+      "evidence": [
+        "57 module tests and 203 related regression tests at 90dcdb5; audit fixes P1-1..P1-4 and P2-1..P2-12 verified by named cases",
+        "export_calendar is a pure local write; agenda collects every snapshot page; academic events respect the request window; per-UID SEQUENCE never resets",
+        "batch-5 joint tree: check 492 files/0 findings, Linux Python 1262 passed/7 skipped/0 failed, Node 66 passed; 0 live campus/model/business calls"
+      ],
+      "cross_module_handoffs": [
+        "contracts/v0.2/error-classification.json and src/thu_assistant/source_state.py (1.1/3.2): 29 additive EVENT_*/AGENDA_*/SNAPSHOT_*/EXPORT_* codes, no existing code changed.",
+        "src/thu_assistant/mcp_stdio.py (6.1): wording-only get_todos description update; no tool added, the 29-tool surface is unchanged.",
+        "6.1/8.1: THU-TODOS-1 container and record_id-in-AAD migration remains a later storage step; 5.4 did not change the cache format.",
+        "6.2/7.1: read calendar_events/views/conflicts only and apply their own HTML escaping."
+      ]
     },
     {
       "id": "6.1",

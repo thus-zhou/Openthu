@@ -52,7 +52,12 @@ REGISTRY.update(library_actions.contracts())
 VERIFIED_ADAPTERS = {library_actions.VERSION, "sports-action-v1"}
 
 def action_enabled(service):
-    return library_actions.enabled() if service=="library" else sports_enabled()
+    # Fail closed for every service without an explicit write switch.  A new
+    # service (5.3 registers `learn`) must never inherit the sports switch just
+    # because it is not the library.
+    if service=="library":return library_actions.enabled()
+    if service=="sports":return sports_enabled()
+    return False
 
 def sports_enabled():
     return os.environ.get('THU_SPORTS_WRITE','1') != '0' and os.environ.get('THU_SPORTS_READ','1') != '0'

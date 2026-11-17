@@ -239,10 +239,10 @@
         "5.4"
       ],
       "module_status": {
-        "5.1": "pending",
-        "5.2": "pending",
-        "5.3": "pending",
-        "5.4": "pending"
+        "5.1": "accepted",
+        "5.2": "accepted",
+        "5.3": "accepted",
+        "5.4": "accepted"
       },
       "status": "ready",
       "integration_commit": null,

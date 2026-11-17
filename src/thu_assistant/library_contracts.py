@@ -106,7 +106,13 @@ def contracts():
             'prechecks':('eligibility','rules'),
             'risk_conditions':['RENEWAL_ELIGIBILITY_CHANGED','DUE_DATE_CHANGED','SOURCE_CONTRACT_UNVERIFIED',
                                'REMOTE_RESULT_UNCERTAIN'],
-            'request_sequence':SEQUENCE[op],'reconciliation':RECONCILIATION_SCOPE[op],
+            'request_sequence':SEQUENCE[op],
+            # Renewal is a new operation, so it has no legacy string to keep;
+            # both fields carry the same string shape the legacy operations use
+            # (the engine and 6.1 must not receive a dict where a descriptor is
+            # expected).
+            'reconciliation':RECONCILIATION_SCOPE[op],
+            'reconciliation_scope':RECONCILIATION_SCOPE[op],
             # No verified renewal source contract is registered yet; the plan
             # can be prepared and handed to the official page but the engine
             # must not report this write operation as ready.
