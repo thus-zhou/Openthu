@@ -17,11 +17,17 @@ SOURCE={'type':'object','properties':{
     'url':{'type':'string','maxLength':2000},'title':{'type':'string','maxLength':200},
     'text':{'type':'string','minLength':1,'maxLength':20000}},
     'required':['source_id','text'],'additionalProperties':False}
+MEDIA_ID=r'media_[A-Za-z0-9_-]{8,64}'
+IMAGE_REF={'type':'object','properties':{'media_id':{'type':'string','pattern':MEDIA_ID}},
+    'required':['media_id'],'additionalProperties':False}
 PROPERTIES={'prompt':{'type':'string','minLength':1,'maxLength':MAX_CHARS},
     'messages':{'type':'array','minItems':1,'maxItems':40,'items':MESSAGE},
     'model':{'type':'string','pattern':MODEL_ID,'maxLength':128},
     'max_tokens':{'type':'integer','minimum':1,'maximum':8192},
-    'source_refs':{'type':'array','maxItems':20,'items':SOURCE}}
+    'source_refs':{'type':'array','maxItems':20,'items':SOURCE},
+    # Image input names references registered through the local media boundary.
+    # It never accepts a path, a URL, an authenticated header or raw bytes.
+    'images':{'type':'array','minItems':1,'maxItems':4,'items':IMAGE_REF}}
 
 def require(ok,code='INVALID_MODEL_ARGUMENTS'):
     if not ok:raise CampusError(code)
@@ -40,6 +46,9 @@ def source_url(value):
 
 def prepare(args):
     require(isinstance(args,dict) and not set(args)-set(PROPERTIES))
+    # An image selection must not degrade into a text request that silently
+    # loses the pictures; only ``chat`` may route it through the media boundary.
+    require('images' not in args,'MODEL_IMAGE_REQUIRES_MEDIA_PIPELINE')
     require(('prompt' in args)!=('messages' in args),'PROMPT_MESSAGES_EXCLUSIVE')
     if 'model' in args:require(isinstance(args['model'],str) and re.fullmatch(MODEL_ID,args['model']),'INVALID_MODEL_ID')
     count=args.get('max_tokens',1024)
@@ -86,10 +95,13 @@ def attach(result,sources):
     out.setdefault('usage',None);out.setdefault('usage_state','UNKNOWN')
     return out
 
-def chat(bridge,args):
+def chat(bridge,args,*,media=None,protocols=None):
     if os.environ.get('THU_MODEL_READ','1')=='0':
         require('prompt' in args and not set(args)-{'prompt','model','max_tokens'},'MODEL_EXTENSION_DISABLED')
         return bridge('model',**args)
+    if args.get('images'):
+        from .model_media import chat as image_chat
+        return image_chat(bridge,args,media=media,protocols=protocols)
     prepared,sources=prepare(args)
     try:return attach(bridge('model',**prepared),sources)
     except CampusError as error:

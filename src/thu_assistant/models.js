@@ -2,6 +2,8 @@
 // Catalog reads never probe/generate. Transport/parser/thinking translation are
 // supplied by the existing madmodel-proxy deployment.
 const crypto=require('node:crypto');
+const fs=require('node:fs');
+const nodePath=require('node:path');
 const ORIGIN='https://madmodel.cs.tsinghua.edu.cn';
 const ID=/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const fail=code=>Object.assign(new Error(code),{code});
@@ -80,25 +82,130 @@ function errorCode(r) {
  if(r.status>=300&&r.status<400)return 'MODEL_SESSION_REDIRECT';
  return 'MODEL_UPSTREAM_ERROR';
 }
+// --- image input ------------------------------------------------------
+// A catalogue flag is not transport evidence. These helpers accept only the
+// protocol profile and single-use staging files prepared by model_media.py;
+// nothing here can read a user folder, a URL or an authenticated request.
+const IMAGE_SHAPES=new Set(['OPENAI_CONTENT_PARTS_IMAGE_URL']);
+const IMAGE_EVIDENCE=new Set(['SYNTHETIC_TRANSPORT','LIVE_READ']);
+const IMAGE_TYPES=new Set(['image/jpeg','image/png','image/webp']);
+const STAGE_TOKEN=/^[a-f0-9]{32}$/;
+const HEX64=/^[a-f0-9]{64}$/;
+function imageSpec(batch,meta) {
+ if(!batch||typeof batch!=='object'||Array.isArray(batch))throw fail('MODEL_IMAGE_PROTOCOL_UNVERIFIED');
+ if(!IMAGE_SHAPES.has(batch.shape)||!IMAGE_EVIDENCE.has(batch.evidence_level)||
+    typeof batch.protocol_id!=='string'||!batch.protocol_id.length)
+  throw fail('MODEL_IMAGE_PROTOCOL_UNVERIFIED');
+ if(!meta||meta.supportImage!==true)throw fail('MODEL_IMAGE_UNSUPPORTED');
+ if(batch.model_id!==meta.id)throw fail('MODEL_IMAGE_PROTOCOL_UNVERIFIED');
+ if(typeof batch.staging_root!=='string'||!nodePath.isAbsolute(batch.staging_root))
+  throw fail('MODEL_IMAGE_TRANSPORT_UNAVAILABLE');
+ for(const key of ['max_images','max_image_bytes','max_total_bytes']){
+  if(!Number.isSafeInteger(batch[key])||batch[key]<=0)throw fail('MODEL_IMAGE_PROTOCOL_UNVERIFIED');
+ }
+ if(batch.max_images>4||batch.max_image_bytes>8*1024*1024||batch.max_total_bytes>16*1024*1024)
+  throw fail('MODEL_IMAGE_PROTOCOL_UNVERIFIED');
+ if(!Array.isArray(batch.images)||!batch.images.length||batch.images.length>batch.max_images)
+  throw fail('MODEL_IMAGE_SELECTION_INVALID');
+ const seen=new Set();let total=0;
+ for(const item of batch.images){
+  if(!item||typeof item!=='object'||Array.isArray(item))throw fail('MODEL_IMAGE_SELECTION_INVALID');
+  if(!STAGE_TOKEN.test(item.token||'')||!IMAGE_TYPES.has(item.mime_type)||
+     !HEX64.test(item.sha256||'')||!Number.isSafeInteger(item.byte_size)||item.byte_size<=0)
+   throw fail('MODEL_IMAGE_SELECTION_INVALID');
+  if(item.byte_size>batch.max_image_bytes)throw fail('MODEL_IMAGE_LIMIT_EXCEEDED');
+  if(seen.has(item.media_id))throw fail('MODEL_IMAGE_SELECTION_INVALID');
+  seen.add(item.media_id);total+=item.byte_size;
+ }
+ if(total>batch.max_total_bytes)throw fail('MODEL_IMAGE_LIMIT_EXCEEDED');
+ return {batch,images:batch.images,total_bytes:total};
+}
+function readStaged(spec,signal) {
+ const root=nodePath.resolve(spec.batch.staging_root),parts=[];
+ for(const item of spec.images){
+  signal?.throwIfAborted();
+  const file=nodePath.join(root,item.token+'.bin');
+  if(nodePath.dirname(file)!==root)throw fail('MODEL_IMAGE_STAGING_MISMATCH');
+  let fd;
+  try{fd=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0));}
+  catch{throw fail('MODEL_IMAGE_STAGING_MISMATCH');}
+  try{
+   const stat=fs.fstatSync(fd);
+   if(!stat.isFile()||stat.size!==item.byte_size)throw fail('MODEL_IMAGE_STAGING_MISMATCH');
+   const data=Buffer.alloc(item.byte_size);
+   let offset=0;
+   while(offset<data.length){
+    const read=fs.readSync(fd,data,offset,data.length-offset,null);
+    if(read<=0)throw fail('MODEL_IMAGE_STAGING_MISMATCH');
+    offset+=read;
+   }
+   if(fs.readSync(fd,Buffer.alloc(1),0,1,null)>0)throw fail('MODEL_IMAGE_STAGING_MISMATCH');
+   if(crypto.createHash('sha256').update(data).digest('hex')!==item.sha256)
+    throw fail('MODEL_IMAGE_STAGING_MISMATCH');
+   parts.push({type:'image_url',image_url:{url:'data:'+item.mime_type+';base64,'+data.toString('base64')}});
+  }finally{
+   try{fs.closeSync(fd);}catch{}
+   // The staging file is single use; a failed request cannot leave it behind.
+   try{fs.unlinkSync(file);}catch{}
+  }
+ }
+ return parts;
+}
+// Text stays first inside the final user turn and images follow the selection
+// order; earlier turns keep their shape exactly.
+function imageMessages(command,parts) {
+ const messages=command.messages?JSON.parse(JSON.stringify(command.messages)):
+  [{role:'user',content:String(command.prompt||'')}];
+ const last=messages[messages.length-1];
+ if(!last||last.role!=='user'||typeof last.content!=='string'||!last.content.trim())
+  throw fail('MODEL_IMAGE_MESSAGES_INVALID');
+ last.content=[{type:'text',text:last.content},...parts];
+ return messages;
+}
 async function generate({command,directory,configuredModel,getToken,createClient,applyThinking,signal,progress=()=>{},redact=x=>x}) {
  const models=normalized(directory.models);
  if(command.model&&!models.some(x=>x.id===command.model))throw fail('MODEL_NOT_IN_CATALOG');
  const model=command.model||(models.some(x=>x.id===configuredModel)?configuredModel:models[0].id);
  const meta=models.find(x=>x.id===model);
  let output='',usage=null,finish_reason=null,started=false,refreshed=false,dispatched=false;
+ let imageInput=null,imageParts=null,imageSends=0;
+ const rawBatch=command.image_batch;
+ if(rawBatch&&typeof rawBatch==='object'&&Array.isArray(rawBatch.images)){
+  // Counts and identifiers only: a refused call still explains its scope
+  // without carrying a token, a path or an image byte.
+  imageInput={count:rawBatch.images.length,total_bytes:rawBatch.images.reduce(
+    (total,item)=>total+(Number.isSafeInteger(item&&item.byte_size)?item.byte_size:0),0),
+   media_ids:rawBatch.images.map(item=>item&&item.media_id).filter(x=>typeof x==='string'),
+   protocol_id:typeof rawBatch.protocol_id==='string'?rawBatch.protocol_id:null,
+   evidence_level:typeof rawBatch.evidence_level==='string'?rawBatch.evidence_level:null,
+   sha256:[],inline_base64:false};
+ }
  const evidence=()=>({model,content:redact(output),usage,usage_state:usage?'REPORTED_BY_UPSTREAM':'UNKNOWN',
   finish_reason,catalog_checked_at:directory.checked_at,catalog_freshness:directory.freshness,
-  checked_at:now(),generation_started:dispatched,partial:!!output,automatic_replay:false});
+  checked_at:now(),generation_started:dispatched,partial:!!output,automatic_replay:false,
+  ...(imageInput?{image_input:{...imageInput,sends:imageSends}}:{})});
  const raise=code=>{throw Object.assign(fail(code),{modelEvidence:evidence()});};
- const payload={model,messages:command.messages||[{role:'user',content:String(command.prompt||'')}],
+ let spec=null;
+ try{spec=command.image_batch?imageSpec(command.image_batch,meta):null;}
+ catch(error){raise(error.code||'MODEL_IMAGE_PROTOCOL_UNVERIFIED');}
+ if(spec) {
+  imageInput={...imageInput,count:spec.images.length,total_bytes:spec.total_bytes,
+   media_ids:spec.images.map(x=>x.media_id),sha256:spec.images.map(x=>x.sha256),
+   protocol_id:spec.batch.protocol_id,evidence_level:spec.batch.evidence_level,
+   inline_base64:false};
+  try{imageParts=readStaged(spec,signal);}
+  catch(error){raise(signal?.aborted?(signal.reason?.code||'CANCELLED'):(error.code||'MODEL_IMAGE_STAGING_MISMATCH'));}
+ }
+ const target=command.messages||[{role:'user',content:String(command.prompt||'')}];
+ const payload={model,messages:spec?imageMessages(command,imageParts):target,
    max_tokens:command.max_tokens||1024,stream:true,stream_options:{include_usage:true},thinking:false};
  applyThinking(payload,meta);
- try{
+ try {
   let token=await getToken();
   for(let attempt=0;attempt<2;attempt++){
    signal?.throwIfAborted();
    let sawOutput=false;
-   dispatched=true;progress({status:'MODEL_REQUEST_SENT'});
+   dispatched=true;if(spec)imageSends++;progress({status:'MODEL_REQUEST_SENT'});
    const r=await createClient().request({token:token.token,cookie:token.cookie,signal,payload,
     onOpen:()=>{started=true;progress({status:'MODEL_STREAM_OPEN'});},
     onChunk:chunk=>{
