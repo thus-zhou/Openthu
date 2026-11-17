@@ -632,11 +632,9 @@
       return {path: M.API.resources,
               params: {semester: state.filters.resources.semester, page_size: M.PAGE_SIZE}};
     }
-    if (spec.key === 'loans') return {path: M.API.query + 'library/loans', params: {parameters: '{}'}};
-    if (spec.key === 'reservations') {
-      return {path: M.API.query + 'library/reservations', params: {parameters: '{}'}};
-    }
-    return {path: M.API.query + 'sports/orders', params: {parameters: '{}'}};
+    const section = LIBRARY_SECTIONS.filter(function (row) { return row.key === spec.key; })[0];
+    if (!section) return null;
+    return {path: section.path, params: {parameters: '{}'}};
   }
 
   async function loadOverviewCard(spec, view, force) {
@@ -810,9 +808,9 @@
       h('div', {class: 'field'},
         h('label', {for: 'resource-kind'}, '类型'),
         h('select', {id: 'resource-kind', dataset: {filter: 'kind'}},
-          [['', '全部'], ['PDF', 'PDF'], ['文档', '文档'], ['表格', '表格'], ['演示', '演示'],
-           ['图片', '图片'], ['视频', '视频'], ['音频', '音频'], ['压缩包', '压缩包'],
-           ['文本', '文本'], ['数据', '数据'], ['其他', '其他']]
+          [['', '全部']].concat(M.RESOURCE_KINDS.map(function (kind) {
+            return [kind, kind];
+          }))
             .map(function (pair) {
               return h('option', {value: pair[0], selected: pair[0] === state.filters.resources.kind},
                 pair[1]);

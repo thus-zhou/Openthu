@@ -731,7 +731,7 @@
     VERSION: VERSION, API_BASE: API_BASE, API: API, PAGE_SIZE: PAGE_SIZE,
     REFRESH_MIN_SECONDS: REFRESH_MIN_SECONDS, PAGE_IDS: PAGE_IDS, PAGES: PAGES,
     OFFICIAL_ENTRIES: OFFICIAL_ENTRIES, STATES: STATES, STATUS_LABELS: STATUS_LABELS,
-    KIND_LABELS: KIND_LABELS,
+    KIND_LABELS: KIND_LABELS, RESOURCE_KINDS: RESOURCE_KINDS,
     text: text, asList: asList, todayIso: todayIso, formatTimestamp: formatTimestamp,
     formatDate: formatDate, addDays: addDays, isSchoolHttps: isSchoolHttps,
     parseSourceTime: parseSourceTime,
