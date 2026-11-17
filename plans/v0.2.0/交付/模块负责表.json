@@ -727,9 +727,9 @@
       "integration_order": 16,
       "status": "accepted",
       "accepted_at": "2026-11-17",
-      "delivery_commit": "16083d9",
+      "delivery_commit": "6145ed2",
       "evidence": [
-        "58 module tests at 16083d9; audit 5.4-audit P1-1..P1-4 and P2-1..P2-12 closed with named regressions",
+        "58 module tests at 6145ed2; audit 5.4-audit P1-1..P1-4 and P2-1..P2-12 closed with named regressions",
         "pure export zero reads; academic window filtering; full snapshot pagination; monotonic per-UID SEQUENCE",
         "check 467/0, Linux Python 1063/7, Node 66; 0 live campus/model/business calls"
       ]
