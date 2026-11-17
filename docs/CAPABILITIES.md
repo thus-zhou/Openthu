@@ -107,7 +107,7 @@ v0.2.0 候选（未发布）｜编制：7.3｜事实来源：`business-facade-v1
 
 | 登记 | 类别 | 归属 | 状态 | 登记证据 | 实现与限制 |
 |---|---|---|---|---|---|
-| `learn.submit_assignment` | CAMPUS_WRITE | 5.3 | BLOCKED | BLOCKED_SOURCE_EVIDENCE | 仅本地校验与计划；上传、草稿、正式提交与结果查询均无已验证接口；写开关默认关闭。 |
+| `learn.submit_assignment` | CAMPUS_WRITE | 5.3 | BLOCKED | BLOCKED_SOURCE_EVIDENCE | 仅本地文件校验；上传、草稿、正式提交与结果查询均无已验证接口；写开关默认关闭。 |
 | `library.cancel_reservation` | CAMPUS_WRITE | 5.1 | AVAILABLE | VERIFIED_ADAPTER | 专用适配（合成传输）；取消；`system` 取 `seat` 或 `room`，先读本人记录再核对。 |
 | `library.create_room_reservation` | CAMPUS_WRITE | 5.1 | AVAILABLE | VERIFIED_ADAPTER | 专用适配（合成传输）；研讨间预约；成员与规则可能要求在官方页面接手。 |
 | `library.create_seat_reservation` | CAMPUS_WRITE | 5.1 | AVAILABLE | VERIFIED_ADAPTER | 专用适配（合成传输）；座位预约；专用适配，一次计划一次派发，需当次授权。 |
