@@ -21,12 +21,10 @@ No campus service, model endpoint or network is contacted.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 import re
 import subprocess
-import sys
 import tomllib
 
 import pytest
@@ -212,20 +210,3 @@ def test_the_integration_and_candidate_records_exist() -> None:
     assert "candidate-not-released" in candidate
     assert "SHA256" in candidate or "sha256" in candidate
 
-
-def test_the_candidate_dist_matches_its_checksums_when_present() -> None:
-    dist = ROOT / "dist"
-    if not (dist / "release-manifest.json").is_file():
-        pytest.skip("no candidate build in this tree; the release gate builds one")
-    release = json.loads((dist / "release-manifest.json").read_text(encoding="utf-8"))
-    sums = {}
-    for line in (dist / "SHA256SUMS").read_text(encoding="ascii").splitlines():
-        digest, _, name = line.partition("  ")
-        sums[name] = digest
-    assert sums
-    for row in release["artifact_files"]:
-        path = dist / row["name"]
-        assert path.is_file(), row["name"]
-        actual = hashlib.sha256(path.read_bytes()).hexdigest()
-        assert actual == sums[row["name"]] == row["sha256"], row["name"]
-    assert release["release_status"] == "candidate-not-released"

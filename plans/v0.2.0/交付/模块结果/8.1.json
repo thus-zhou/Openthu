@@ -61,11 +61,11 @@
   ],
   "checks": {
     "module_tests": {
-      "passed": 9,
+      "passed": 8,
       "failed": 0,
       "command": "python -m pytest -o addopts='' -q tests/test_batch8_integration.py",
       "breakdown": {
-        "tests/test_batch8_integration.py": 9
+        "tests/test_batch8_integration.py": 8
       }
     },
     "related_tests": {
@@ -74,14 +74,15 @@
       "command": "python -m pytest -o addopts='' -q tests/test_local_api.py tests/test_facade_audit.py tests/test_batch6_integration.py tests/test_batch7_integration.py tests/test_docs_consistency.py"
     },
     "full_offline_suite_linux": {
-      "python_passed": 1798,
+      "python_passed": 1797,
       "python_skipped": 8,
       "python_failed": 0,
       "python_errors": 0,
+      "python_total": 1805,
       "node_passed": 66,
       "node_failed": 0,
-      "command": "python scripts/dev.py test",
-      "tree": "the record-commit tree on a clean worktree; this text-only update changes no test code",
+      "command": "python -m pytest -o addopts='' -q -p no:cacheprovider --junitxml=.local/junit-clean.xml; python scripts/dev.py test",
+      "note": "Python totals come from the JUnit cases; scripts/regression_report.py adds the 66 Node cases into its own totals (1871), so its total is Python plus Node.",
       "live_campus_calls": 0,
       "model_calls": 0,
       "business_submissions": 0
