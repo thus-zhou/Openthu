@@ -9,9 +9,10 @@
   "baseline_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
   "integration_parent_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
   "branch_base_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
-  "delivery_commit": "21b4d7d37d1ebcda5a6676ef8bb040ef833e2c8e",
+  "delivery_commit": "181216cda0eba7d68b70f0012db200ca3d09c315",
   "implementation_commits": [
-    "21b4d7d37d1ebcda5a6676ef8bb040ef833e2c8e"
+    "21b4d7d37d1ebcda5a6676ef8bb040ef833e2c8e",
+    "181216cda0eba7d68b70f0012db200ca3d09c315"
   ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/7.1",
