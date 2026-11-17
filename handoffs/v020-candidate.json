@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "task_id": "v020-candidate",
+  "status": "READY_FOR_CODEX",
+  "next_owner": "codex",
+  "branch": "hermes/8.1",
+  "code_commit": "fe7ad391cfcffbf201b90d182bcf883211a75d74",
+  "created_at": "2026-11-17T20:49:59+00:00",
+  "context_file": "handoffs/v020-candidate.md",
+  "dispatch": "manual"
+}
