@@ -62,6 +62,7 @@
     "academics exams/timetable are opt-in and capability-gated; blocked capabilities return UNKNOWN/ADAPTER_REQUIRED, never EMPTY",
     "grades are not a selectable agenda source and never become todos or public summary events",
     "get_todos keeps its legacy parameters, 200-item snapshot paging, cursor binding and empty/partial/failed semantics",
+    "get_todos now exposes semester and the academics/academics.exams/academics.timetable enums through the existing PROPERTIES-driven MCP schema; they are opt-in, blocked by default, and ADAPTER_REQUIRED rather than EMPTY",
     "agenda()/changes()/export_calendar()/describe_agenda() expose on-demand results with background_polling=false and message_delivery=false"
   ],
   "checks": {
