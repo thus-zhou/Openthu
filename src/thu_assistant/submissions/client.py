@@ -14,11 +14,12 @@ import time
 
 from .. import actions
 from ..action_store import ActionStore
+from ..bridge import CampusError
 from .adapter import SubmissionAdapter, enabled
 from .contracts import OPERATION, SERVICE, VERSION, register
 from .errors import SubmissionError
 from .manifest import MAX_FILES, plan_files
-from .models import SOURCE_ID, assignment_state, closed, now_iso, replacement_allowed
+from .models import SOURCE_ID, assignment_state, now_iso, replacement_allowed, window_state
 from .store import FileSetStore, SubmissionJournal
 from .transport import BlockedSubmissionTransport
 
@@ -26,6 +27,7 @@ BLOCKED_SCOPE = ['production upload', 'production draft save', 'production final
 # Stated in every plan so a preview never implies that only the last button writes.
 SIDE_EFFECTS = ['UPLOAD_CREATES_REMOTE_STAGING', 'DRAFT_MAY_BE_REMEMBERED_BY_THE_PLATFORM',
                 'FINAL_SUBMIT_IS_NOT_REVERSIBLE_LOCALLY']
+FILESET_KEEP = 200
 
 
 def capability_report():
@@ -44,6 +46,7 @@ def capability_report():
         'rehearsal': 'SYNTHETIC_TRANSPORT',
         'write_switch': 'THU_LEARN_SUBMIT',
         'enabled': enabled(),
+        'write_switch_default': 'OFF',
         'max_files': MAX_FILES,
         'request_sequence': 'ORDERED_UPLOADS_THEN_DRAFT_THEN_FINAL_SUBMIT',
         'final_submit': 'REQUIRES_SPECIFIC_HUMAN_AUTHORIZATION',
@@ -88,8 +91,15 @@ class Submissions:
         if not isinstance(account, str) or not account:
             raise SubmissionError('SUBMISSION_INVALID_ARGUMENTS', 'ACCOUNT')
         assignment = self.adapter.read_assignment(assignment_id.strip())
-        if closed(assignment):
-            raise SubmissionError('SUBMISSION_ASSIGNMENT_CLOSED', 'DEADLINE')
+        # The deadline is reported first: "unreadable" and "passed" are
+        # different diagnoses, and neither is a rule gap in another field.
+        window, code = window_state(assignment)
+        if window != 'OPEN':
+            raise SubmissionError(code or 'SUBMISSION_DEADLINE_UNVERIFIED', 'DEADLINE_' + window)
+        if assignment['rules_state'] != 'COMPLETE':
+            # A rule the reader did not supply is not a permission to upload.
+            raise SubmissionError('SUBMISSION_RULE_UNVERIFIED',
+                                  'MISSING_' + '_'.join(assignment['missing_rules']).upper())
         allowed, code = replacement_allowed(assignment, replacement_policy, expected_version)
         if not allowed:
             raise SubmissionError(code)
@@ -109,7 +119,14 @@ class Submissions:
             'replacement_policy': replacement_policy,
             'assignment_state': assignment_state(assignment),
         }
-        plan = self.engine.prepare(SERVICE, OPERATION, business)
+        prepare_warnings = sorted(set(warnings) | set(assignment.get('warnings') or []))
+        try:
+            plan = self.engine.prepare(SERVICE, OPERATION, business)
+        except Exception:
+            # A rejected plan must not leave a local record holding the user's
+            # file paths and hashes.
+            self.files.delete(file_set_id)
+            raise
         plan_id = plan['plan_id']
         self.journal.put(plan_id, {
             'stage': 'PREPARED_LOCAL', 'account': account,
@@ -118,10 +135,12 @@ class Submissions:
             'files': [{'index': index, 'name': item['name'], 'size': item['size'],
                        'sha256': item['sha256'], 'status': 'PENDING', 'receipt_id': None}
                       for index, item in enumerate(files)],
-            'warnings': sorted(set(warnings) | set(assignment.get('warnings') or [])),
+            'prepare_warnings': prepare_warnings,
+            'warnings': prepare_warnings,
             'synthetic': True,
             'stage_history': [{'stage': 'PREPARED_LOCAL', 'at': now_iso()}],
         })
+        self._prune_file_sets()
         return self._project(plan, self.store.read(plan_id))
 
     def execute(self, plan_id, authorization):
@@ -142,6 +161,7 @@ class Submissions:
         record = self._submission_record(plan_id)
         journal = self.journal.get(plan_id) or {}
         return {'operation_id': plan_id, 'cancelled': False,
+                'cancel_reason': 'LOCAL_CANCEL_NO_REMOTE_EFFECT',
                 'engine_state': record['state'],
                 'remote_changes': 'NONE',
                 'stage': journal.get('stage'),
@@ -158,29 +178,41 @@ class Submissions:
             raise SubmissionError('SUBMISSION_PRODUCTION_TRANSPORT_BLOCKED', phase)
 
     def _submission_record(self, plan_id):
+        """Read one plan with the same account binding the engine enforces."""
         record = self.store.read(plan_id)
         if (record.get('service_id') != SERVICE or record.get('operation') != OPERATION
                 or record.get('adapter_version') != VERSION):
             raise SubmissionError('SUBMISSION_PLAN_MISMATCH', 'PLAN')
+        if record.get('account') != self.account_provider():
+            raise CampusError('ACTION_ACCOUNT_MISMATCH')
         return record
+
+    def _prune_file_sets(self):
+        """Bound retained file sets without deleting one a live plan references."""
+        if self.files.count() <= FILESET_KEEP:
+            return
+        live = self.journal.live_file_sets()
+        self.files.prune(keep=FILESET_KEEP, keep_ids=live)
 
     def _sync_terminal(self, plan_id, result):
         """Reflect an engine-level terminal failure in the module journal.
 
-        Preflight must not write to the action journal (the engine claims the
-        plan with a revision read before it), so the plan can be invalidated
-        without any module-side note.  This runs after the engine call and only
-        touches the module-owned journal.
+        Preflight cannot write the action journal (the engine claims the plan
+        with a revision read before it), so it records its specific codes in the
+        module journal; this keeps the most specific code visible instead of
+        replacing it with the engine's generic reason.
         """
         journal = self.journal.get(plan_id)
         if journal is None or result.get('status') != 'FAILED':
             return
         if journal.get('stage') in ('FAILED', 'VERIFIED'):
             return
+        specific = journal.get('preflight_errors') or []
 
         def change(state):
             state['stage'] = 'FAILED'
-            state['last_error'] = result.get('reason')
+            state['engine_reason'] = result.get('reason')
+            state['last_error'] = specific[0] if specific else result.get('reason')
             steps = state.setdefault('stage_history', [])
             steps.append({'stage': 'FAILED', 'at': now_iso()})
             state['stage_history'] = steps[-20:]
@@ -202,6 +234,7 @@ class Submissions:
             'plan': {
                 'assignment_id': business.get('assignment_id'),
                 'course_id': business.get('course_id'),
+                'source_record_id': business.get('source_record_id'),
                 'attachments': business.get('attachments') or [],
                 'replacement_policy': business.get('replacement_policy'),
                 'assignment_state': business.get('assignment_state'),
@@ -211,14 +244,17 @@ class Submissions:
             'submission': observed,
             'verification': journal.get('verification'),
             'warnings': journal.get('warnings') or [],
+            'prepare_warnings': journal.get('prepare_warnings') or [],
+            'preflight_errors': journal.get('preflight_errors') or [],
+            'pre_submit': journal.get('pre_submit'),
             'last_error': journal.get('last_error'),
+            'engine_reason': journal.get('engine_reason'),
             'stage_history': journal.get('stage_history') or [],
             'side_effects': list(SIDE_EFFECTS),
             'synthetic': journal.get('synthetic') is True,
             'production_enabled': False,
             'submit_supported': False,
         }
-
 
 
 __all__ = ['BLOCKED_SCOPE', 'SIDE_EFFECTS', 'Submissions', 'capability_report']

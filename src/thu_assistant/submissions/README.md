@@ -21,10 +21,27 @@
 | 生产结果查询 | `NOT_IMPLEMENTED` | 没有已登记的提交记录读取入口 |
 | 合成传输演练 | 可用 | `SyntheticSubmissionTransport`，`synthetic=true` |
 | 本地文件校验与计划 | 可用 | 不联网、不上传 |
+| 写开关 | **默认关闭** | 只有显式 `THU_LEARN_SUBMIT=1` 才允许派发；未设置即拒绝 |
 
 `Submissions()` 默认使用 `BlockedSubmissionTransport`，任何 `prepare`/`execute` 都
 返回 `SUBMISSION_PRODUCTION_TRANSPORT_BLOCKED`。要启用真实适配器，必须先取得脱敏
 来源证据并把传输显式改为非合成——这是需要记录的有意决定，而不是默认回退。
+
+## 规则读取（fail-closed）
+
+`read_assignment` 的 payload 必须提供五项规则，缺一项即 `rules_state=PARTIAL` 并
+拒绝建计划（`SUBMISSION_RULE_UNVERIFIED`），不会退化成宽松默认：
+
+| 字段 | 有效值 | 缺失/非法时 |
+|---|---|---|
+| `deadline`（必填）/ `late_deadline` 或 `late_submission_deadline` | 可解析时间或日期；`deadline_state='NONE'` 显式声明无截止 | `SUBMISSION_DEADLINE_UNVERIFIED`，不当作"已截止"也不当作"开放" |
+| `allowed_extensions` | 非空扩展名列表 | `SUBMISSION_RULE_UNVERIFIED` |
+| `max_bytes` | 正整数上限 | `SUBMISSION_RULE_UNVERIFIED` |
+| `allow_multiple_files` | 布尔 | `SUBMISSION_RULE_UNVERIFIED`（占位值取最严格的 `False`） |
+| `requires_official_confirmation` | 布尔 | `SUBMISSION_RULE_UNVERIFIED` |
+
+读取器把模型默认值直接 `asdict` 过来时，这些默认值会被当作"读取器声明"，因此 6.1
+必须只传入真实来源值；无法确认的字段应省略，让计划停在明确的规则缺口上。
 
 ## 两个状态轴
 
@@ -51,13 +68,24 @@
 3. 一个 `POST .../submit/<submission_ref>`。
 
 4.4 的 `CHECKS` 是冻结的四项，本模块的含义固定为：`availability` 提交窗口是否
-开放（截止/补交时间）、`eligibility` 替换策略是否满足、`fees` 文件数量与大小限制
-是否仍然满足（本模块没有费用概念，该槽位用于平台限制）、`rules` 作业身份与规则
-（完成方式、允许扩展名、大小上限等）是否与计划一致。任一为假都会让引擎以
-`PRECONDITIONS_CHANGED_PREPARE_AGAIN` 使计划失效，且不构造请求门。
+开放（截止/补交时间；不可读就是不可用）、`eligibility` 替换策略是否满足且没有另一
+份进行中的本地计划、`fees` 文件是否仍与冻结哈希一致且满足平台限制（本模块没有费用
+概念，该槽位用于平台限制）、`rules` 作业身份与规则（完成方式、允许扩展名、大小
+上限等）是否与计划一致。任一为假都会让引擎以
+`PRECONDITIONS_CHANGED_PREPARE_AGAIN` 使计划失效，且不构造请求门；具体分类码写入
+模块日志的 `preflight_errors` 与 `last_error`，不会被引擎的通用 reason 覆盖。
 
 所有请求体只使用**由计划号与文件哈希确定性派生**的客户端引用。4.4 的授权门要求
 请求体在计划冻结时完全确定，服务端回执只用于核对，不会回流进后续请求体。
+
+**最终提交前重新核对**：上传与草稿完成后、消费提交请求之前，适配器再次读取作业，
+依次检查截止窗口、规则完整性、被替换版本、作业摘要和本地计划冲突。任一变化都会在
+发出 `submit` 之前停止（计划进入 `UNKNOWN` 并记录原因），不会用上传开始时的旧状态
+提交。
+
+**成功语义**：传输必须在回执里返回 `accepted=True`，上传与草稿还必须带
+`receipt_id`。HTTP 200 但 `accepted=False` / 缺回执按拒绝处理：当前文件标
+`REJECTED`，后续草稿与提交不再发出。
 
 派发前动作引擎已把 `DISPATCHING`、授权证据和 owner 进程写入加密日志；每一步先在
 `SideEffectLedger` 中标记 `NOT_SENT → SENT/UNKNOWN`，再交给传输。没有任何自动重试：
@@ -65,9 +93,11 @@
 
 `preflight` 和 `reconcile` **不写动作日志**：引擎在调用 `preflight` 前捕获计划
 修订号、在 `reconcile` 前捕获结果修订号，从这两个钩子写同一日志会变成静默空操作。
-因此上传回执、草稿引用、观测结果和核对结论写入本模块自己的加密提交日志
-（`submissions-v1/plans`），文件路径与哈希写入 `submissions-v1/files`。两处都使用与
-`ActionStore` 相同的保护编码器（2.2 信封或 Windows DPAPI），POSIX 权限 0600。
+因此上传回执、草稿引用、观测结果、preflight 分类码和准备警告写入本模块自己的加密
+提交日志（`submissions-v1/plans`），文件路径与哈希写入 `submissions-v1/files`。
+两处都使用与 `ActionStore` 相同的保护编码器（2.2 信封或 Windows DPAPI），POSIX
+权限 0600。日志的读改写带按计划的文件锁，`execute` 与并发 `result` 不会丢更新；
+观察到的新警告与准备阶段警告合并而不是替换。
 
 ## 文件变化保护
 
@@ -84,15 +114,23 @@
 - `NO_OVERWRITE`：已有提交或提交状态未知时拒绝（`SUBMISSION_EXISTING_SUBMISSION`
   或 `SUBMISSION_REPLACEMENT_UNVERIFIED`），不默认覆盖。
 - `REPLACE_EXISTING`：必须同时给出要替换的版本号；平台报告的版本必须与之一致，
-  否则拒绝。准备后若他端版本变化，`preflight` 使计划失效。
+  否则拒绝。准备后若他端版本变化，`preflight` 与提交前复核都会使计划失效。
+- 核对时要求观测版本 **大于** 被替换版本；更旧或相同的版本一律
+  `VERSION_NOT_VERIFIED`。
 
 ## 结果核对
 
 核对分四个独立结论：`identity_verified`（作业与文件清单）、`content_verified`
 （平台确实为每个文件提供哈希且一致）、`version_verified`（平台提供版本，替换时是
-新版本）、`receipt_verified`（平台提供提交时间或回执）。`verified` 只要求作业身份、
-最终状态和回执成立；平台只给文件名时 `content_verified` 保持 `false`，
+更新的版本）、`receipt_verified`（平台提供提交时间或回执）。`verified` 只要求作业
+身份、最终状态和回执成立；平台只给文件名时 `content_verified` 保持 `false`，
 `limitations` 写明 `CONTENT_HASH_NOT_AVAILABLE`，绝不声称内容完全一致。
+
+观测必须自带作业标识（`assignment_id` 或 `assignment_uid`）；缺失或不一致时不构造
+`submission-v1` 记录，计划停在 `UNKNOWN`。矛盾观测（非最终状态却声称
+`is_final=true`）会被降级并标记 `IS_FINAL_CONTRADICTED`；畸形文件行不会抛异常，而是
+记 `OBSERVED_FILE_ROW_INVALID` 限制。`submission-v1` 的 `allOf` 规则在构造时强制，
+非 `SUBMITTED` 状态一律 `is_final=false`。
 
 ## 恢复路径
 
@@ -103,10 +141,18 @@
 | 只保存了草稿 | `stage=DRAFT_SAVED`，`status=UNKNOWN`，不产生 `SUBMITTED` |
 | 正式提交响应丢失 | 通过读取核对；确实提交成功才进入 `VERIFIED`，否则保持 `UNKNOWN` |
 | 平台要求声明/官方验证 | `AWAITING_OFFICIAL`，零写入，下一步在官方页完成 |
-| 截止时间或规则变化 | 计划 `FAILED`，零请求 |
+| 截止/规则/版本在准备后变化 | 计划 `FAILED`，零请求，`last_error` 给出具体分类码 |
+| 截止/版本在上传后、提交前变化 | 停止在提交之前，计划 `UNKNOWN`，`pre_submit` 记录原因 |
+| 同一作业已有另一份进行中的本地计划 | `SUBMISSION_PLAN_CONFLICT`，零请求 |
+| 上传或草稿回执 `accepted!=True` | 当前文件 `REJECTED`，后续步骤不发出 |
 
-本地取消（`Submissions.cancel`）只返回 `remote_changes = NONE`：本模块不提供撤回
-或重交接口，清理草稿和代码回退都不会改动远端正式作业。
+本地取消（`Submissions.cancel`）只返回 `remote_changes = NONE` 和
+`cancel_reason = LOCAL_CANCEL_NO_REMOTE_EFFECT`：本模块不提供撤回或重交接口，清理
+草稿和代码回退都不会改动远端正式作业。取消、结果读取和执行都做账号绑定，另一账号
+会得到 `ACTION_ACCOUNT_MISMATCH`。
+
+文件集保留最近 200 份，但**不会删除仍被非终态计划引用的那一份**（`prune` 必须显式
+传入活跃集合）；失败的 `prepare` 会删除刚写入的文件集，不留无主路径记录。
 
 ## 与其它模块的接线
 

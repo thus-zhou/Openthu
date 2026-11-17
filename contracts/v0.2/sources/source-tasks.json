@@ -120,11 +120,14 @@
       "known_evidence": [
         "Assignment lists and details are read-only.",
         "The local core has file validation and a preparation path, but no verified campus upload or final submit.",
-        "No draft-save or result-query endpoint is registered."
+        "No draft-save or result-query endpoint is registered.",
+        "The 5.3 boundary (plan, ordered upload/draft/submit, stage machine, result check) is implemented with a declared-synthetic transport only."
       ],
       "evidence_refs": [
         "src/learn_assistant/providers/learn_read.py:143-176",
-        "src/learn_assistant/core.py:330-380"
+        "src/learn_assistant/core.py:330-380",
+        "src/thu_assistant/submissions/adapter.py",
+        "src/thu_assistant/submissions/README.md"
       ],
       "missing_evidence": [
         "Upload endpoint and multipart/field contract.",

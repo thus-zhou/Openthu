@@ -67,6 +67,22 @@ CODES = {
         'CONFLICT', False, 'FIX_INPUT',
         '本地计划、文件清单或账号与当前请求不一致。',
     ),
+    'SUBMISSION_PLAN_CONFLICT': (
+        'CONFLICT', False, 'CHECK_REMOTE_RECORD',
+        '同一作业已有另一份进行中的本地计划；先核对官方记录再决定是否继续。',
+    ),
+    'SUBMISSION_RULE_UNVERIFIED': (
+        'CONFLICT', False, 'CHECK_REMOTE_RECORD',
+        '作业的文件、截止或确认规则未被完整读取；缺失规则不会按宽松默认继续。',
+    ),
+    'SUBMISSION_DEADLINE_UNVERIFIED': (
+        'CONFLICT', False, 'CHECK_REMOTE_RECORD',
+        '截止时间不可读或格式未知；不能据此判断开放或已截止。',
+    ),
+    'SUBMISSION_LIVE_EVIDENCE_UNVERIFIED': (
+        'NOT_IMPLEMENTED', False, 'CONTACT_SUPPORT',
+        '来源契约未核对前不构造真实提交记录；只有合成演练可以产生记录。',
+    ),
     'SUBMISSION_SOURCE_UNAVAILABLE': (
         'NETWORK', True, 'RETRY',
         '作业读取暂时不可用；不能据此判断远端提交状态，也不会自动重试写入。',

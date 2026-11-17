@@ -91,6 +91,12 @@ def plan_files(paths, assignment):
         raise SubmissionError('SUBMISSION_INVALID_ARGUMENTS', 'FILES')
     if len(paths) > MAX_FILES:
         raise SubmissionError('SUBMISSION_LIMIT_EXCEEDED', 'COUNT')
+    if assignment.get('allowed_extensions_state') != 'DECLARED':
+        raise SubmissionError('SUBMISSION_RULE_UNVERIFIED', 'ALLOWED_EXTENSIONS')
+    if assignment.get('max_bytes_state') != 'DECLARED':
+        raise SubmissionError('SUBMISSION_RULE_UNVERIFIED', 'MAX_BYTES')
+    if assignment.get('multiple_files_state') == 'UNVERIFIED':
+        raise SubmissionError('SUBMISSION_RULE_UNVERIFIED', 'ALLOW_MULTIPLE_FILES')
     if len(paths) > 1 and assignment['allow_multiple_files'] is not True:
         raise SubmissionError('SUBMISSION_FILE_UNSAFE', 'MULTIPLE')
     allowed = {item.casefold() for item in assignment['allowed_extensions']}

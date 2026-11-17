@@ -36,6 +36,8 @@ BEHAVIOURS = (
     'ok',
     'lost_upload',
     'reject_upload',
+    'upload_not_accepted',
+    'draft_not_accepted',
     'draft_only',
     'submit_lost',
     'submit_unknown',
@@ -161,7 +163,11 @@ class SyntheticSubmissionTransport:
         if payload is None or hashlib.sha256(payload).hexdigest() != body['sha256']:
             raise SubmissionError('SUBMISSION_FILE_CHANGED', 'PAYLOAD')
         if self.behavior == 'reject_upload' and index == self.fail_at:
+            # A definite rejection: nothing was stored.
             raise SubmissionError('SUBMISSION_PLATFORM_REJECTED', 'UPLOAD')
+        if self.behavior == 'upload_not_accepted' and index == self.fail_at:
+            # HTTP 200 but the platform says it did not store the file.
+            return {'accepted': False, 'receipt_id': 'SYN-REJECTED-' + body['upload_ref'][:8]}
         self.uploads[body['upload_ref']] = {'name': body['name'], 'size': body['size'],
                                             'sha256': body['sha256']}
         if body['upload_ref'] not in self.upload_order:
@@ -176,6 +182,8 @@ class SyntheticSubmissionTransport:
         for reference in body['uploads']:
             if reference not in self.uploads:
                 raise SubmissionError('SUBMISSION_INVALID_ARGUMENTS', 'DRAFT_UPLOADS')
+        if self.behavior == 'draft_not_accepted':
+            return {'accepted': False, 'receipt_id': 'SYN-DRAFT-REJECTED'}
         self.draft = {'draft_ref': body['draft_ref'], 'uploads': list(body['uploads']),
                       'note': body.get('note', '')}
         return {'receipt_id': 'SYN-DRAFT-' + body['draft_ref'][:8], 'accepted': True}
@@ -198,6 +206,10 @@ class SyntheticSubmissionTransport:
         }
         if self.behavior == 'submit_unknown':
             self.submission['result_observed'] = False
+        if self.behavior != 'submit_unknown':
+            # The platform now reports one more submission version.
+            self.assignment.update(submitted=True, submitted_at=self.submission['submitted_at'],
+                                   submission_version=version)
         if self.behavior == 'submit_lost':
             raise TimeoutError('synthetic-lost-submit-response')
         return {'receipt_id': self.submission['remote_submission_id'], 'accepted': True}

@@ -10,6 +10,12 @@ endpoint is guessed.
 Request bodies use client-generated references only.  The action engine hands
 out one exact, ordered, single-use request capability, so a body cannot carry a
 server-issued identifier that is still unknown when the plan is frozen.
+
+Success semantics for ``send``: a transport must return a mapping with
+``accepted=True`` and a non-empty ``receipt_id`` for an upload or draft that the
+platform stored.  Anything else (``accepted=False``, a missing receipt, or an
+exception) is treated as a rejected or unknown step: the adapter records the
+code and stops the sequence, and it never treats an ambiguous reply as success.
 """
 from __future__ import annotations
 

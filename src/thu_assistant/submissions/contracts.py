@@ -32,17 +32,25 @@ ASSIGNMENT_STATE = schema({
     'late_deadline_precision': {'type': 'string', 'pattern': 'NONE|DATE|EXACT|UNVERIFIED'},
     'allowed_extensions': {'type': 'array', 'items': {'type': 'string', 'maxLength': 20},
                            'maxItems': 40},
+    'allowed_extensions_state': {'type': 'string', 'pattern': 'DECLARED|UNVERIFIED'},
     'max_bytes': {'type': 'integer', 'minimum': 0, 'maximum': 1073741824},
+    'max_bytes_state': {'type': 'string', 'pattern': 'DECLARED|UNVERIFIED'},
     'allow_multiple_files': {'type': 'boolean'},
+    'multiple_files_state': {'type': 'string', 'pattern': 'ALLOWED|SINGLE|UNVERIFIED'},
     'submission_state': {'type': 'string', 'pattern': 'NONE|EXISTING|UNKNOWN'},
     'submission_version': {'type': 'integer', 'minimum': 0, 'maximum': 100000},
     'requires_official_confirmation': {'type': 'boolean'},
+    'confirmation_state': {'type': 'string', 'pattern': 'REQUIRED|NOT_REQUIRED|UNVERIFIED'},
     'completion_type': {'type': 'string', 'maxLength': 40},
     'submission_type': {'type': 'string', 'maxLength': 40},
+    'rules_state': {'type': 'string', 'pattern': 'COMPLETE|PARTIAL'},
+    'missing_rules': {'type': 'array', 'items': {'type': 'string', 'maxLength': 40},
+                      'maxItems': 40},
 }, ('deadline', 'deadline_precision', 'late_deadline', 'late_deadline_precision',
-    'allowed_extensions', 'max_bytes', 'allow_multiple_files', 'submission_state',
-    'submission_version', 'requires_official_confirmation', 'completion_type',
-    'submission_type'))
+    'allowed_extensions', 'allowed_extensions_state', 'max_bytes', 'max_bytes_state',
+    'allow_multiple_files', 'multiple_files_state', 'submission_state',
+    'submission_version', 'requires_official_confirmation', 'confirmation_state',
+    'completion_type', 'submission_type', 'rules_state', 'missing_rules'))
 
 INPUT = {
     'assignment_id': ID,

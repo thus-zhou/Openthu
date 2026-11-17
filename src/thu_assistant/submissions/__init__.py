@@ -28,7 +28,7 @@ from .manifest import MAX_FILES, describe_file, plan_files, recheck_files
 from .models import (
     ASSIGNMENT_SOURCE_ID, REMOTE_STATES, REPLACEMENT_POLICIES, SOURCE_ID, STAGES,
     assignment_state, closed, normalize_assignment, observed_submission,
-    replacement_allowed, submission_record, verify_submission,
+    replacement_allowed, submission_record, verify_submission, window_state,
 )
 from .store import FileSetStore, SubmissionJournal
 from .synthetic import SyntheticSubmissionTransport
@@ -44,5 +44,5 @@ __all__ = [
     'contract', 'contracts', 'describe_file', 'enabled', 'errors', 'error_object',
     'manifest', 'models', 'normalize_assignment', 'observed_submission', 'plan_files',
     'recheck_files', 'register', 'replacement_allowed', 'store', 'submission_record',
-    'transport', 'verify_submission',
+    'transport', 'verify_submission', 'window_state',
 ]

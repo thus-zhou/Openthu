@@ -5,11 +5,17 @@ dispatch records intent per step in the ``SideEffectLedger`` before the
 transport is called.  There is no retry path here: a lost or failed response
 leaves the engine in ``UNKNOWN`` and only reads can continue.
 
-Preflight and reconcile are intentionally free of writes to the action journal.
-The engine claims the plan with a revision captured before ``preflight`` and
-re-reads the record with a revision captured before ``reconcile``; a write to
-the same journal from either hook would turn into a silent no-op.  Module-owned
-evidence therefore lives in the separate submission journal.
+The final submit is re-checked against the platform immediately before its
+request is consumed: a deadline that passed, a rule that changed, a new
+replacement version, or another local plan for the same assignment stops the
+sequence after the uploads instead of submitting under stale conditions.
+
+Preflight and reconcile never write the *action* journal.  The engine claims the
+plan with a revision captured before ``preflight`` and re-reads the record with
+a revision captured before ``reconcile``; a write from either hook would turn
+into a silent no-op.  Module-owned evidence (per-file receipts, the observed
+record, preflight codes and prepare warnings) lives in the separate submission
+journal, which has its own lock.
 """
 from __future__ import annotations
 
@@ -22,15 +28,19 @@ from ..bridge import CampusError
 from .errors import SubmissionError
 from .manifest import read_verified, recheck_files
 from .models import (
-    VERSION, assignment_state, closed, normalize_assignment, now_iso, observed_submission,
-    replacement_allowed, verify_submission,
+    VERSION, assignment_state, normalize_assignment, now_iso, observed_submission,
+    replacement_allowed, verify_submission, window_state,
 )
 from .transport import references, request_specs
 
 
 def enabled():
-    """Module-owned write switch; action_enabled() has no learn branch yet."""
-    return os.environ.get('THU_LEARN_SUBMIT', '1') != '0'
+    """Module-owned write switch; fail-closed until explicitly enabled.
+
+    ``actions.action_enabled`` has no ``learn`` branch, and this module must not
+    inherit the sports switch, so the switch lives here and defaults to off.
+    """
+    return os.environ.get('THU_LEARN_SUBMIT') == '1'
 
 
 def _error_code(error):
@@ -38,6 +48,13 @@ def _error_code(error):
         return error.code
     code = getattr(error, 'code', None)
     return code if isinstance(code, str) else 'SUBMISSION_WRITE_UNKNOWN'
+
+
+def _stored(receipt, require_receipt=True):
+    """A transport reply counts only when it explicitly says the step was stored."""
+    if not isinstance(receipt, dict) or receipt.get('accepted') is not True:
+        return False
+    return bool(receipt.get('receipt_id')) if require_receipt else True
 
 
 class SubmissionAdapter:
@@ -53,49 +70,54 @@ class SubmissionAdapter:
     # -- engine hooks -----------------------------------------------------
     def preview(self, business):
         """Validate the frozen business object; no I/O, no upload."""
-        file_set = self.files.get(business['file_set_id'])
-        if file_set['assignment_id'] != business['assignment_id']:
-            raise SubmissionError('SUBMISSION_PLAN_MISMATCH', 'ASSIGNMENT')
-        stored = [(item['name'], item['size'], item['sha256']) for item in file_set['files']]
-        frozen = [(item['name'], item['size'], item['sha256']) for item in business['attachments']]
-        if stored != frozen:
-            raise SubmissionError('SUBMISSION_PLAN_MISMATCH', 'ATTACHMENTS')
+        file_set = self._file_set(business)
+        self._compare(file_set, business)
         return business
 
     def preflight(self, record):
         if not enabled():
             raise SubmissionError('SUBMISSION_WRITES_DISABLED', 'SWITCH')
         business = record['business']
-        file_set = self.files.get(business['file_set_id'])
-        if file_set['assignment_id'] != business['assignment_id']:
-            raise SubmissionError('SUBMISSION_PLAN_MISMATCH', 'ASSIGNMENT')
+        file_set = self._file_set(business)
         if file_set.get('account') != record.get('account'):
             # File sets are account-scoped; a plan may not upload files that
             # were prepared under another account.
             raise SubmissionError('SUBMISSION_PLAN_MISMATCH', 'ACCOUNT')
-        stored = [(item['name'], item['size'], item['sha256']) for item in file_set['files']]
-        frozen = [(item['name'], item['size'], item['sha256']) for item in business['attachments']]
-        if stored != frozen:
-            raise SubmissionError('SUBMISSION_PLAN_MISMATCH', 'ATTACHMENTS')
+        self._compare(file_set, business)
 
         assignment = self.read_assignment(business['assignment_id'])
+        operation_id = record['operation_id']
         checks = {}
         errors = []
         current, file_errors = recheck_files(file_set['files'])
         checks['fees'] = not file_errors
         errors.extend(file_errors)
-        checks['rules'] = assignment_state(assignment) == business['assignment_state']
-        if not checks['rules']:
-            errors.append('SUBMISSION_PLAN_MISMATCH')
-        checks['availability'] = not closed(assignment)
-        if not checks['availability']:
-            errors.append('SUBMISSION_ASSIGNMENT_CLOSED')
+        if assignment['rules_state'] != 'COMPLETE':
+            # An incomplete rule set is never planned under permissive defaults.
+            checks['rules'] = False
+            errors.append('SUBMISSION_RULE_UNVERIFIED')
+        else:
+            checks['rules'] = assignment_state(assignment) == business['assignment_state']
+            if not checks['rules']:
+                errors.append('SUBMISSION_PLAN_MISMATCH')
+        window, window_code = window_state(assignment)
+        checks['availability'] = window == 'OPEN'
+        if window_code:
+            errors.append(window_code)
+        conflict = self.journal.conflicting_plan(business['assignment_id'],
+                                                 exclude=operation_id)
         allowed, code = replacement_allowed(
             assignment, business['replacement_policy'],
             business['assignment_state']['submission_version'])
+        if conflict:
+            allowed, code = False, 'SUBMISSION_PLAN_CONFLICT'
         checks['eligibility'] = allowed
         if code:
             errors.append(code)
+        self._note(operation_id, preflight_errors=sorted(set(errors)),
+                   preflight_checks=checks, preflight_at=now_iso(),
+                   rules_state=assignment['rules_state'],
+                   missing_rules=list(assignment['missing_rules']))
         fresh = {**business, 'attachments': current}
         requests = []
         handoff = None
@@ -105,7 +127,7 @@ class SubmissionAdapter:
                 # cannot perform: hand the step over instead of sending a write.
                 handoff = 'OFFICIAL_CONFIRMATION_REQUIRED'
             else:
-                refs = references(record['operation_id'], business['attachments'])
+                refs = references(operation_id, business['attachments'])
                 requests = request_specs(business, refs, self.transport.requires_draft)
         return {'business': fresh, 'context': record['context'], 'checks': checks,
                 'check_errors': sorted(set(errors)), 'requests': requests,
@@ -114,7 +136,7 @@ class SubmissionAdapter:
     def dispatch(self, record, gate, ledger):
         business = record['business']
         operation_id = record['operation_id']
-        file_set = self.files.get(business['file_set_id'])
+        file_set = self._file_set(business)
         refs = references(operation_id, business['attachments'])
         self._begin(record, file_set, refs)
         try:
@@ -144,19 +166,33 @@ class SubmissionAdapter:
                     self._file(operation_id, index, 'UNKNOWN')
                     self._unknown(operation_id, _error_code(error))
                     raise
+                if not _stored(receipt):
+                    # HTTP 200 is not storage: the platform must say it stored
+                    # the file and return a receipt, or the plan stops here.
+                    ledger.unknown(step)
+                    self._file(operation_id, index, 'REJECTED')
+                    self._unknown(operation_id, 'SUBMISSION_PLATFORM_REJECTED')
+                    raise SubmissionError('SUBMISSION_PLATFORM_REJECTED', 'UPLOAD')
                 self._file(operation_id, index, 'ACCEPTED', receipt)
             self._transition(operation_id, 'UPLOADED_STAGING')
             if self.transport.requires_draft:
-                self._send_step(operation_id, gate, ledger, 'draft',
-                                self._draft_body(business, refs))
+                receipt = self._send_step(operation_id, gate, ledger, 'draft',
+                                          self._draft_body(business, refs))
+                if not _stored(receipt):
+                    self._unknown(operation_id, 'SUBMISSION_PLATFORM_REJECTED')
+                    raise SubmissionError('SUBMISSION_PLATFORM_REJECTED', 'DRAFT')
                 self._transition(operation_id, 'DRAFT_SAVED', draft_ref=refs['draft'])
+            # Re-check the platform immediately before the final submit; the
+            # uploads may have taken long enough for the rules to change.
+            self._pre_submit_check(record)
             receipt = self._send_step(operation_id, gate, ledger, 'submit',
                                       self._submit_body(business, refs))
-            accepted = isinstance(receipt, dict) and receipt.get('accepted') is not False
+            accepted = _stored(receipt, require_receipt=False)
             if not accepted:
                 self._unknown(operation_id, 'SUBMISSION_PLATFORM_REJECTED')
+                return receipt
             self._transition(operation_id, 'SUBMIT_SENT_UNVERIFIED',
-                             submission_ref=refs['submission'], submit_accepted=accepted)
+                             submission_ref=refs['submission'], submit_accepted=True)
             return receipt
         except NotDispatched:
             self._transition(operation_id, 'FAILED', last_error='REQUEST_NOT_SENT')
@@ -170,21 +206,25 @@ class SubmissionAdapter:
             raise
         except Exception:
             raise SubmissionError('SUBMISSION_SOURCE_UNAVAILABLE', 'READ') from None
+        operation_id = record['operation_id']
         if not isinstance(observed, dict) or observed.get('complete') is not True:
-            self._observe(record['operation_id'], None, None, ['OBSERVATION_INCOMPLETE'])
+            self._observe(operation_id, None, None, ['OBSERVATION_INCOMPLETE'])
             return {'records': [], 'complete': False}
         payload = observed.get('submission')
         if not isinstance(payload, dict):
-            self._observe(record['operation_id'], None, None, [])
+            self._observe(operation_id, None, None, [])
             return {'records': [], 'complete': True}
-        record_observed, warnings = observed_submission(payload, business['assignment_id'])
+        record_observed, warnings = observed_submission(
+            payload, business['assignment_id'],
+            synthetic=self.transport.synthetic is True)
         if record_observed is None:
-            self._observe(record['operation_id'], None, None, warnings)
+            self._observe(operation_id, None, None, warnings)
             return {'records': [], 'complete': True}
         verification = verify_submission(
             record_observed, payload.get('files'), business['assignment_id'],
-            business['attachments'], business['assignment_state']['submission_version'])
-        self._observe(record['operation_id'], record_observed, verification, warnings)
+            business['attachments'], business['assignment_state']['submission_version'],
+            observed_assignment_uid=payload.get('assignment_uid'))
+        self._observe(operation_id, record_observed, verification, warnings)
         base = {'business': deepcopy(business), 'account': record['account'],
                 'service_id': record['service_id'], 'operation': record['operation'],
                 'platform': 'learn'}
@@ -212,6 +252,50 @@ class SubmissionAdapter:
         assignment['warnings'] = warnings
         return assignment
 
+    def _file_set(self, business):
+        return self.files.get(business['file_set_id'])
+
+    def _compare(self, file_set, business):
+        if file_set['assignment_id'] != business['assignment_id']:
+            raise SubmissionError('SUBMISSION_PLAN_MISMATCH', 'ASSIGNMENT')
+        stored = [(item['name'], item['size'], item['sha256']) for item in file_set['files']]
+        frozen = [(item['name'], item['size'], item['sha256']) for item in business['attachments']]
+        if stored != frozen:
+            raise SubmissionError('SUBMISSION_PLAN_MISMATCH', 'ATTACHMENTS')
+
+    def _pre_submit_check(self, record):
+        """Refuse the final submit when the platform state moved after preflight."""
+        business = record['business']
+        operation_id = record['operation_id']
+        assignment = self.read_assignment(business['assignment_id'])
+        window, code = window_state(assignment)
+        if window != 'OPEN':
+            self._unknown(operation_id, code or 'SUBMISSION_DEADLINE_UNVERIFIED')
+            self._note(operation_id, pre_submit='WINDOW_' + window)
+            raise SubmissionError(code or 'SUBMISSION_DEADLINE_UNVERIFIED', 'PRE_SUBMIT')
+        if assignment['rules_state'] != 'COMPLETE':
+            self._unknown(operation_id, 'SUBMISSION_RULE_UNVERIFIED')
+            self._note(operation_id, pre_submit='RULES_PARTIAL')
+            raise SubmissionError('SUBMISSION_RULE_UNVERIFIED', 'PRE_SUBMIT')
+        allowed, code = replacement_allowed(
+            assignment, business['replacement_policy'],
+            business['assignment_state']['submission_version'])
+        if not allowed:
+            self._unknown(operation_id, code)
+            self._note(operation_id, pre_submit='REPLACEMENT')
+            raise SubmissionError(code, 'PRE_SUBMIT')
+        if assignment_state(assignment) != business['assignment_state']:
+            self._unknown(operation_id, 'SUBMISSION_PLAN_MISMATCH')
+            self._note(operation_id, pre_submit='ASSIGNMENT_CHANGED')
+            raise SubmissionError('SUBMISSION_PLAN_MISMATCH', 'PRE_SUBMIT')
+        conflict = self.journal.conflicting_plan(business['assignment_id'],
+                                                 exclude=operation_id)
+        if conflict:
+            self._unknown(operation_id, 'SUBMISSION_PLAN_CONFLICT')
+            self._note(operation_id, pre_submit='PLAN_CONFLICT')
+            raise SubmissionError('SUBMISSION_PLAN_CONFLICT', 'PRE_SUBMIT')
+        self._note(operation_id, pre_submit='RECHECKED', pre_submit_at=now_iso())
+
     def _upload_spec(self, business, refs, index):
         return request_specs(business, refs, self.transport.requires_draft)[index]
 
@@ -237,6 +321,12 @@ class SubmissionAdapter:
             raise
 
     # -- journal ----------------------------------------------------------
+    def _note(self, operation_id, **fields):
+        """Update module evidence without touching the stage."""
+        def change(state):
+            state.update(fields)
+        self.journal.merge(operation_id, change)
+
     def _begin(self, record, file_set, refs):
         business = record['business']
         files = [{'index': index, 'name': item['name'], 'size': item['size'],
@@ -247,7 +337,7 @@ class SubmissionAdapter:
             assignment_id=business['assignment_id'],
             replacement_policy=business['replacement_policy'],
             file_set_id=business['file_set_id'], refs=refs, files=files,
-            dispatch_at=now_iso(), synthetic=True))
+            dispatch_at=now_iso(), synthetic=self.transport.synthetic is True))
 
     def _transition(self, operation_id, stage, **extra):
         def change(state):
@@ -293,7 +383,12 @@ class SubmissionAdapter:
             state['observed'] = observed
             state['verification'] = verification
             state['observed_at'] = now_iso()
-            state['warnings'] = sorted({str(item)[:200] for item in warnings if item})
+            # A reconciliation must not erase the warnings that explain why a
+            # plan was prepared under limited rules.
+            merged = {str(item)[:200] for item in (warnings or []) if item}
+            merged.update(str(item)[:200] for item in (state.get('prepare_warnings') or []) if item)
+            state['observe_warnings'] = sorted({str(item)[:200] for item in (warnings or []) if item})
+            state['warnings'] = sorted(merged)
             steps = state.setdefault('stage_history', [])
             steps.append({'stage': stage, 'at': now_iso()})
             state['stage_history'] = steps[-20:]

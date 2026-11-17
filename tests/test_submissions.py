@@ -31,7 +31,8 @@ from thu_assistant.submissions import (
     capability_report, contract, register,
 )
 from thu_assistant.submissions.models import (
-    closed, normalize_assignment, observed_submission, submission_record, verify_submission,
+    REMOTE_STATES, closed, normalize_assignment, observed_submission, submission_record,
+    verify_submission, window_state,
 )
 from thu_assistant.submissions.manifest import plan_files
 from thu_assistant.submissions.transport import references, request_specs
@@ -42,6 +43,12 @@ READINESS = ROOT / 'contracts' / 'v0.2' / 'sources' / 'adapter-readiness.json'
 CLASSIFICATION = ROOT / 'contracts' / 'v0.2' / 'error-classification.json'
 AUTH = 'Synthetic human instruction for this exact test transaction'
 ASSIGNMENT = 'SYNTHETIC-ASSIGNMENT-1'
+
+
+@pytest.fixture(autouse=True)
+def _enable_rehearsal(monkeypatch):
+    """The write switch is off by default; every write test enables it explicitly."""
+    monkeypatch.setenv('THU_LEARN_SUBMIT', '1')
 
 
 def world(tmp_path, behavior='ok', assignment=None, requires_draft=True, fail_at=0):
@@ -736,10 +743,12 @@ def test_an_unreadable_deadline_blocks_instead_of_assuming_it_is_open():
     assert closed(assignment) is True
 
 
-def test_a_missing_deadline_is_not_a_closed_assignment():
-    assignment, _ = normalize_assignment({'assignment_id': ASSIGNMENT}, ASSIGNMENT)
-    assert assignment['deadline_precision'] == 'NONE'
-    assert closed(assignment) is False
+def test_a_missing_deadline_is_unverified_not_open():
+    assignment, warnings = normalize_assignment({'assignment_id': ASSIGNMENT}, ASSIGNMENT)
+    assert assignment['deadline_precision'] == 'UNVERIFIED'
+    assert 'deadline' in assignment['missing_rules']
+    assert 'DEADLINE_NOT_PROVIDED' in warnings
+    assert closed(assignment) is True
 
 
 def test_verification_requires_a_receipt_and_identity():
@@ -750,3 +759,462 @@ def test_verification_requires_a_receipt_and_identity():
     assert verify_submission(record, [{'name': 'a.pdf', 'size': 5}], ASSIGNMENT,
                              attachments, 0)['verified'] is True
     assert verify_submission(record, [], ASSIGNMENT, attachments, 0)['verified'] is False
+
+
+# -- audit remediation: rules are read fail-closed (P1-1) -------------------
+
+def without(context, *keys):
+    for key in keys:
+        context.transport.assignment.pop(key, None)
+    return context
+
+
+def test_a_missing_multiple_files_rule_blocks_the_plan(tmp_path):
+    context = without(world(tmp_path), 'allow_multiple_files')
+    paths = make_files(tmp_path / 'source')
+    info = pytest.raises(SubmissionError)
+    with info as captured:
+        prepare(context, paths)
+    assert captured.value.code == 'SUBMISSION_RULE_UNVERIFIED'
+    assert 'ALLOW_MULTIPLE_FILES' in captured.value.detail
+    assert context.transport.counts['sent'] == 0
+
+
+def test_missing_size_and_extension_rules_block_the_plan(tmp_path):
+    context = without(world(tmp_path), 'max_bytes')
+    context.transport.assignment['allowed_extensions'] = []
+    paths = make_files(tmp_path / 'source', [('payload.exe', b'MZ' * 300)])
+    with pytest.raises(SubmissionError) as info:
+        prepare(context, paths)
+    assert info.value.code == 'SUBMISSION_RULE_UNVERIFIED'
+    assert 'ALLOWED_EXTENSIONS' in info.value.detail and 'MAX_BYTES' in info.value.detail
+    assert context.transport.counts['sent'] == 0
+
+
+def test_a_missing_confirmation_rule_blocks_the_plan(tmp_path):
+    context = without(world(tmp_path), 'requires_official_confirmation')
+    paths = make_files(tmp_path / 'source')
+    with pytest.raises(SubmissionError) as info:
+        prepare(context, paths)
+    assert info.value.code == 'SUBMISSION_RULE_UNVERIFIED'
+    assert 'REQUIRES_OFFICIAL_CONFIRMATION' in info.value.detail
+    assert context.transport.counts['sent'] == 0
+
+
+def test_a_missing_deadline_blocks_with_the_deadline_code(tmp_path):
+    context = without(world(tmp_path), 'deadline')
+    paths = make_files(tmp_path / 'source')
+    with pytest.raises(SubmissionError) as info:
+        prepare(context, paths)
+    assert info.value.code == 'SUBMISSION_DEADLINE_UNVERIFIED'
+
+
+def test_an_unreadable_deadline_is_not_reported_as_passed(tmp_path):
+    context = world(tmp_path, assignment={'deadline': 'not-a-date'})
+    paths = make_files(tmp_path / 'source')
+    with pytest.raises(SubmissionError) as info:
+        prepare(context, paths)
+    assert info.value.code == 'SUBMISSION_DEADLINE_UNVERIFIED'
+    assert info.value.code != 'SUBMISSION_ASSIGNMENT_CLOSED'
+    assert '已过截止' not in info.value.message
+
+
+def test_the_late_submission_deadline_alias_is_honoured(tmp_path):
+    context = world(tmp_path, assignment={'late_submission_deadline': '2000-01-01 00:00'})
+    context.transport.assignment.pop('late_deadline', None)
+    paths = make_files(tmp_path / 'source')
+    with pytest.raises(SubmissionError) as info:
+        prepare(context, paths)
+    assert info.value.code == 'SUBMISSION_ASSIGNMENT_CLOSED'
+
+
+def test_preflight_refuses_a_rule_set_that_became_partial(tmp_path):
+    context = world(tmp_path)
+    paths = make_files(tmp_path / 'source')
+    plan = prepare(context, paths)
+    without(context, 'allowed_extensions')
+    grant(context, plan['plan_id'])
+    result = context.client.execute(plan['plan_id'], AUTH)
+    assert result['status'] == 'FAILED'
+    assert context.transport.counts['sent'] == 0
+    assert result['last_error'] == 'SUBMISSION_RULE_UNVERIFIED'
+    assert 'SUBMISSION_RULE_UNVERIFIED' in result['preflight_errors']
+
+
+# -- audit remediation: recheck immediately before the final submit (P1-2) --
+
+class DeadlineFlipTransport(SyntheticSubmissionTransport):
+    def send(self, spec, payload=None):
+        receipt = super().send(spec, payload)
+        if '/upload/' in spec.url:
+            self.assignment['deadline'] = '2000-01-01 00:00'
+        return receipt
+
+
+class VersionFlipTransport(SyntheticSubmissionTransport):
+    def send(self, spec, payload=None):
+        receipt = super().send(spec, payload)
+        if '/upload/' in spec.url:
+            self.change_existing_version()
+        return receipt
+
+
+def transport_world(tmp_path, transport):
+    store = make_action_store(tmp_path / 'actions')
+    files = FileSetStore(tmp_path / 'files', protect=wrap, unprotect=unwrap)
+    journal = SubmissionJournal(tmp_path / 'plans', protect=wrap, unprotect=unwrap)
+    client = Submissions(transport=transport, store=store, file_store=files,
+                         journal=journal, account_provider=lambda: 'synthetic-account')
+    return SimpleNamespace(client=client, transport=transport, store=store, files=files,
+                           journal=journal, root=tmp_path)
+
+
+def test_a_deadline_change_after_the_uploads_stops_the_final_submit(tmp_path):
+    context = transport_world(tmp_path, DeadlineFlipTransport())
+    paths = make_files(tmp_path / 'source')
+    plan = prepare(context, paths)
+    grant(context, plan['plan_id'])
+    result = context.client.execute(plan['plan_id'], AUTH)
+    assert result['status'] == 'UNKNOWN'
+    assert context.transport.counts['upload'] == 2
+    assert context.transport.counts['draft'] == 1
+    assert context.transport.counts['submit'] == 0
+    assert result['last_error'] == 'SUBMISSION_ASSIGNMENT_CLOSED'
+    assert result['pre_submit'] == 'WINDOW_CLOSED'
+
+
+def test_a_version_change_after_the_uploads_stops_a_replacement(tmp_path):
+    context = transport_world(tmp_path, VersionFlipTransport(behavior='existing_changes'))
+    paths = make_files(tmp_path / 'source')
+    plan = prepare(context, paths, replacement_policy='REPLACE_EXISTING', expected_version=3)
+    grant(context, plan['plan_id'])
+    result = context.client.execute(plan['plan_id'], AUTH)
+    assert result['status'] == 'UNKNOWN'
+    assert context.transport.counts['submit'] == 0
+    assert result['last_error'] == 'SUBMISSION_REPLACEMENT_UNVERIFIED'
+    assert result['pre_submit'] == 'REPLACEMENT'
+
+
+def test_another_local_plan_blocks_a_second_plan(tmp_path):
+    context = world(tmp_path)
+    paths = make_files(tmp_path / 'source')
+    first = prepare(context, paths, note='first')
+    second = prepare(context, paths, note='second')
+    assert first['plan_id'] != second['plan_id']
+    grant(context, second['plan_id'])
+    result = context.client.execute(second['plan_id'], AUTH)
+    assert result['status'] == 'FAILED'
+    assert context.transport.counts['sent'] == 0
+    assert result['last_error'] == 'SUBMISSION_PLAN_CONFLICT'
+
+
+def test_a_second_prepare_is_refused_after_the_first_submission(tmp_path):
+    context = world(tmp_path)
+    paths = make_files(tmp_path / 'source')
+    plan = prepare(context, paths)
+    grant(context, plan['plan_id'])
+    assert context.client.execute(plan['plan_id'], AUTH)['status'] == 'SUCCEEDED'
+    with pytest.raises(SubmissionError) as info:
+        prepare(context, paths)
+    assert info.value.code == 'SUBMISSION_EXISTING_SUBMISSION'
+
+
+# -- audit remediation: submission-v1 invariants (P1-3) ---------------------
+
+@pytest.mark.parametrize('state', [item for item in REMOTE_STATES if item != 'SUBMITTED'])
+def test_only_the_submitted_state_may_be_final(state):
+    with pytest.raises(SubmissionError) as info:
+        submission_record(assignment_id=ASSIGNMENT, state=state, is_final=True, version=1,
+                          remote_submission_id='SYN-1', upload_receipt_id='SYN-U1',
+                          submitted_at='2026-11-20T22:00:00+08:00', result_observed=True)
+    assert info.value.code == 'SUBMISSION_INVALID_ARGUMENTS'
+    record = submission_record(assignment_id=ASSIGNMENT, state=state, is_final=False,
+                               version=1, remote_submission_id=None, upload_receipt_id='SYN-U1',
+                               submitted_at=None, result_observed=False)
+    assert record['is_final'] is False
+
+
+def test_the_submitted_state_must_be_final():
+    with pytest.raises(SubmissionError) as info:
+        submission_record(assignment_id=ASSIGNMENT, state='SUBMITTED', is_final=False,
+                          version=1, remote_submission_id='SYN-1', upload_receipt_id='U',
+                          submitted_at='2026-11-20T22:00:00+08:00', result_observed=True)
+    assert info.value.code == 'SUBMISSION_RESULT_UNVERIFIED'
+
+
+@pytest.mark.parametrize('state', ['DRAFT_SAVED', 'UPLOADED_STAGING', 'SUPERSEDED'])
+def test_a_contradictory_observation_is_downgraded_not_published(state):
+    record, warnings = observed_submission(
+        {'assignment_id': ASSIGNMENT, 'state': state, 'is_final': True, 'version': 1,
+         'remote_submission_id': 'R1', 'upload_receipt_id': 'U1',
+         'submitted_at': '2026-11-20T22:00:00+08:00', 'result_observed': True}, ASSIGNMENT)
+    assert 'IS_FINAL_CONTRADICTED' in warnings
+    assert record['is_final'] is False
+    schema = json.loads(SCHEMA.read_text(encoding='utf-8'))
+    jsonschema.Draft202012Validator(schema).validate(record)
+
+
+# -- audit remediation: the observation must identify the assignment (P1-4)
+
+def test_an_observation_without_an_assignment_id_is_not_matched():
+    record, warnings = observed_submission(
+        {'state': 'SUBMITTED', 'is_final': True, 'version': 2,
+         'remote_submission_id': 'SYN-OTHER', 'submitted_at': '2026-11-20T22:00:00+08:00',
+         'result_observed': True}, ASSIGNMENT)
+    assert record is None
+    assert 'ASSIGNMENT_ID_NOT_OBSERVED' in warnings
+
+
+def test_an_observation_for_another_assignment_uid_is_not_matched():
+    record, warnings = observed_submission(
+        {'assignment_uid': 'learn.assignments:ASSIGNMENT:OTHER-1', 'state': 'SUBMITTED',
+         'is_final': True, 'version': 2, 'remote_submission_id': 'SYN-OTHER',
+         'submitted_at': '2026-11-20T22:00:00+08:00', 'result_observed': True}, ASSIGNMENT)
+    assert record is None
+    assert 'OBSERVED_ASSIGNMENT_MISMATCH' in warnings
+
+
+class AnonymousObservationTransport(SyntheticSubmissionTransport):
+    def read_submission(self, assignment_id):
+        observed = super().read_submission(assignment_id)
+        for key in ('assignment_id', 'assignment_uid'):
+            (observed.get('submission') or {}).pop(key, None)
+        return observed
+
+
+def test_an_anonymous_observation_never_completes_a_plan(tmp_path):
+    context = transport_world(tmp_path, AnonymousObservationTransport())
+    paths = make_files(tmp_path / 'source')
+    plan = prepare(context, paths)
+    grant(context, plan['plan_id'])
+    result = context.client.execute(plan['plan_id'], AUTH)
+    assert result['status'] == 'UNKNOWN'
+    assert result['submission'] is None
+    assert 'ASSIGNMENT_ID_NOT_OBSERVED' in result['warnings']
+
+
+# -- audit remediation: verification detail (P2-1, P2-10) -------------------
+
+def test_an_older_version_never_verifies_a_replacement():
+    record = submission_record(assignment_id=ASSIGNMENT, state='SUBMITTED', is_final=True,
+                               version=1, remote_submission_id='SYN-1', upload_receipt_id='U',
+                               submitted_at='2026-11-20T22:00:00+08:00', result_observed=True)
+    attachments = [{'name': 'a.pdf', 'size': 5, 'sha256': 'a' * 64}]
+    files = [{'name': 'a.pdf', 'size': 5, 'sha256': 'a' * 64}]
+    older = verify_submission(record, files, ASSIGNMENT, attachments, 2)
+    assert older['version_verified'] is False
+    assert 'VERSION_NOT_VERIFIED' in older['limitations']
+    newer_record = submission_record(assignment_id=ASSIGNMENT, state='SUBMITTED', is_final=True,
+                                     version=3, remote_submission_id='SYN-3',
+                                     upload_receipt_id='U',
+                                     submitted_at='2026-11-20T22:00:00+08:00',
+                                     result_observed=True)
+    assert verify_submission(newer_record, files, ASSIGNMENT, attachments, 2)['version_verified']
+
+
+def test_a_non_dict_observed_row_is_a_limitation_not_an_exception():
+    record = submission_record(assignment_id=ASSIGNMENT, state='SUBMITTED', is_final=True,
+                               version=1, remote_submission_id='SYN-1', upload_receipt_id='U',
+                               submitted_at='2026-11-20T22:00:00+08:00', result_observed=True)
+    attachments = [{'name': 'a.pdf', 'size': 5, 'sha256': 'a' * 64}]
+    result = verify_submission(record, ['junk-row'], ASSIGNMENT, attachments, 0)
+    assert result['verified'] is False
+    assert 'OBSERVED_FILE_ROW_INVALID' in result['limitations']
+
+
+# -- audit remediation: receipts and observations (P2-3, P2-4) --------------
+
+def test_a_live_record_cannot_be_built_before_the_source_is_verified():
+    with pytest.raises(SubmissionError) as info:
+        submission_record(assignment_id=ASSIGNMENT, state='SUBMITTED', is_final=True, version=1,
+                          remote_submission_id='SYN-1', upload_receipt_id='U',
+                          submitted_at='2026-11-20T22:00:00+08:00', result_observed=True,
+                          synthetic=False)
+    assert info.value.code == 'SUBMISSION_LIVE_EVIDENCE_UNVERIFIED'
+
+
+def test_an_upload_receipt_without_accepted_true_stops_the_sequence(tmp_path):
+    context = world(tmp_path, behavior='upload_not_accepted', fail_at=0)
+    paths = make_files(tmp_path / 'source')
+    plan = prepare(context, paths)
+    grant(context, plan['plan_id'])
+    result = context.client.execute(plan['plan_id'], AUTH)
+    assert result['status'] == 'UNKNOWN'
+    assert context.transport.counts['upload'] == 1
+    assert context.transport.counts['draft'] == 0
+    assert context.transport.counts['submit'] == 0
+    assert result['files'][0]['status'] == 'REJECTED'
+    assert result['last_error'] == 'SUBMISSION_PLATFORM_REJECTED'
+
+
+def test_a_draft_receipt_without_accepted_true_stops_the_submit(tmp_path):
+    context = world(tmp_path, behavior='draft_not_accepted')
+    paths = make_files(tmp_path / 'source')
+    plan = prepare(context, paths)
+    grant(context, plan['plan_id'])
+    result = context.client.execute(plan['plan_id'], AUTH)
+    assert result['status'] == 'UNKNOWN'
+    assert context.transport.counts['draft'] == 1
+    assert context.transport.counts['submit'] == 0
+    assert result['last_error'] == 'SUBMISSION_PLATFORM_REJECTED'
+
+
+# -- audit remediation: local state (P2-2, P2-5, P2-6, P2-7) ----------------
+
+def test_cancel_is_account_bound(tmp_path):
+    context = world(tmp_path)
+    paths = make_files(tmp_path / 'source')
+    plan = prepare(context, paths)
+    other = Submissions(transport=context.transport, store=context.store,
+                        file_store=context.files, journal=context.journal,
+                        account_provider=lambda: 'another-account')
+    with pytest.raises(CampusError) as info:
+        other.cancel(plan['plan_id'])
+    assert info.value.code == 'ACTION_ACCOUNT_MISMATCH'
+    shown = context.client.cancel(plan['plan_id'])
+    assert shown['cancel_reason'] == 'LOCAL_CANCEL_NO_REMOTE_EFFECT'
+    assert shown['remote_changes'] == 'NONE'
+
+
+def test_concurrent_journal_merges_keep_every_update(tmp_path):
+    import threading
+
+    journal = SubmissionJournal(tmp_path / 'plans', protect=wrap, unprotect=unwrap)
+    operation_id = 'a' * 32
+    journal.put(operation_id, {'stage': 'PREPARED_LOCAL'})
+    barrier = threading.Barrier(8)
+
+    def merge(index):
+        barrier.wait(timeout=5)
+        journal.merge(operation_id, lambda state: state.update({f'k{index}': True}))
+
+    threads = [threading.Thread(target=merge, args=(index,)) for index in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    record = journal.get(operation_id)
+    assert all(record.get(f'k{index}') for index in range(8))
+
+
+def test_a_failed_prepare_leaves_no_orphan_file_set(tmp_path):
+    context = world(tmp_path)
+    directory = tmp_path / 'source'
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / ('n' * 250 + '.pdf')
+    path.write_bytes(b'alpha')
+    with pytest.raises(CampusError) as info:
+        prepare(context, [path])
+    assert info.value.code == 'INVALID_ARGUMENT_LENGTH'
+    assert list((tmp_path / 'files').glob('*.dpapi')) == []
+
+
+def test_prune_never_deletes_a_live_plan_file_set(tmp_path):
+    store = FileSetStore(tmp_path / 'files', protect=wrap, unprotect=unwrap)
+    ids = []
+    for index in range(3):
+        ids.append(store.put(operation_digest='0' * 64, account='a', assignment_id=ASSIGNMENT,
+                             files=[{'path': str(tmp_path / f'f{index}.pdf'),
+                                     'name': f'f{index}.pdf', 'size': 1,
+                                     'sha256': 'a' * 64, 'extension': '.pdf'}]))
+    store.prune(keep=2, keep_ids={ids[0]})
+    assert (tmp_path / 'files' / (ids[0] + '.dpapi')).exists()
+    assert store.get(ids[0])['file_set_id'] == ids[0]
+
+
+def test_a_live_plan_file_set_survives_a_full_prepare(tmp_path, monkeypatch):
+    context = world(tmp_path)
+    paths = make_files(tmp_path / 'source')
+    plan = prepare(context, paths)
+    file_set_id = context.journal.get(plan['plan_id'])['file_set_id']
+    monkeypatch.setattr('thu_assistant.submissions.client.FILESET_KEEP', 0)
+    prepare(context, paths, note='second')
+    assert context.files.get(file_set_id)['file_set_id'] == file_set_id
+
+
+# -- audit remediation: observability (P2-8, P2-9) --------------------------
+
+def test_prepare_warnings_survive_reconcile(tmp_path):
+    context = without(world(tmp_path), 'late_deadline')
+    paths = make_files(tmp_path / 'source')
+    plan = prepare(context, paths)
+    assert 'LATE_DEADLINE_NOT_PROVIDED' in plan['warnings']
+    grant(context, plan['plan_id'])
+    result = context.client.execute(plan['plan_id'], AUTH)
+    assert 'LATE_DEADLINE_NOT_PROVIDED' in result['warnings']
+    assert 'LATE_DEADLINE_NOT_PROVIDED' in result['prepare_warnings']
+
+
+def test_the_specific_preflight_code_is_kept_after_invalidation(tmp_path):
+    context = world(tmp_path)
+    paths = make_files(tmp_path / 'source')
+    plan = prepare(context, paths)
+    paths[0].write_bytes(b'changed')
+    grant(context, plan['plan_id'])
+    result = context.client.execute(plan['plan_id'], AUTH)
+    assert result['status'] == 'FAILED'
+    assert result['last_error'] == 'SUBMISSION_FILE_CHANGED'
+    assert 'SUBMISSION_FILE_CHANGED' in result['preflight_errors']
+    assert result['engine_reason'] == 'PRECONDITIONS_CHANGED_PREPARE_AGAIN'
+
+
+# -- audit remediation: the public projection (P2-12) -----------------------
+
+def test_the_public_result_keeps_receipt_ids_but_no_paths_or_content(tmp_path):
+    context = world(tmp_path)
+    paths = make_files(tmp_path / 'source')
+    plan = prepare(context, paths, note='很私人的说明')
+    grant(context, plan['plan_id'])
+    result = context.client.execute(plan['plan_id'], AUTH)
+    text = json.dumps(result, ensure_ascii=False)
+    assert str(tmp_path) not in text
+    assert 'alpha' not in text
+    assert '很私人的说明' not in text
+    # The observed record keeps its own receipt ids on purpose: the user needs
+    # them to check the official page.  No secret or third-party identifier is
+    # included.
+    assert result['submission']['remote_submission_id'].startswith('SYN-SUBMISSION-')
+    assert result['verification']['receipt_verified'] is True
+
+
+# -- audit remediation: legacy path and the switch default (P2-15, P2-16) ---
+
+def test_the_legacy_path_has_no_submission_transport_wiring(tmp_path):
+    import ast
+    source = (ROOT / 'src' / 'learn_assistant' / 'core.py').read_text(encoding='utf-8')
+    tree = ast.parse(source)
+    imported = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imported.add(node.module or '')
+    assert not any('submissions' in name for name in imported)
+    assert 'submissions' not in source and '.send(' not in source
+
+    class MustNotDispatch(SyntheticSubmissionTransport):
+        def send(self, spec, payload=None):
+            raise AssertionError('the legacy preparation path must never dispatch')
+
+    context = transport_world(tmp_path, MustNotDispatch())
+    report = tmp_path / 'report.pdf'
+    report.write_bytes(b'%PDF-1.4 synthetic report')
+    assistant = LearnAssistant(MockProvider(), system_data_root=tmp_path / 'system')
+    result = assistant.prepare_submission(assignment_id='assignment-geology-1',
+                                          file_paths=[report], note='合成')
+    assert result['submit_supported'] is False
+    assert result['ready_for_manual_confirmation'] is True
+    assert context.transport.counts['sent'] == 0
+
+
+def test_the_write_switch_is_off_by_default(tmp_path, monkeypatch):
+    monkeypatch.delenv('THU_LEARN_SUBMIT', raising=False)
+    assert capability_report()['enabled'] is False
+    context = world(tmp_path)
+    paths = make_files(tmp_path / 'source')
+    plan = prepare(context, paths)
+    grant(context, plan['plan_id'])
+    with pytest.raises(SubmissionError) as info:
+        context.client.execute(plan['plan_id'], AUTH)
+    assert info.value.code == 'SUBMISSION_WRITES_DISABLED'
+    assert context.transport.counts['sent'] == 0

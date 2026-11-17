@@ -13,14 +13,19 @@ Windows DPAPI through the compatibility wrapper).  The journal is separate from
 the action record on purpose: the action engine owns authorization and its
 revision-checked state machine, while this module owns upload/draft/submit
 evidence and must be able to write it during dispatch and reconciliation
-without changing the engine's revision.
+without changing the engine's revision.  The journal read-modify-write is
+guarded by the same kind of per-record file lock the action store uses, so a
+concurrent ``execute`` and ``result`` cannot lose an update.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
 import re
+import time
 import uuid
 
 from learn_assistant.auth import _dpapi_protect, _dpapi_unprotect
@@ -33,6 +38,12 @@ FILE_HEADER = b'THU-SUBMISSION-FILES-1\0'
 JOURNAL_HEADER = b'THU-SUBMISSION-STATE-1\0'
 _RECORD_ID = re.compile(r'[a-f0-9]{32}')
 _OPERATION = re.compile(r'[a-f0-9]{32}')
+
+# A plan in one of these stages has, or may have, a remote effect; a second
+# local plan for the same assignment must not proceed until it is reconciled.
+ACTIVE_STAGES = ('UPLOADING', 'UPLOADED_STAGING', 'DRAFT_SAVED',
+                 'SUBMIT_SENT_UNVERIFIED', 'UNKNOWN')
+PREPARED_GRACE_SECONDS = 900
 
 
 def _fsync_directory(directory):
@@ -48,6 +59,18 @@ def _fsync_directory(directory):
         os.close(handle)
 
 
+def _age_seconds(stamp):
+    if not isinstance(stamp, str) or not stamp:
+        return None
+    try:
+        parsed = datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return max(0.0, (datetime.now(parsed.tzinfo) - parsed).total_seconds())
+
+
 class _ProtectedStore:
     header = b''
     id_pattern = _RECORD_ID
@@ -61,6 +84,50 @@ class _ProtectedStore:
         if not isinstance(record_id, str) or not self.id_pattern.fullmatch(record_id):
             raise SubmissionError('SUBMISSION_INVALID_ARGUMENTS', 'RECORD_ID')
         return self.root / (record_id + '.dpapi')
+
+    @contextmanager
+    def lock(self, record_id):
+        """Exclusive per-record lock; distinct records never block each other."""
+        self._path(record_id)
+        try:
+            self.root.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            raise SubmissionError('SUBMISSION_LOCAL_STATE_UNAVAILABLE', 'MKDIR') from None
+        try:
+            handle = open(self.root / (record_id + '.lock'), 'a+b')
+        except OSError:
+            raise SubmissionError('SUBMISSION_LOCAL_STATE_UNAVAILABLE', 'LOCK') from None
+        deadline = time.monotonic() + 3
+        held = False
+        try:
+            while not held:
+                try:
+                    if os.name == 'nt':
+                        import msvcrt
+                        handle.seek(0)
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
+                        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    held = True
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise SubmissionError('SUBMISSION_LOCAL_STATE_UNAVAILABLE',
+                                              'LOCK_BUSY') from None
+                    time.sleep(.05)
+            yield
+        finally:
+            if held:
+                try:
+                    if os.name == 'nt':
+                        import msvcrt
+                        handle.seek(0)
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        fcntl.flock(handle, fcntl.LOCK_UN)
+                except OSError:
+                    pass
+            handle.close()
 
     def _write(self, record_id, payload):
         target = self._path(record_id)
@@ -120,6 +187,19 @@ class _ProtectedStore:
             raise SubmissionError('SUBMISSION_LOCAL_STATE_CORRUPT', 'SHAPE')
         return payload
 
+    def delete(self, record_id):
+        """Best-effort removal of one record; never raises."""
+        try:
+            self._path(record_id).unlink(missing_ok=True)
+        except (OSError, SubmissionError):
+            pass
+
+    def count(self):
+        try:
+            return sum(1 for _ in self.root.glob('*.dpapi'))
+        except OSError:
+            return 0
+
 
 class FileSetStore(_ProtectedStore):
     """Local paths and hashes for one prepared plan."""
@@ -142,7 +222,6 @@ class FileSetStore(_ProtectedStore):
                       for item in files],
         }
         self._write(file_set_id, payload)
-        self.prune()
         return file_set_id
 
     def get(self, file_set_id):
@@ -164,14 +243,26 @@ class FileSetStore(_ProtectedStore):
             raise SubmissionError('SUBMISSION_LOCAL_STATE_CORRUPT', 'ID')
         return payload
 
-    def prune(self, keep=200):
-        """Best-effort bound on retained file sets; oldest first, never raises."""
+    def prune(self, keep=200, *, keep_ids):
+        """Bound retained file sets, never deleting one a live plan references.
+
+        ``keep_ids`` is the set of ``file_set_id`` values still referenced by a
+        non-terminal submission journal.  Best effort: failures never affect the
+        plan being prepared.
+        """
+        protected = {item for item in keep_ids if isinstance(item, str)}
         try:
             entries = sorted((path for path in self.root.glob('*.dpapi')),
                              key=lambda path: path.stat().st_mtime, reverse=True)
         except OSError:
             return
-        for path in entries[keep:]:
+        retained = 0
+        for path in entries:
+            if path.stem in protected:
+                continue
+            if retained < keep:
+                retained += 1
+                continue
             try:
                 path.unlink()
             except OSError:
@@ -191,11 +282,15 @@ class SubmissionJournal(_ProtectedStore):
         record = dict(payload)
         record['version'] = 1
         record['operation_id'] = operation_id
+        record['updated_at'] = now_iso()
         self._write(operation_id, record)
         return record
 
     def get(self, operation_id):
-        payload = self._read(operation_id)
+        try:
+            payload = self._read(operation_id)
+        except SubmissionError:
+            raise
         if payload is None:
             return None
         if payload.get('operation_id') != operation_id:
@@ -205,11 +300,56 @@ class SubmissionJournal(_ProtectedStore):
         return payload
 
     def merge(self, operation_id, change):
-        record = self.get(operation_id) or {'version': 1, 'operation_id': operation_id,
-                                            'stage': 'PREPARED_LOCAL', 'history': []}
-        updated = dict(record)
-        change(updated)
-        return self.put(operation_id, updated)
+        """Atomic read-modify-write; a concurrent merge cannot be lost."""
+        with self.lock(operation_id):
+            record = self.get(operation_id) or {'version': 1, 'operation_id': operation_id,
+                                                'stage': 'PREPARED_LOCAL', 'history': []}
+            updated = dict(record)
+            change(updated)
+            return self.put(operation_id, updated)
+
+    def records(self):
+        """Best-effort live journal rows; unreadable records are skipped."""
+        rows = []
+        try:
+            paths = list(self.root.glob('*.dpapi'))
+        except OSError:
+            return rows
+        for path in paths:
+            try:
+                record = self.get(path.stem)
+            except SubmissionError:
+                continue
+            if record is not None:
+                rows.append(record)
+        return rows
+
+    def live_file_sets(self):
+        """File sets a non-terminal plan may still need at execute time."""
+        return {record.get('file_set_id') for record in self.records()
+                if record.get('file_set_id') and record.get('stage') not in ('FAILED', 'VERIFIED')}
+
+    def conflicting_plan(self, assignment_id, exclude):
+        """Another local plan that may already have a remote effect.
+
+        A recent ``PREPARED_LOCAL`` plan also counts: two independently
+        prepared plans could otherwise both pass preflight before either one
+        starts.  The residual same-instant race is documented in the module
+        record; the engine still dispatches each plan at most once.
+        """
+        for record in self.records():
+            if record.get('operation_id') == exclude:
+                continue
+            if record.get('assignment_id') != assignment_id:
+                continue
+            stage = record.get('stage')
+            if stage in ACTIVE_STAGES:
+                return record.get('operation_id')
+            if stage == 'PREPARED_LOCAL':
+                age = _age_seconds(record.get('updated_at'))
+                if age is None or age <= PREPARED_GRACE_SECONDS:
+                    return record.get('operation_id')
+        return None
 
 
-__all__ = ['FileSetStore', 'SubmissionJournal']
+__all__ = ['ACTIVE_STAGES', 'FileSetStore', 'SubmissionJournal']
