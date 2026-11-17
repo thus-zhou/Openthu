@@ -653,7 +653,22 @@
         "体育预约/取消、付款状态闭环和未知结果核对"
       ],
       "integration_order": 14,
-      "status": "pending"
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "53d59570b6f02f30c7a886f7a74c01030d1bf22e",
+      "audit_fix": "5.2-audit: P1-1/P1-2 fixed; P2-1..P2-6 and P2-8..P2-18 fixed in scope; P2-7, authorization consumption and the browser service-worker hardening are recorded 4.4 handoffs.",
+      "evidence": [
+        "55 module tests at f0b2444; 117 sports regressions; 306 related transaction/query tests passed/1 skipped; Linux Python 1060 passed/7 skipped/0 failed, Node 66 passed; check 463 files/0 findings; 247 error codes",
+        "effective RESV_EFFECT orders prepare an official cancel plan; unobserved dispatches stay UNKNOWN with the ledger UNKNOWN; pre-dispatch failures are definite not-sent",
+        "expired/cancelled payment maps to FAILED; payType is a recorded soft match; preview and evidence agree on total comparison; nine sports codes registered",
+        "reconnected at the single batch-5 integration commit by the integration owner; no delivery PR, no main merge, no release"
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/source_state.py and contracts/v0.2/error-classification.json (owned by 1.1/3.2): nine sports codes added additively by 5.2.",
+        "contracts/v0.2/sources/source-registry.json (owned by 2.3): five sports code_refs refreshed; sports.orders points at the read implementation.",
+        "4.4/6.1: NOT_CREATED terminal state or controlled close entry; authorization consumption on failure; browser context service_workers='block'.",
+        "6.1: register sports_actions.capabilities(); keep the 29 legacy tools; expose platform.refresh to todo/kanban readers."
+      ]
     },
     {
       "id": "5.3",

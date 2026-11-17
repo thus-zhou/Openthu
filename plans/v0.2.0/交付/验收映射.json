@@ -561,7 +561,13 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "体育预约/取消、付款状态闭环和未知结果核对",
-      "evidence": []
+      "evidence": [
+        "55 module tests at f0b2444; audit 5.2-audit P1-1/P1-2 and P2-1..P2-6, P2-8..P2-18 fixed in scope; P2-7 and the browser/auth framework items are recorded 4.4 handoffs",
+        "effective RESV_EFFECT orders prepare an official cancel plan; unobserved dispatch stays UNKNOWN and the ledger records UNKNOWN; expired/cancelled payment maps to FAILED",
+        "preview and platform.amounts agree on whether the source total was compared with a plan amount; payType is a recorded soft match; nine sports codes registered",
+        "117 sports regressions; 306 related transaction/query tests passed/1 skipped; Linux Python 1060 passed/7 skipped/0 failed; Node 66; check 463 files/0 findings",
+        "batch-5 reconnection and two-platform CI are recorded by the integration owner; no delivery PR, main merge or release"
+      ]
     },
     {
       "id": "5.3",

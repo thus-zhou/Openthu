@@ -3,21 +3,26 @@
   "title": "体育预约取消与付款状态闭环",
   "batch": 5,
   "owner": "Hermes",
-  "status": "implemented",
-  "status_note": "Implementation and module tests are complete. accepted is reserved for the audit/remediation stage and the batch-5 integration record.",
+  "status": "accepted",
+  "status_note": "P0/P1/P2 audit findings are fixed and verified within the module's writable paths; cross-module framework items are recorded as explicit handoffs, not claimed fixed. Batch-5 reconnection is recorded by the integration owner.",
   "branch": "hermes/5.2",
   "worktree": "~/projects/Openthu/.local/worktrees/5.2",
   "worktree_note": "The contract privacy validator rejects absolute home-directory paths, so the worktree is recorded relative to the user home.",
   "baseline_commit": "37b1605df9409a19ad1755f54355a2e2f71578d2",
   "integration_parent_commit": "4e073578d964407c10b7c94ed8b3fa64c8332036",
   "delivery_commit": "53d59570b6f02f30c7a886f7a74c01030d1bf22e",
+  "audit_baseline_commit": "a445dc9",
+  "audit_fix_commit": "f0b244412beeb6bd463ea0a56f88834ec6ca18cc",
   "record_commit": "the commit containing this record file",
   "version_pr": null,
-  "evidence_tree": "clean checkout of 53d5957 after `python scripts/dev.py setup-node` (or an equivalent src/thu_assistant/node_modules link); otherwise dev.py check stops on the missing tough-cookie runtime dependency",
+  "audit_report": ".local/audits/5.2-audit.md",
+  "evidence_tree": "clean checkout of f0b2444 after `python scripts/dev.py setup-node` (or an equivalent src/thu_assistant/node_modules link); otherwise dev.py check stops on the missing tough-cookie runtime dependency",
   "paths": [
     "src/thu_assistant/sports_actions.py",
     "src/thu_assistant/sports_transport.py",
+    "src/thu_assistant/source_state.py",
     "tests/test_sports_actions.py",
+    "contracts/v0.2/error-classification.json",
     "contracts/v0.2/sources/source-registry.json"
   ],
   "contracts": [
@@ -29,32 +34,39 @@
     "library-sports-precheck-v1"
   ],
   "additive_runtime_objects": [
-    "sports_actions.capabilities() capability table for the public facade",
+    "sports_actions.capabilities() deep-copied capability table for the public facade",
     "sports_transport.PUBLIC_ROUTES and redact_official_url",
-    "platform evidence block with payment deadline, refund acceptance/settlement/arrival and refresh suggestion",
-    "official_request side-effect ledger step (NOT_SENT/SENT)"
+    "platform evidence with payment deadline, payment method observation, eligibility, refund acceptance/settlement/arrival and structured refresh",
+    "official_request side-effect ledger step (NOT_SENT/SENT/UNKNOWN)",
+    "nine registered sports error codes"
   ],
   "outputs": [
     "creation previews consume the 4.3 precheck summary and the selected site/session blocks; the plan fingerprint binds resource ids, window, availability, capacity, fees, rules, form deployment and mode without checked_at/source",
     "a changed unit price, total, session window, availability, cancellation rule, capacity, form deployment or project mode invalidates the stored plan with FAILED/PRECONDITIONS_CHANGED_PREPARE_AGAIN and never dispatches at the new values",
     "the project directory mode is checked before any mode-specific page request; a declared mismatch or an unregistered mode is refused with INVALID_ARGUMENTS",
-    "cross-project same-named sites are rejected by scene, site and mode checks; the request body is bound to sceneUuid, siteUuid, siteType, sceneUseType, sessionDetailUuid and the exact time span",
+    "cross-project same-named sites are rejected by the 4.3 read layer (field_row checks sceneUuid); the write adapter binds the selected ids, mode and exact span in the request body and no longer repeats a tautological check",
     "SPORT_PERSON supports one self ticket only and always hands off CHOOSE_TICKET_AND_QUANTITY; multi-ticket purchases are outside the frozen input schema",
     "amounts stay integer fen; the preview separates quantity, unit price and source-declared total and never multiplies a unit price by an assumed headcount; an unknown total goes to the official settlement page",
     "expected_total_fen is compared with the source payableAmount; a mismatch is SPORTS_FEE_CHANGED and a free plan cannot silently become paid",
+    "preview text and structured evidence agree: only an explicit plan amount says 'compared with the plan amount', a free plan records the implicit zero, and a paid plan without expected_total_fen says no comparison was made",
     "captcha, form, deployment and official payment paths stay on the official site; the plan becomes AWAITING_OFFICIAL without dispatch and result readback uses own orders/detail",
     "action evidence keeps reservation/approval/payment/refund source values plus canonical status and state_confirmed; pending payment keeps the platform deadline and its declared/not-reported state",
     "refund acceptance (REQUESTED/REFUNDING/PENDING/MANUAL), platform settlement (REFUNDED) and arrived-money verification are separate; refund_arrived_verified is always false",
     "cancel plans bind the own record, scene, sites, time span, reservation/approval/payment/refund states, extended status, amounts and cancelBeforeStart; a changed rule or state invalidates the plan",
-    "cancel results require an exact cancelled record with matching extension status, scene, sites and time; a missing record or a partial search is not proof of cancellation",
-    "create reconciliation runs only inside a 24-hour window after dispatch and requires exactly one matching record whose detail agrees on extension status, platform status, amount and pay type",
-    "short, repeated or changed order pages, two similar records, an unparseable row or a disagreeing detail keep the result UNKNOWN instead of choosing a record",
-    "the side-effect ledger records official_request as NOT_SENT before dispatch and SENT once the single-use gate accepts the request; a lost response leaves SENT and is never replayed",
+    "a normally effective order (RESV_EFFECT + approval pass) can prepare a cancel plan; it hands off OFFICIAL_CANCEL_CONTROL, paid orders also add CONFIRM_REFUND_CONSEQUENCES, and only ended/cancelled/expired/unmapped orders are refused",
+    "cancel results require an exact cancelled record with matching extension status, scene and time; a missing record or a partial search is not proof of cancellation",
+    "the internal site list is bound in the fingerprint but not published as a business field, so the public preview has no masked site_ids",
+    "create reconciliation runs only inside a 24-hour window after dispatch and requires exactly one matching record whose detail agrees on extension status, platform status and amount",
+    "unrelated malformed order rows are ignored; a malformed row that looks like this plan keeps the result UNKNOWN, and a malformed gmtCreate never raises out of reconciliation",
+    "expired or cancelled payment makes the plan FAILED even though the read layer keeps the overall status UNKNOWN",
+    "the side-effect ledger records official_request as NOT_SENT before dispatch and SENT at the moment the single-use gate accepts the request; a lost response or process death keeps SENT",
+    "an unobserved page fetch (for example a service worker) is never reported as definitely not sent: it becomes SPORTS_DISPATCH_UNOBSERVED with transaction state UNKNOWN and ledger UNKNOWN",
+    "a failed pre-dispatch re-read or signed-URL preparation is converted into a definite not-sent result instead of UNKNOWN",
     "repeated execution of the same unresolved plan only re-reads; the synthetic dispatch count stays at one",
-    "disabling THU_SPORTS_WRITE stops new plans and execution while order reads, describe and unresolved reconciliation keep working",
+    "disabling THU_SPORTS_WRITE stops new plans and execution while order reads, describe and unresolved reconciliation keep working; THU_SPORTS_READ=0 suspends pending reconciliation reads",
     "official jump links are reduced to registered routes; signing query values, foreign hosts and URL credentials never enter a plan, todo or action result",
-    "platform evidence excludes member accounts and payment credentials and carries a refresh suggestion for todo/kanban consumers",
-    "no new MCP tool or query operation is introduced; the legacy operation names, parameters and fields remain compatible"
+    "platform evidence excludes member accounts and payment credentials and carries a structured refresh suggestion",
+    "no new MCP tool or query operation is introduced; the legacy operation names, parameters, fields and status strings remain compatible (fee/cancel_rule text was updated)"
   ],
   "capability_table": {
     "adapter_version": "sports-action-v1",
@@ -81,8 +93,20 @@
     "amount": {
       "unit": "FEN",
       "currency": "CNY",
+      "quantity_unit_per_mode": true,
       "total_source": "SESSION_PAYABLE_AMOUNT_ONLY",
       "multiplies_unit_price_never": true
+    },
+    "prechecks": {
+      "availability": "READ_FROM_SOURCE",
+      "fees": "SOURCE_DECLARED_ONLY",
+      "rules": "SOURCE_DECLARED_ONLY",
+      "eligibility": "UNVERIFIED_BY_ADAPTER_PLATFORM_IS_AUTHORITY"
+    },
+    "payment_method": {
+      "request_domain": "UNVERIFIED",
+      "response_domain": "UNVERIFIED",
+      "verification": "SOFT_MATCH_NOT_BLOCKING"
     },
     "reconciliation": {
       "horizon_seconds": 86400,
@@ -107,24 +131,27 @@
       "CAPTCHA_SOLVING",
       "IDENTITY_BYPASS",
       "REPLAY_UNCERTAIN_WRITE"
+    ],
+    "assumptions": [
+      "resvExtendStatus bit 256 is a defensive handoff and has no source sample"
     ]
   },
   "checks": {
     "module_tests": {
-      "passed": 26,
+      "passed": 55,
       "failed": 0,
       "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_sports_actions.py"
     },
     "sports_regression": {
-      "passed": 88,
+      "passed": 117,
       "failed": 0,
       "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_sports_actions.py tests/test_sports.py tests/test_sports_contracts.py"
     },
     "transaction_and_query_regression": {
-      "passed": 237,
+      "passed": 306,
       "skipped": 1,
       "failed": 0,
-      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_sports_actions.py tests/test_sports.py tests/test_sports_contracts.py tests/test_action_framework.py tests/test_actions.py tests/test_queries.py tests/test_todos.py"
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_sports_actions.py tests/test_sports.py tests/test_sports_contracts.py tests/test_action_framework.py tests/test_actions.py tests/test_queries.py tests/test_query_contracts.py tests/test_todos.py"
     },
     "plan_validator": {
       "ok": true,
@@ -139,6 +166,7 @@
       "schema_samples": 9,
       "rejection_samples": 35,
       "extra_samples": 8,
+      "error_codes": 247,
       "command": "python contracts/v0.2/validate.py"
     },
     "source_validator": {
@@ -152,29 +180,77 @@
     },
     "privacy_check": {
       "ok": true,
-      "files_checked": 461,
+      "files_checked": 463,
       "findings": 0,
       "mcp_tools": 29,
       "command": "python scripts/dev.py check"
     },
     "full_offline_suite_linux": {
-      "python_passed": 1031,
+      "python_passed": 1060,
       "python_skipped": 7,
       "python_failed": 0,
       "node_passed": 66,
       "node_failed": 0,
       "command": "python scripts/dev.py test",
-      "evidence_tree": "clean checkout of 53d5957 after setup-node"
+      "evidence_tree": "clean checkout of f0b2444 after setup-node"
     },
     "live_campus_calls": 0,
     "model_calls": 0,
     "business_submissions": 0
   },
+  "audit_fixes": {
+    "P0": [],
+    "P1": [
+      {
+        "id": "P1-1",
+        "fix": "RESV_EFFECT + approval pass prepares a cancel plan with OFFICIAL_CANCEL_CONTROL; paid orders add CONFIRM_REFUND_CONSEQUENCES; only ended/cancelled/expired/unmapped orders are refused",
+        "verification": "test_effective_order_gets_an_official_cancel_plan; test_effective_paid_order_adds_refund_confirmation_and_reads_back; test_ended_or_cancelled_order_is_refused"
+      },
+      {
+        "id": "P1-2",
+        "fix": "dispatch_exact records route observation; a resolved fetch that the guard never saw raises SPORTS_DISPATCH_UNOBSERVED, keeps the plan UNKNOWN and marks the ledger UNKNOWN; only NO_PENDING or an observed abort is definitely not sent",
+        "verification": "test_dispatch_exact_unobserved_fetch_is_never_not_sent; test_unobserved_request_becomes_unknown_and_the_ledger_says_so; test_dispatch_exact_observed_abort_is_not_sent"
+      }
+    ],
+    "P2": [
+      "P2-1 eligibility is documented as UNVERIFIED (platform is the authority) and only an explicit INELIGIBLE result blocks planning",
+      "P2-2 preview text and platform.amounts agree on whether the source total was compared with a plan amount; free plans expose the implicit zero",
+      "P2-3 PAYMENT_EXPIRED/PAYMENT_CANCELLED map the plan to FAILED",
+      "P2-4 payType is a soft match recorded in platform.payment_method; no blocking comparison against an unverified enum domain",
+      "P2-5 pre-dispatch re-read and signed-URL preparation failures become definite not-sent",
+      "P2-6 the dispatch fact is written at gate consumption; an unobserved request writes UNKNOWN",
+      "P2-8 unrelated malformed rows are ignored; malformed candidates keep UNKNOWN; malformed gmtCreate is guarded",
+      "P2-9 the tautological scene/mode assertions were removed; cross-project protection is documented as the 4.3 read layer",
+      "P2-10 nine sports codes were added to the error contract and the runtime mirror; a static test enforces the mirror",
+      "P2-11 capabilities() returns a deep copy and is tested for isolation",
+      "P2-12 resvExtendStatus bit 256 hands off and is documented as an unverified assumption",
+      "P2-13 platform.refresh uses {service_id, operation}",
+      "P2-14 the internal site_ids field is no longer published; platform.checked_at is UTC with checked_at_zone",
+      "P2-15 sports.orders code_refs point at the read implementation; the registry line sync is a 2.3 handoff",
+      "P2-16 direct dispatch_exact tests, an effective-order fixture and the unused-import cleanup",
+      "P2-17 one transient short order page is retried before prepare refuses",
+      "P2-18 THU_SPORTS_READ=0 suspends pending reconciliation without opening a browser"
+    ],
+    "out_of_scope_handoffs": [
+      {
+        "id": "P2-7",
+        "reason": "The transaction engine has no terminal NOT_CREATED state or controlled close/abandon entry; the adapter must not fabricate a remote record. 5.2 keeps UNKNOWN and never replays; 4.4 must provide the state."
+      },
+      {
+        "id": "P2-5-authorization",
+        "reason": "The engine consumes the authorization at claim time. 5.2 converts pre-dispatch failures into definite not-sent, but not consuming the authorization on failure requires an actions.py change owned by 4.4."
+      },
+      {
+        "id": "P1-2-browser",
+        "reason": "Blocking service workers at browser-context creation (browser.py service_workers='block') would remove the condition entirely; library_wire.py has the same observation assumption. The 5.2 adapter-side mitigation already prevents the repeat-write path."
+      }
+    ]
+  },
   "verified_cases": [
     "a free plan binds the precheck snapshot, dispatches once through the exact signed URL, records official_request as SENT and verifies the synthetic remote record on a lost response",
     "a changed unit price, total, session availability, time or cancellation rule makes execute return FAILED/PRECONDITIONS_CHANGED_PREPARE_AGAIN with zero dispatches",
     "the plan binding is stable across different checked_at values but changes when the price or cancel rule changes",
-    "a page row from another project is rejected with SPORTS_SCENE_MISMATCH; an unregistered or mismatched mode is refused before any mode-specific page request",
+    "a page row from another project is rejected with SPORTS_SCENE_MISMATCH by the read layer; an unregistered or mismatched mode is refused before any mode-specific page request",
     "person mode always hands off ticket quantity and stays AWAITING_OFFICIAL without dispatch; the preview states one TICKET",
     "official captcha verification keeps the plan AWAITING_OFFICIAL on repeated execute and result",
     "an unknown total is never derived from the unit price; the plan hands off to the official settlement page and does not dispatch",
@@ -182,37 +258,50 @@
     "an unpaid order reports PENDING_PAYMENT with the platform deadline and declared deadline state; the same record with paid + approval pending reports PENDING_APPROVAL and payment_status PAID",
     "repeated execute/result calls on one unresolved plan keep the synthetic dispatch count at one and verify SUCCEEDED only after the record appears",
     "a successful cancel with refund REFUNDING reports refund_accepted=true, refund_settled_by_platform=false and refund_arrived_verified=false",
-    "a short own-order page, two similar records, a malformed row or a disagreeing detail keeps the result UNKNOWN; no record is chosen arbitrarily",
+    "a normally effective order (RESV_EFFECT + approval pass) prepares an official cancel plan; a paid one adds the refund confirmation and reads back SUCCEEDED with REFUNDING",
+    "an ended or already cancelled order is refused with SPORTS_CANCELLATION_NOT_AVAILABLE",
+    "a short own-order page, two similar records or a disagreeing detail keeps the result UNKNOWN; an unrelated malformed row does not block a valid match",
+    "a malformed candidate row or a malformed gmtCreate keeps the result unknown without raising",
     "a delayed order created after plan expiry but within the 24-hour dispatch window is matched; an order created before dispatch is not attributed to the plan",
     "a rate-limited readback keeps UNKNOWN with CHECK_RESULT_ONLY_DO_NOT_RESEND and never dispatches again",
     "a definite not-sent dispatch ends FAILED/REQUEST_NOT_SENT with official_request NOT_SENT and no retry",
-    "with THU_SPORTS_WRITE=0, order reads, describe and reconciliation keep working while prepare is refused with SPORTS_WRITES_DISABLED",
+    "an unobserved fetch after the page returned becomes UNKNOWN with official_request UNKNOWN and no replay",
+    "an observed abort or a NO_PENDING script is definitely not sent",
+    "pre-dispatch re-read and signed-URL preparation failures are definitely not sent",
+    "expired or cancelled payment makes the plan FAILED",
+    "a numeric payType is recorded (source_pay_type/matches_plan/verified=false) without blocking the record match",
+    "with THU_SPORTS_WRITE=0, order reads, describe and reconciliation keep working while prepare is refused with SPORTS_WRITES_DISABLED; with THU_SPORTS_READ=0 pending reconciliation is suspended",
     "official URLs lose signing query values; foreign hosts and URL credentials fall back to the personal reservation page",
-    "the capability table exposes exactly the two legacy sports operations, one session/ticket per mode and no new tool names",
-    "cancel preview amounts stay exact integer fen (12345 -> 123.45) and record the current payment state",
-    "cancel preparation requires a complete own-record search; a missing record stays non-success"
+    "the capability table exposes exactly the two legacy sports operations, one session/ticket per mode, the precheck/payment notes and no new tool names; its return is isolated from MODE_CONTRACT",
+    "cancel preview amounts stay exact integer fen (12345 -> 123.45), record the payment state, do not publish site_ids and stay bound to the site list through the fingerprint",
+    "cancel preparation requires a complete own-record search; a missing record stays non-success",
+    "every SPORTS_* literal used by the adapter is registered in the error classification"
   ],
   "limits": [
     "Offline synthetic verification only: no real campus login, availability read, reservation creation, cancellation, payment or refund was performed.",
     "The sports-action-v1 input schema is frozen in actions.py (4.4): there is no quantity parameter. SPORT_GROUP is one session and SPORT_PERSON one self ticket; multi-ticket, multi-person ticket and reschedule flows must use the official page.",
-    "The plan business schema is string-only; quantity/unit/total are separated in the preview text and the source fen values are bound in the fingerprint. Structured amounts are exposed in the result platform.amounts; adding plan-level structured fields needs an actions.py change owned by 4.4/6.1.",
-    "Delayed-order reconciliation is bounded to 24 hours after dispatch and requires gmtCreate. A record without gmtCreate or created before dispatch is not attributed to the plan and the result stays UNKNOWN.",
-    "A paid plan completed on the official page without expected_total_fen accepts the platform total but reports total_verified=false; it never claims the platform amount was compared with a plan amount.",
+    "The plan business schema is string-only; quantity/unit/total are separated in the preview text and the source fen values are bound in the fingerprint. Structured amounts are exposed in the result platform.amounts.",
+    "payType request/response enum domains have no real sample; the adapter records and soft-matches the value instead of blocking. Real creation needs a local verification.",
+    "resvExtendStatus bit 256 is a defensive official-control handoff with no source sample; it never triggers direct dispatch.",
+    "Delayed-order reconciliation is bounded to 24 hours after dispatch and requires gmtCreate. A record without gmtCreate or created before dispatch is not attributed to the plan.",
+    "There is no terminal not-created state after the window: the plan stays UNKNOWN and is never replayed until 4.4 adds NOT_CREATED or a controlled close entry.",
+    "Cancel readback confirms the own record by id, scene and exact time; the site list is bound in the plan fingerprint at prepare time and is not compared again after the cancellation.",
     "refund_arrived_verified is always false; refund_settled_by_platform only mirrors the platform refund enum and does not prove the money reached the payer.",
-    "Only group reservations with resvProperty=0 can dispatch a cancel directly; person tickets, non-zero resvProperty, paid or unknown-refund orders require the official control page.",
-    "sports.py, queries.py, actions.py, action_store.py and mcp_stdio.py were not modified; order reads, precheck and the four status axes remain 4.3/3.2 contracts.",
-    "No new error code was registered. An unsupported mode reuses the registered INVALID_ARGUMENTS code; pre-existing unregistered sports-internal codes were left for the overall error-classification audit.",
-    "This record does not update the batch gate, acceptance mapping or ownership table status; accepted and batch reconnection are recorded by the remediation stage and the integration owner."
+    "A persistently short, repeated or over-50-page order list still blocks a new prepare; one transient short page is retried once.",
+    "sports.py, queries.py, actions.py, action_store.py, browser.py and mcp_stdio.py were not modified; order reads, precheck, the four status axes and cross-project rejection remain 4.3/3.2/4.4 contracts.",
+    "The nine sports error codes and the source-registry line sync are additive sequential handoffs to the 1.1/2.3/3.2 owners.",
+    "This record does not update the batch gate; batch-5 reconnection and batch-level acceptance are recorded by the integration owner."
   ],
-  "rollback": "Set THU_SPORTS_WRITE=0 to stop new plans and execution while keeping order reads, describe and unresolved reconciliation. For a code rollback restore sports_actions.py and sports_transport.py to 37b1605 and delete tests/test_sports_actions.py; do not undo any real reservation or cancellation, do not trigger refunds and do not delete unresolved plans or official references. Added evidence fields are optional and old clients ignore them.",
+  "rollback": "Set THU_SPORTS_WRITE=0 to stop new plans and execution while keeping order reads, describe and unresolved reconciliation; THU_SPORTS_READ=0 also suspends reconciliation. For a code rollback restore sports_actions.py and sports_transport.py to 37b1605, delete tests/test_sports_actions.py and revert the nine error-code registrations and the source-registry line sync. Do not undo any real reservation or cancellation, do not trigger refunds and do not delete unresolved plans or official references. Added evidence fields are optional and old clients ignore them.",
   "next": "Wait for batch 5 modules 5.1, 5.3 and 5.4, then let the integration owner form the single batch reconnection commit and run the full offline regression and two-platform CI. This module opens no delivery PR, does not merge main and does not publish a release.",
   "cross_module_requests": [
-    "6.1: register sports_actions.capabilities(); keep the 29 legacy tool entries and do not add sports-specific tools; expose platform.refresh to todo/kanban readers.",
-    "5.4/7.1: consume platform.refresh, platform.amounts, refund_* and checked_at for redacted todo/kanban summaries; platform intentionally excludes member accounts and payment credentials.",
-    "4.4/8.1: the sports-action-v1 input schema is unchanged; a structured quantity/total plan field would need an actions.py change owned by 4.4/6.1 and is outside this module.",
-    "3.2/4.3: 5.2 only consumes the precheck object and does not modify sports.py or queries.py; the order read and four-axis semantics stay on the 4.3 contract.",
-    "2.3/integration: source-registry code_refs for sports.scenes, sports.availability, sports.orders, sports.booking and sports.cancel were refreshed to the actual line ranges after the 5.2 edits; sources, tasks and evidence levels are unchanged.",
-    "7.3: document the capability table, fen units and the cancellation-success-versus-refund-arrival evidence level.",
-    "integration: tests/test_sports_actions.py is a new exclusive path; run it separately from the 5.1 library actions suite during the batch reconnection, then run the full offline suite."
+    "4.4/6.1: add a terminal NOT_CREATED state (or a controlled close/abandon entry) so a complete list with no match after the 24-hour window can close; consider not consuming the authorization on a failed dispatch.",
+    "4.4/5.1: set service_workers='block' on the browser context (browser.py) and apply the same unobserved-request rule in library_wire.py.",
+    "6.1: register sports_actions.capabilities() including prechecks, payment_method and assumptions; keep the 29 legacy tools and do not add sports-specific tools; expose platform.refresh to todo/kanban readers.",
+    "5.4/7.1: consume platform.refresh {service_id, operation}, platform.amounts, payment_method, refund_* and the UTC checked_at for redacted todo/kanban summaries.",
+    "2.3/integration: source-registry code_refs for the five sports entries were refreshed; sports.orders now points only at the read implementation. Sources, tasks and evidence levels are unchanged.",
+    "3.2/1.1: the nine sports error codes were added additively to error-classification.json and source_state.ERROR_CODES; no existing code changed.",
+    "7.3: document the capability table, fen units, the unverified payType/bit-256 status and the cancellation-success-versus-refund-arrival evidence level.",
+    "integration: tests/test_sports_actions.py is the module's exclusive test path; run it separately from the 5.1 library actions suite during the batch reconnection, then run the full offline suite."
   ]
 }
