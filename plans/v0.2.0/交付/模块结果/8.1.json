@@ -348,7 +348,7 @@
     "items": [
       "P1-1: hermes/8.1 merged into hermes/1-install-diagnostics at 5ec73d9; version PR #2 head now contains the candidate",
       "P1-2: delivery_commit c81a877 contains the module tests, the CI fetch-depth fix and the report attribution; implementation_commits lists the chain and verification_commit is separate",
-      "P1-3: /todos and /calendar refuse a cursor they never issued (400 CURSOR_EXPIRED) and a cursor from another route (400 CURSOR_QUERY_MISMATCH)",
+      "P1-3: /todos and /calendar refuse a cursor they never issued (400 CURSOR_EXPIRED, including non-lac1 values) and a lac1 cursor from another route (400 CURSOR_QUERY_MISMATCH)",
       "P2-1: privacy counts are recorded for both the local rehearsal and the final candidate",
       "P2-2: fb6edb1 and 8d0606d are named as integration commit and branch point",
       "P2-3: 7.1/7.3 ownership handoffs are marked resolved",
