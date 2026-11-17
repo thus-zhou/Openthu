@@ -36,9 +36,10 @@ def serve(*, host: str = contract.DEFAULT_BIND, port: int = 0, facade: Any = Non
           static_dir: Any = None, state_dir: Any = None) -> dict[str, Any]:
     """Start the local dashboard API and block until it is stopped.
 
-    The 6.1 CLI looks for ``serve``/``run``/``main`` and passes the business
-    facade here.  ``localhost`` is mapped to the only loopback form the bind
-    allowlist accepts; no other alias is invented.
+    ``openthu dashboard`` builds :class:`LocalApiServer` itself so it can print
+    the listening URL before blocking; this helper stays the one-call form for
+    embedders that do not need that line.  ``localhost`` is mapped to the only
+    loopback form the bind allowlist accepts; no other alias is invented.
     """
     bind = '127.0.0.1' if host == 'localhost' else host
     server = LocalApiServer(facade, bind=bind, port=port, static_dir=static_dir,
