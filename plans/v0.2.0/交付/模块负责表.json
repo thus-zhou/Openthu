@@ -1154,7 +1154,14 @@
         "全版本集成、候选构建、恢复安装验证和交审说明"
       ],
       "integration_order": 23,
-      "status": "pending"
+      "status": "implemented",
+      "delivery_commit": "9b1bef59685bab1be1922219f6fc53f67f1601ad",
+      "evidence": [
+        "All batches 1-7 accepted and reconnected; 8.1 folds the local-read-api request-side cursor revision, the actions.py docstring and the source-matrix difference register into one candidate tree.",
+        "Candidate build and verify at 9b1bef5: 4 artifacts, 214 wheel members (54 bundled), 493 sdist members, release status candidate-not-released.",
+        "install-check and a fresh wheel install outside the repository: 29 MCP tools, doctor ok, dashboard shell served from the installed package, missing resource and missing key both fail closed.",
+        "Batch 8 remains ready with 8.1 implemented; the review phase owns accepted."
+      ]
     },
     {
       "id": "9.1",

@@ -411,13 +411,43 @@
         "8.1"
       ],
       "module_status": {
-        "8.1": "pending"
+        "8.1": "implemented"
       },
       "status": "ready",
       "integration_commit": null,
       "accepted_at": null,
       "entry_condition": "all batch 7 modules accepted and integrated",
-      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
+      "exit_condition": "all modules accepted; candidate built, restored and reviewed",
+      "implementation": {
+        "implemented_at": "2026-11-18",
+        "code_commit": "9b1bef59685bab1be1922219f6fc53f67f1601ad",
+        "summary": "All 24 modules integrated on one tree; the deferred local-read-api cursor revision, the stale actions.py docstring and the source-matrix difference register are folded in; one candidate is built and restored outside the repository.",
+        "checks": [
+          "plan validator ok: 24 modules, 9 batches",
+          "contract validator ok: 8 contracts + 1 compatibility baseline; local-read-api revision 8.1",
+          "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures",
+          "scripts/dev.py check: 568 files, 0 findings, 29 MCP tools",
+          "candidate build/verify at 9b1bef5: 4 artifacts, wheel 214 members (54 bundled), sdist 493 members",
+          "install-check outside the repository: 29 tools, doctor_ok=true, user state unchanged",
+          "fresh wheel install outside the repository: dashboard shell served, /api/v1/health 401, missing resource fails doctor, no key gives SECURE_KEY_NOT_CONFIGURED",
+          "Linux: Python 1797 passed/8 platform skips/0 failed (1805 cases) and Node 66 passed; the JUnit report returns PASS with 0 gaps",
+          "Windows (CI): Python 1784 passed/21 platform skips/0 failed and Node 66 passed; the platform report returns PASS with 0 gaps",
+          "GitHub Actions push 44177697601 at f8a026f: ubuntu-24.04, ubuntu-24.04 (3.13), windows-2025 and the release gate all successful; the gate returns PASS with all nine checks true and 0 gaps",
+          "final candidate rebuilt by the release gate at f8a026f: 4 artifacts, 565 source files, wheel 214 members (54 bundled), sdist 496 members"
+        ],
+        "note": "Batch 8 stays ready: `implemented` is the implementer's state; `accepted` is written only by the review phase after the audit and the final candidate evidence.",
+        "final_candidate": {
+          "commit": "f8a026f67e59875552216672b8f2c0deabc905ac",
+          "run": 44177697601,
+          "artifacts": 4,
+          "source_files": 565,
+          "wheel_members": 214,
+          "bundled_files": 54,
+          "sdist_members": 496,
+          "release_gate": "PASS, 0 gaps, nine checks true"
+        }
+      },
+      "gate_note": "8.1 is implemented on hermes/8.1 and prepared the v0.2.0 candidate; batch 8 is not accepted yet, so batch 9 stays locked. No PR, merge, tag or release was created."
     },
     {
       "batch": 9,

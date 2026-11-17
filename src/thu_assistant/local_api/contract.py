@@ -5,12 +5,11 @@ of truth.  This module is the runtime copy the server enforces, and
 ``tests/test_local_api.py`` compares the two so drift fails a test instead of
 reaching a browser.
 
-Deliberate, documented extension: the frozen route list declares an opaque
-``next_cursor`` response field on ``/todos``, ``/calendar`` and ``/resources``
-but omits the matching request field.  Without it those routes could not page at
-all, so the server accepts ``cursor`` there.  ``QUERY_EXTENSION`` records the
-gap and the delivery record routes it to the contract owner; every other query
-parameter is exactly the frozen list.
+Revision 8.1 folded the request-side ``cursor`` into the frozen endpoint list:
+``/todos``, ``/calendar`` and ``/resources`` declare the field that pairs with
+``next_cursor``, so every route now accepts exactly its declared parameters.
+The earlier 6.2 server extension and its ``QUERY_EXTENSION`` note are gone; the
+contract record keeps the revision history.
 """
 from __future__ import annotations
 
@@ -127,15 +126,6 @@ ROUTES: tuple[Route, ...] = (
     Route('resources', '/resources', re.compile(r'^/api/v1/resources$'),
           ('semester', 'query', 'course_id', 'page_size', 'cursor'), 'read', 'resources'),
 )
-
-# The only query-parameter extension over the frozen list.  Reported in
-# ``describe_api()`` and in the delivery record rather than hidden.
-QUERY_EXTENSION = {
-    'parameter': 'cursor',
-    'routes': ['/todos', '/calendar', '/resources'],
-    'reason': 'local-read-api-v1 declares next_cursor on these routes but omits the request field',
-    'status': 'PENDING_CONTRACT_OWNER_REVISION',
-}
 
 # Route names that must never exist in the read-only API.
 FORBIDDEN_ROUTE_TOKENS = (

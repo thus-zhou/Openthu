@@ -224,7 +224,6 @@ def describe_api() -> dict[str, Any]:
         },
         'limits': deepcopy(contract.LIMITS),
         'routes': contract.route_table(),
-        'query_extension': deepcopy(contract.QUERY_EXTENSION),
         'display_states': contract.display_states(),
         'error_codes': sorted(contract.ERROR_CATEGORIES),
         'forbidden_route_tokens': list(contract.FORBIDDEN_ROUTE_TOKENS),
