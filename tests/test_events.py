@@ -664,6 +664,13 @@ def test_academic_bridge_forwards_semester_and_expansions(monkeypatch):
     assert result['pages_read'] == 2
 
 
+def test_get_todos_description_mentions_the_opt_in_academic_path():
+    from thu_assistant.mcp_stdio import TOOL_BY_NAME
+    description = TOOL_BY_NAME['get_todos']['description']
+    assert 'ADAPTER_REQUIRED' in description
+    assert '学业' in description
+
+
 def test_export_agenda_rejects_an_incomplete_source_unless_allowed(tmp_path):
     responses = {'library.loans': {'items': [], 'status': 'FAILED',
                                    'source_complete': False, 'complete': False,
