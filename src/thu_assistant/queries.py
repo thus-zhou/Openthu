@@ -19,7 +19,7 @@ import re
 import secrets
 import time
 from .bridge import CampusError
-from . import catalog, cache_policy, precheck, source_state
+from . import catalog, cache_policy, precheck, source_state, local_ops
 
 VERSION = 'query-v1'
 CURSOR_VERSION = 'c1'
@@ -94,6 +94,15 @@ for _op, _schema in SPORTS_OPS.items():
 WINDOW_OPS = {'catalog_search', 'database_links', 'seat_availability', 'room_availability', 'reservations', 'availability', 'orders'}
 RECORD_OPS = {'catalog_detail', 'order_detail', 'notice_detail', 'assignment_detail'}
 
+# Local aggregate reads (module 6.1).  They are not campus endpoints: agenda
+# combines already-registered reads and resources reads a local encrypted
+# index.  The schema table lives in ``local_ops`` so the facade description and
+# this registry cannot drift apart.
+LOCAL_OPS = local_ops.operations()
+for _operation, _spec in LOCAL_OPS.items():
+    REGISTRY[(local_ops.SERVICE_ID, _operation)] = (_spec['schema'], _spec['pagination'], _spec['level'])
+
+
 
 def now():
     return source_state.now_iso()
@@ -126,17 +135,18 @@ def validate(value, spec):
 
 
 def describe(service_id):
-    if service_id != 'campus':
+    if service_id not in ('campus', local_ops.SERVICE_ID):
         catalog.resolve(service_id)
     operations = []
-    for operation in ('page', 'status', 'directory', 'courses', 'semesters', 'notices', 'notice_detail', 'assignments', 'assignment_detail', 'files', 'calendar', *LIBRARY_OPS, *SPACE_OPS, *SPORTS_OPS):
+    local_names = tuple(LOCAL_OPS) if service_id == local_ops.SERVICE_ID else ()
+    for operation in (*local_names, 'page', 'status', 'directory', 'courses', 'semesters', 'notices', 'notice_detail', 'assignments', 'assignment_detail', 'files', 'calendar', *LIBRARY_OPS, *SPACE_OPS, *SPORTS_OPS):
         if operation in SPORTS_OPS and os.environ.get('THU_SPORTS_READ', '1') == '0':
             continue
         if operation in (*LIBRARY_OPS, *SPACE_OPS) and os.environ.get('THU_LIBRARY_READ', '1') == '0':
             continue
         if operation in SPACE_OPS and os.environ.get('THU_SPACE_READ', '1') == '0':
             continue
-        entry = REGISTRY.get((service_id, operation)) or (REGISTRY.get(('*', operation)) if service_id != 'campus' else None)
+        entry = REGISTRY.get((service_id, operation)) or (REGISTRY.get(('*', operation)) if service_id not in ('campus', local_ops.SERVICE_ID) else None)
         if entry:
             parameters, pagination, level = entry
             expanded = service_id == 'learn' and operation not in ('page', 'status', 'courses')
@@ -153,6 +163,11 @@ def describe(service_id):
             if service_id == 'library' and operation in SPACE_OPS:
                 operations[-1].update(adapter_version='space-read-v1', last_acceptance={'date': '2026-11-05', 'report': '08-验收.md', 'level': 'SEE_OPERATION_EVIDENCE'},
                                       note='每次新查询实时读取；游标仅为同一检查时间的快照。next_page 表示下一来源页，complete 只覆盖当前来源页。空闲不代表具备预约资格。')
+            if service_id == local_ops.SERVICE_ID and operation in LOCAL_OPS:
+                operations[-1].update(adapter_version=LOCAL_OPS[operation]['adapter_version'],
+                                      last_acceptance={'level': 'OFFLINE_CONTRACT', 'date': '2026-11-17',
+                                                       'report': '模块结果/6.1.md'},
+                                      note=LOCAL_OPS[operation]['note'], local_read=True)
     from .actions import describe_actions
     return {'service_id': service_id, 'operations': operations, 'actions': describe_actions(service_id),
             'registry_version': VERSION, 'cursor_version': CURSOR_VERSION,
@@ -482,6 +497,8 @@ class QueryEngine:
             raise CampusError('UNREGISTERED_QUERY_OPERATION')
         validate(parameters, ops[operation]['parameters_schema'])
         validate(page_size, {'type': 'integer', 'minimum': 1, 'maximum': 200})
+        if service_id == local_ops.SERVICE_ID:
+            return self.local_query(operation, parameters, cursor=cursor, page_size=page_size)
         query_time = source_state.now_iso()
         account_bound = (service_id == 'library' and operation in ('loans', *SPACE_OPS)) or \
                         (service_id == 'sports' and operation in SPORTS_OPS)
@@ -570,6 +587,81 @@ class QueryEngine:
             scope = read_scope_for('learn', 'courses', parameters, items, raw, query_time)
             result = self._finish(result, items, True, scope, query_time)
         return self.snapshots.start(key, result, 'list', items, page_size)
+
+    def local_query(self, operation, parameters, cursor=None, page_size=50):
+        """Dispatch one local aggregate read without touching a campus adapter.
+
+        ``agenda``/``agenda_changes`` read through the 5.4 todo/event engine;
+        ``resources`` reads the 4.2 local encrypted index through an injected
+        provider.  A paginated snapshot is built once per read so a cursor never
+        mixes two different reads.
+        """
+        query_time = source_state.now_iso()
+        local = LOCAL_OPS[operation]
+        account_scope = self._account_scope()
+        key = binding(local_ops.SERVICE_ID, operation, parameters, page_size,
+                      account_scope=account_scope)
+        if cursor:
+            return self._local_page(self.snapshots.resume(cursor, key), operation)
+        source = {'service_id': local_ops.SERVICE_ID, 'operation': operation,
+                  'url': None, 'adapter_version': local['adapter_version']}
+        if operation in ('agenda', 'agenda_changes'):
+            todos = getattr(self.owner, 'todos', None)
+            if todos is None:
+                raise CampusError('AGENDA_PROVIDER_UNAVAILABLE')
+            if operation == 'agenda':
+                built = todos.agenda(**parameters)
+                rows = list(built.pop('calendar_events', None) or [])
+                built.pop('items', None)
+            else:
+                args = {name: value for name, value in parameters.items()
+                        if name != 'change_cursor'}
+                built = todos.changes(cursor=parameters.get('change_cursor'), **args)
+                rows = list(built.pop('changes', None) or [])
+                built['change_cursor'] = built.pop('next_cursor', None)
+            result = {**built, 'source': source, 'query_time': query_time,
+                      'verification_level': built.get('verification_level') or 'NONE'}
+            return self._local_page(self.snapshots.start(key, result, 'list', rows, page_size),
+                                    operation)
+        provider = getattr(self.owner, 'resources', None)
+        if provider is None:
+            raise CampusError('RESOURCE_PROVIDER_UNAVAILABLE')
+        search = provider.search(semester=parameters['semester'],
+                                 query=parameters.get('query'),
+                                 course_id=parameters.get('course_id'),
+                                 offset=0, limit=200)
+        rows = list(search.get('items') or [])
+        total = search.get('total')
+        capped = type(total) is int and total > len(rows)
+        warnings = set(search.get('warnings') or ())
+        if capped:
+            warnings.add('RESOURCE_SEARCH_LIMIT_APPLIED')
+        result = {name: value for name, value in search.items() if name != 'items'}
+        result.update(source=source, query_time=query_time,
+                      verification_level='LOCAL_INDEX_READ',
+                      status=search.get('status') or 'UNKNOWN',
+                      # A capped search did not read every source row, so it is
+                      # not complete even when the local index itself is.
+                      source_complete=bool(search.get('source_complete')) and not capped,
+                      complete=bool(search.get('complete')) and not capped,
+                      warnings=sorted(warnings), next_cursor=None)
+        return self._local_page(self.snapshots.start(key, result, 'list', rows, page_size),
+                                operation)
+
+    @staticmethod
+    def _local_page(page, operation):
+        """Expose the page under its natural name, without the legacy ``data`` alias."""
+        page['calendar_events' if operation == 'agenda' else
+             'changes' if operation == 'agenda_changes' else 'items'] = page['items']
+        page.pop('data', None)
+        if operation in ('agenda', 'agenda_changes'):
+            page['pagination'] = {
+                'total_items': page.get('total_items'),
+                'returned_items': len(page['items']),
+                'next_cursor': page.get('next_cursor'),
+                'scope': 'FULL_WINDOW' if operation == 'agenda' else 'FULL_CHANGE_SET',
+            }
+        return page
 
     def read_page(self, args, page_size=50, bound=None, normalized=False, operation='page'):
         args = dict(args)
