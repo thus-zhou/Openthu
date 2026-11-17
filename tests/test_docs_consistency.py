@@ -8,6 +8,7 @@ instead of silently drifting away from the manual and the capability matrix.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -169,9 +170,12 @@ def test_tool_table_matches_the_frozen_legacy_surface():
 
 
 def test_cli_commands_named_in_the_docs_exist():
-    environment = {"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"}
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(ROOT / "src")
+    environment["PYTHONIOENCODING"] = "utf-8"
     result = subprocess.run([sys.executable, "-m", "thu_assistant", "--help"],
-                            cwd=ROOT, env=environment, capture_output=True, text=True)
+                            cwd=ROOT, env=environment, capture_output=True, text=True,
+                            encoding="utf-8")
     assert result.returncode == 0, result.stderr
     choices = re.search(r"\{([a-z][a-z,]+)\}", result.stdout)
     assert choices, result.stdout
