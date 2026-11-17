@@ -192,7 +192,7 @@
     append(block, h('p', {class: 'state-message', text: model.message}));
     const next = model.nextStep && model.nextStep !== '无' ? model.nextStep : '无需操作';
     append(block, h('p', {class: 'next-step', text: '下一步：' + next}));
-    if (model.requestId) {
+    if (model.requestId && model.state !== 'READY' && model.state !== 'EMPTY') {
       append(block, h('p', {class: 'request-id', text: '请求编号：' + model.requestId}));
     }
     if (model.warnings.length) {
