@@ -129,7 +129,9 @@
   "cross_module_requests": [
     "5.1/5.2: consume precheck selection/availability/eligibility/fees/rules/retrieval; preparation_state is not authorization and money must not be derived from display text.",
     "5.1/5.2: keep write paths on strict pagination checks; if partial results are used, record uncertainty explicitly and never replay.",
+    "5.1: room_row can now return interval_state=RULE_UNVERIFIED when a duration rule is missing, which find_room surfaces as ROOM_RULE_UNVERIFIED. Register that code or map it to an existing classified code; never treat a missing duration rule as unlimited or relabel it ROOM_NOT_OPEN.",
     "6.1: precheck is additive; preserve the 29 legacy tools and choose whether to pass it through or summarize it.",
-    "7.3: index docs/contracts/library-sports-read.md and update the capability table's read-precheck evidence wording."
+    "7.3: index docs/contracts/library-sports-read.md and update the capability table's read-precheck evidence wording.",
+    "2.3/integration: refresh source-registry code_refs line ranges for library.py, spaces.py and sports.py during batch reconnection; the field mappings themselves are unchanged."
   ]
 }
