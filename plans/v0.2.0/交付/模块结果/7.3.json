@@ -6,11 +6,12 @@
   "status": "implemented",
   "baseline_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
   "integration_parent_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
-  "delivery_commit": "d354025",
+  "delivery_commit": "3b0a9c6",
   "implementation_commits": [
     "e5e0af6",
     "f7564a9",
-    "d354025"
+    "d354025",
+    "3b0a9c6"
   ],
   "audit_fix_commits": [],
   "record_commit": "the commit containing this record file",
@@ -37,7 +38,8 @@
     "integrations/codex/README.md",
     "integrations/codex/skills/openthu/SKILL.md",
     "integrations/codex/skills/tsinghua-assistant/SKILL.md",
-    "tests/test_docs_consistency.py"
+    "tests/test_docs_consistency.py",
+    "integrations/codex/skills/tsinghua-assistant/references/models.md"
   ],
   "contracts": [
     "business-facade-v1",
