@@ -6,10 +6,11 @@
   "status": "implemented",
   "baseline_commit": "37b1605",
   "integration_parent_commit": "37b1605",
-  "delivery_commit": "ed47c0d",
+  "delivery_commit": "f9e9918",
   "implementation_commits": [
     "4172bce",
-    "ed47c0d"
+    "ed47c0d",
+    "f9e9918"
   ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/5.4",
@@ -17,7 +18,7 @@
   "worktree_note": "Recorded relative to the user home because the contract privacy validator rejects absolute home-directory paths; the absolute path stays in the execution session.",
   "version_pr": null,
   "batch_state": "batch 5 is not yet accepted; 5.4 is implemented and tested, acceptance belongs to the integration/fix phase",
-  "evidence_tree": "clean checkout of ed47c0d after `python scripts/dev.py setup-node` (or an equivalent src/thu_assistant/node_modules link); otherwise dev.py check stops on the missing tough-cookie runtime dependency",
+  "evidence_tree": "clean checkout of f9e9918 after `python scripts/dev.py setup-node` (or an equivalent src/thu_assistant/node_modules link); otherwise dev.py check stops on the missing tough-cookie runtime dependency",
   "paths": [
     "src/thu_assistant/events.py",
     "src/thu_assistant/snapshot_diff.py",
@@ -61,7 +62,7 @@
   ],
   "checks": {
     "module_tests": {
-      "passed": 40,
+      "passed": 41,
       "failed": 0,
       "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_events.py tests/test_calendar_export.py"
     },
@@ -98,19 +99,19 @@
     },
     "dev_check": {
       "ok": true,
-      "files_checked": 465,
+      "files_checked": 467,
       "findings": 0,
       "mcp_tools": 29,
       "command": "python scripts/dev.py check"
     },
     "full_offline_suite_linux": {
-      "python_passed": 1045,
+      "python_passed": 1046,
       "python_skipped": 7,
       "python_failed": 0,
       "node_passed": 66,
       "node_failed": 0,
       "command": "python scripts/dev.py test",
-      "evidence_tree": "clean checkout of ed47c0d after setup-node"
+      "evidence_tree": "clean checkout of f9e9918 after setup-node"
     },
     "live_campus_calls": 0,
     "model_calls": 0,
