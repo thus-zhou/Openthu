@@ -1,9 +1,10 @@
 """Documentation consistency checks for module 7.3.
 
 These tests compare the public documentation with the running capability
-registry, the frozen tool list and the real CLI.  They are behavioural: a new,
-renamed or removed registered operation, tool or command fails the check
-instead of silently drifting away from the manual and the capability matrix.
+registry, the frozen tool list, the package manifests and the real CLI.  They
+are behavioural: a new, renamed or removed operation, tool, entry point or
+command fails the check instead of silently drifting away from the manual and
+the capability matrix.
 """
 from __future__ import annotations
 
@@ -12,9 +13,10 @@ import os
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
-import pytest
+import jsonschema
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC_FILES = [ROOT / "README.md", ROOT / "CHANGELOG.md", ROOT / "CONTRIBUTING.md",
@@ -22,11 +24,7 @@ DOC_FILES = [ROOT / "README.md", ROOT / "CHANGELOG.md", ROOT / "CONTRIBUTING.md"
 DOC_FILES += sorted((ROOT / "docs").rglob("*.md"))
 DOC_FILES += sorted((ROOT / "integrations").rglob("*.md"))
 
-CAPABILITY_ROW = re.compile(
-    r"^\| `(?P<service>[a-z0-9-]+)\.(?P<operation>[a-z_]+)` \| "
-    r"(?P<kind>[A-Z_]+) \| (?P<owner>[0-9.]+) \| (?P<state>[A-Z]+) \| "
-    r"(?P<evidence>[A-Z_]+) \|"
-)
+CAPABILITY_KEY = re.compile(r"^`(?P<service>[a-z0-9-]+)\.(?P<operation>[a-z_]+)`$")
 TOOL_ROW = re.compile(r"^\| (?P<index>\d+) \| `(?P<name>[a-z_]+)` \|")
 LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
@@ -45,6 +43,17 @@ OWNER_PATHS = {
 }
 
 
+def split_row(line: str) -> list[str]:
+    """Split a Markdown table row, keeping an escaped ``\\|`` inside its cell."""
+    text = line.strip()
+    if text.startswith("|"):
+        text = text[1:]
+    if text.endswith("|"):
+        text = text[:-1]
+    cells = re.split(r"(?<!\\)\|", text)
+    return [cell.strip().replace("\\|", "|") for cell in cells]
+
+
 def _service_ids():
     from thu_assistant import catalog
 
@@ -59,7 +68,7 @@ def _service_ids():
     return tuple(ids)
 
 
-def default_registrations():
+def default_registrations(env=None):
     """The same default surface the CLI describes: todos present, no 4.2 provider."""
     from thu_assistant import queries
     from thu_assistant.facade import registry
@@ -68,22 +77,34 @@ def default_registrations():
         registry.Providers(todos=object()),
         service_ids=_service_ids(),
         describe=queries.describe,
-        env={},
+        env={} if env is None else env,
     )
     assert failures == []
     return list(entries)
 
 
-def capability_rows():
+def _capability_section() -> str:
     text = (ROOT / "docs" / "CAPABILITIES.md").read_text(encoding="utf-8")
+    start = text.index("## 1. 校园只读")
+    end = text.index("## 5. 环境就绪")
+    return text[start:end]
+
+
+def capability_rows():
     rows = {}
-    for line in text.splitlines():
-        match = CAPABILITY_ROW.match(line)
-        if not match:
+    for line in _capability_section().splitlines():
+        if not line.startswith("|"):
             continue
+        cells = split_row(line)
+        if cells[0] == "登记" or set(cells[0]) <= set("-: "):
+            continue
+        assert len(cells) == 6, f"capability row has {len(cells)} cells: {line[:80]}"
+        match = CAPABILITY_KEY.fullmatch(cells[0])
+        assert match, f"capability row has no `service.operation` key: {cells[0]!r}"
         key = (match.group("service"), match.group("operation"))
         assert key not in rows, f"duplicate capability row: {key}"
-        rows[key] = match.groupdict()
+        rows[key] = {"kind": cells[1], "owner": cells[2], "state": cells[3],
+                     "evidence": cells[4], "note": cells[5]}
     return rows
 
 
@@ -97,11 +118,41 @@ def tool_rows():
     return rows
 
 
+def tool_operation_rows():
+    text = (ROOT / "docs" / "TOOLS.md").read_text(encoding="utf-8")
+    pairs, in_operations = [], False
+    for line in text.splitlines():
+        if line.startswith("### 3."):
+            in_operations = True
+            continue
+        if line.startswith("## "):
+            in_operations = False
+            continue
+        if not in_operations or not line.startswith("|"):
+            continue
+        cells = split_row(line)
+        if len(cells) < 2:
+            continue
+        services = re.findall(r"`([a-z0-9-]+)`", cells[0])
+        operations = re.findall(r"`([a-z_]+)`", cells[1])
+        if not services or not operations:
+            continue
+        for service in services:
+            for operation in operations:
+                pairs.append((service, operation))
+    return pairs
+
+
 def changelog_section(version: str) -> str:
     text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     start = text.index(f"## {version}")
     end = text.find("\n## ", start + 1)
     return text[start:end if end != -1 else len(text)]
+
+
+def json_blocks(text: str) -> list[dict]:
+    blocks = re.findall(r"```json\n(.*?)```", text, re.S)
+    return [json.loads(block) for block in blocks]
 
 
 def test_every_registered_operation_has_one_capability_row():
@@ -121,14 +172,21 @@ def test_every_registered_operation_has_one_capability_row():
         assert row["evidence"] == entry.evidence, key
 
 
-def test_capability_rows_are_well_formed_markdown_tables():
-    text = (ROOT / "docs" / "CAPABILITIES.md").read_text(encoding="utf-8")
-    for line in text.splitlines():
-        if not CAPABILITY_ROW.match(line):
+def test_every_capability_table_line_is_well_formed():
+    for line in _capability_section().splitlines():
+        if not line.startswith("|"):
             continue
-        cells = line.split("|")
-        assert len(cells) == 8, (
-            "a capability row contains an unescaped pipe in its note: " + line[:80])
+        cells = split_row(line)
+        assert len(cells) == 6, f"capability table row has {len(cells)} cells: {line[:80]}"
+        if cells[0] == "登记" or set(cells[0]) <= set("-: "):
+            continue
+        assert CAPABILITY_KEY.fullmatch(cells[0]), f"bad capability key: {cells[0]!r}"
+
+
+def test_table_row_parser_keeps_an_escaped_pipe():
+    cells = split_row("| `a.b` | READ | 3.2 | AVAILABLE | REGISTERED_LOCAL_QUERY | note \\| more |")
+    assert len(cells) == 6
+    assert cells[-1] == "note | more"
 
 
 def test_supported_operations_reach_an_implementation():
@@ -167,6 +225,22 @@ def test_tool_table_matches_the_frozen_legacy_surface():
     assert len(rows) == baseline["mcp_tool_count"] == 29
     assert [index for index, _ in rows] == list(range(1, 30))
     assert {name for _, name in rows} == set(baseline["mcp_tools"])
+
+
+def test_tools_doc_operation_names_cover_the_registry():
+    registered = {(entry.service_id, entry.operation) for entry in default_registrations()}
+    named = set()
+    for pair in tool_operation_rows():
+        assert pair in registered, f"docs/TOOLS.md names an unregistered operation: {pair}"
+        named.add(pair)
+    entries = default_registrations()
+    available_reads = {(entry.service_id, entry.operation) for entry in entries
+                       if entry.kind == "READ" and entry.state == "AVAILABLE"}
+    writes = {(entry.service_id, entry.operation) for entry in entries
+              if entry.kind == "CAMPUS_WRITE"}
+    assert available_reads - named == set(), (
+        f"docs/TOOLS.md omits available reads: {sorted(available_reads - named)}")
+    assert writes - named == set(), f"docs/TOOLS.md omits writes: {sorted(writes - named)}"
 
 
 def test_cli_commands_named_in_the_docs_exist():
@@ -252,7 +326,7 @@ def test_user_guide_covers_the_required_paths():
     assert "THU_SECURE_KEY_FILE" in text and "THU_SECURE_DATA_DIR" in text
     assert "PARTIAL" in text and "UNKNOWN" in text and "PENDING_PAYMENT" in text
     assert "synthetic-account" in text and "learn:FILE:1001" in text
-    assert "media:IMG:synthetic-0001" in text
+    assert "media_synthetic0001" in text and '"media_id"' in text
     assert "无条件全自动登录" not in text
 
 
@@ -267,41 +341,145 @@ def test_upgrade_guide_preserves_pending_state_and_keys():
 def test_capability_matrix_does_not_turn_unknown_into_success():
     text = (ROOT / "docs" / "CAPABILITIES.md").read_text(encoding="utf-8")
     for status in ("UNKNOWN", "PARTIAL", "PENDING_PAYMENT", "PENDING_APPROVAL",
-                   "BLOCKED_SOURCE_EVIDENCE", "ADAPTER_REQUIRED"):
+                   "BLOCKED_SOURCE_EVIDENCE", "ADAPTER_REQUIRED", "SWITCHED_OFF"):
         assert status in text, status
     assert "都不是成功" in text
     assert "安装成功、模拟测试通过、HTTP 200" in text
 
 
-def test_tools_doc_operation_names_match_the_registry():
-    text = (ROOT / "docs" / "TOOLS.md").read_text(encoding="utf-8")
-    registered = {(entry.service_id, entry.operation) for entry in default_registrations()}
-    single_service = re.compile(r"^`(?P<service>[a-z0-9-]+)`$")
-    operation = re.compile(r"`(?P<operation>[a-z_]+)`")
+def test_switched_off_is_the_documented_evidence_for_a_disabled_write(monkeypatch):
+    monkeypatch.setenv("THU_LIBRARY_WRITE", "0")
+    entries = default_registrations()
+    row = next(entry for entry in entries
+               if entry.service_id == "library" and entry.operation == "create_seat_reservation")
+    assert row.state == "DISABLED"
+    assert row.reason == "WRITES_DISABLED"
+    assert row.evidence == "SWITCHED_OFF"
+    text = (ROOT / "docs" / "CAPABILITIES.md").read_text(encoding="utf-8")
+    assert "`SWITCHED_OFF`（写开关关闭，对应 `DISABLED`）" in text
+
+
+def test_capability_gap_table_separates_state_reason_and_evidence():
+    text = (ROOT / "docs" / "CAPABILITIES.md").read_text(encoding="utf-8")
+    assert "| 能力 | 状态 | 原因 | 登记证据 | 下一步 |" in text
+    entries = {(entry.service_id, entry.operation): entry for entry in default_registrations()}
+    section = text[text.index("## 7. 未登记"):text.index("## 8. 文字规则")]
     checked = 0
-    in_operations = False
-    for line in text.splitlines():
-        if line.startswith("### 3."):
-            in_operations = True
+    for line in section.splitlines():
+        if not line.startswith("|") or "---" in line or "| 能力 |" in line:
             continue
-        if line.startswith("## "):
-            in_operations = False
+        cells = split_row(line)
+        key = re.search(r"`([a-z0-9-]+\.[a-z_]+)`", cells[0])
+        if not key:
             continue
-        if not in_operations or not line.startswith("|"):
+        service, operation = key.group(1).split(".", 1)
+        entry = entries.get((service, operation))
+        if entry is None:
             continue
-        cells = [cell.strip() for cell in line.strip("|").split("|")]
-        if len(cells) < 2:
-            continue
-        service = single_service.match(cells[0])
-        if not service:
-            continue
-        names = operation.findall(cells[1])
-        for name in names:
-            assert (service.group("service"), name) in registered, (
-                f"docs/TOOLS.md names an unregistered operation: "
-                f"{service.group('service')}.{name}")
-            checked += 1
-    assert checked >= 30
+        assert cells[1].strip("`") == entry.state, key.group(1)
+        assert cells[2].strip("`") == (entry.reason or ""), key.group(1)
+        assert cells[3].strip("`") == entry.evidence, key.group(1)
+        checked += 1
+    assert checked >= 5
+
+
+def test_legacy_dpapi_and_image_error_codes_are_distinguished():
+    guide = (ROOT / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
+    capabilities = (ROOT / "docs" / "CAPABILITIES.md").read_text(encoding="utf-8")
+    for text in (guide, capabilities):
+        assert "UNSUPPORTED_PLATFORM" in text
+        assert "SECURE_LEGACY_UNAVAILABLE" in text
+    assert "SECURE_KEY_FORMAT" in guide
+    assert "MODEL_IMAGE_INPUT_UNAVAILABLE" in guide
+    assert "MODEL_IMAGE_PROTOCOL_UNVERIFIED" in guide
+    assert "只有宿主注入媒体管道" in guide
+
+
+def test_dashboard_shell_wording_matches_the_unwired_cli():
+    guide = (ROOT / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
+    capabilities = (ROOT / "docs" / "CAPABILITIES.md").read_text(encoding="utf-8")
+    for text in (guide, capabilities):
+        assert "LOCAL_API_UI_NOT_INSTALLED" in text
+        assert "8.1" in text
+        assert "随看板模块安装" not in text
+
+
+def test_linux_key_creation_is_documented_with_the_real_format():
+    guide = (ROOT / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
+    install = (ROOT / "docs" / "INSTALL.md").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    for text in (guide, install):
+        assert "create_key_file" in text
+        assert "THU-KEY-1" in text
+        assert "SECURE_KEY_FORMAT" in text
+    assert "create_key_file" in readme
+
+
+def test_readme_installs_chromium_before_the_full_test_suite():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    browser = readme.index("playwright install chromium")
+    tests = readme.index("python scripts/dev.py test")
+    assert browser < tests
+    guide = (ROOT / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
+    assert "真实浏览器用例需要 Chromium" in guide
+
+
+def test_entry_point_counts_match_the_manifests():
+    baseline = json.loads((ROOT / "contracts" / "v0.2" / "compatibility-baseline.json")
+                          .read_text(encoding="utf-8"))
+    scripts = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert len(baseline["entry_points"]) == 6
+    assert len(scripts["project"]["scripts"]) == 7
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    handover = (ROOT / "docs" / "HANDOVER.md").read_text(encoding="utf-8")
+    assert "6 个旧入口" in changelog
+    assert "新增 `openthu-doctor`" in changelog
+    assert "6 个旧入口点" in handover
+    assert "7 个入口点保留" not in changelog + handover
+
+
+def test_changelog_describe_and_route_wording_matches_the_runtime():
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "`openthu describe --service <id>`" in changelog
+    assert "`openthu health`" in changelog
+    assert "/services/{service_id}" in changelog
+    assert "`describe`/`health` 给出每个操作" not in changelog
+
+
+def test_install_doc_does_not_claim_the_wheel_contains_the_source_tree():
+    install = (ROOT / "docs" / "INSTALL.md").read_text(encoding="utf-8")
+    assert "不包含 `docs/`" in install
+    assert "`plans/`" in install and "`contracts/`" in install
+    assert "差别只在 `node_modules`" not in install
+
+
+def test_user_guide_json_examples_match_their_schemas():
+    text = (ROOT / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
+    blocks = json_blocks(text)
+    assert len(blocks) >= 3
+
+    from thu_assistant import models
+
+    model_chat = next(block for block in blocks if block.get("tool") == "model_chat")
+    arguments = model_chat["arguments"]
+    jsonschema.validate(arguments, {
+        "type": "object", "properties": models.PROPERTIES,
+        "additionalProperties": False,
+    })
+    assert arguments["model"] == "synthetic-model"
+    media_id = arguments["images"][0]["media_id"]
+    assert re.fullmatch(models.MEDIA_ID, media_id)
+
+    assert '"ok": false' in text
+    agenda = next(block for block in blocks if block.get("status") == "PARTIAL")
+    assert agenda["complete"] is False and agenda["source_complete"] is False
+    dashboard = next(block for block in blocks if block.get("command") == "dashboard")
+    assert dashboard["result"]["status"] == "LISTENING"
+
+    semesters = re.findall(r'"semester"\s*:\s*"([^"]+)"', text)
+    assert semesters
+    for semester in semesters:
+        assert re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", semester)
 
 
 def test_user_guide_shows_verified_example_states():
@@ -320,41 +498,6 @@ def test_tools_doc_marks_blocked_and_limited_operations():
     assert "renew_loan" in text and "官方页面" in text
     assert "MODEL_IMAGE_INPUT_UNAVAILABLE" in text
     assert "ADAPTER_REQUIRED" in text
-
-
-def test_no_table_cell_contains_an_unescaped_pipe():
-    def spans(line: str):
-        found, index = [], 0
-        while True:
-            start = line.find("`", index)
-            if start < 0:
-                break
-            end = line.find("`", start + 1)
-            if end < 0:
-                break
-            found.append(line[start + 1:end])
-            index = end + 1
-        return found
-
-    for name in ("README.md", "CHANGELOG.md", "docs/USER_GUIDE.md",
-                 "docs/TOOLS.md", "docs/CAPABILITIES.md", "docs/UPGRADE.md",
-                 "docs/INSTALL.md"):
-        for number, line in enumerate((ROOT / name).read_text(encoding="utf-8").splitlines(), 1):
-            if not line.startswith("|"):
-                continue
-            for span in spans(line):
-                assert "|" not in span, f"{name}:{number} has a pipe inside a table code span"
-
-
-def test_user_guide_json_examples_parse():
-    text = (ROOT / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
-    blocks = re.findall(r"```json\n(.*?)```", text, re.S)
-    assert len(blocks) >= 3
-    for block in blocks:
-        value = json.loads(block)
-        assert isinstance(value, dict)
-    parameters = re.search(r'"semester":"([^"]+)"', text)
-    assert parameters is None or re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", parameters.group(1))
 
 
 def test_public_claims_keep_download_and_campus_service_separate():

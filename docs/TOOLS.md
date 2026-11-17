@@ -37,7 +37,7 @@ Python 导入路径 `thu_assistant`、`learn_assistant` 都保留；MCP 工具 s
 | 9 | `list_services` | 静态校园服务目录 | `info.directory` 的本地目录视图 |
 | 10 | `refresh_service_directory` | 刷新 info 门户应用目录 | 本地目录刷新；不逐站登录 |
 | 11 | `describe_service` | 服务的能力登记与阻塞原因 | 门面 `describe` / `describe_service` |
-| 12 | `query_service` | 执行登记过的只读查询 | `*.page`、`*.status`、`learn.*`、`library.*`、`sports.*`、`local.agenda`、`local.agenda_changes`、`local.resources` |
+| 12 | `query_service` | 执行登记过的只读查询 | `info.directory`、`*.page`、`*.status`、`learn.*`、`library.*`、`sports.*`、`local.agenda`、`local.agenda_changes`、`local.resources`；完整清单以 `describe --service <id>` 为准 |
 | 13 | `prepare_service_action` | 生成办理预览与加密计划 | `library.create_seat_reservation`、`library.create_room_reservation`、`library.cancel_reservation`、`library.renew_loan`、`sports.create_reservation`、`sports.cancel_reservation` |
 | 14 | `execute_service_action` | 执行当次授权的计划 | 同上；`learn.submit_assignment` 被阻塞，`renew_loan` 只移交官方页面 |
 | 15 | `get_action_result` | 核对事务状态，不重发 | 全部办理操作 |
@@ -68,7 +68,8 @@ Python 导入路径 `thu_assistant`、`learn_assistant` 都保留；MCP 工具 s
 | `learn` | `semesters`、`courses`、`notices`、`notice_detail`、`assignments`、`assignment_detail`、`files`、`calendar`、`page`、`status` | 列表与正文分开；`calendar` 只是教学日历，不是完整课表或考试表 |
 | `library` | `catalog_search`、`catalog_detail`、`database_links`、`loans`、`seat_areas`、`seat_availability`、`room_types`、`room_availability`、`reservations`、`page`、`status` | 检索是请求窗口；`borrowable=null` 表示未核验；空闲不等于可预约 |
 | `sports` | `scenes`、`availability`、`orders`、`order_detail`、`page`、`status` | 余量与报价不是预约或付款回执 |
-| `campus`、`campusvisit`、`cloud`、`student`、`thos`、`visitors`、`webvpn`、`madmodel`、`library-catalog`、`library-databases`、`library-offcampus`、`library-rooms`、`library-search`、`library-seat` | `page`、`status` | 页面与状态读取；HTTP 200 不等于登录成功 |
+| `campus` | `page` | 校园入口页面读取；不提供单独的入口状态操作 |
+| `campusvisit`、`cloud`、`student`、`thos`、`visitors`、`webvpn`、`madmodel`、`library-catalog`、`library-databases`、`library-offcampus`、`library-rooms`、`library-search`、`library-seat` | `page`、`status` | 页面与状态读取；HTTP 200 不等于登录成功 |
 | `academics` | `timetable`、`exams`、`grades` | 全部 `BLOCKED_SOURCE_EVIDENCE`，当前不读取 |
 
 ### 3.2 本地派生

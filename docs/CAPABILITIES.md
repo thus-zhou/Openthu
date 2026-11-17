@@ -18,7 +18,7 @@ v0.2.0 候选（未发布）｜编制：7.3｜事实来源：`business-facade-v1
 - `BLOCKED`：实现或部分实现存在，来源契约/证据不足，不能执行。
 - `MISSING`：没有提供者、没有公开入口或没有适配。
 
-登记证据取值：`REGISTERED_LOCAL_QUERY`（本地登记的只读分派）、`VERIFIED_ADAPTER`（已注册的专用适配，合成传输验证）、`CONTRACT_ONLY`（只有契约或准备路径）、`BLOCKED_SOURCE_EVIDENCE`（来源证据阻塞）、`NO_VERIFIED_PROTOCOL`（协议未核对）、`NO_PUBLIC_ENTRY`（仅宿主 API）、`NO_PROVIDER`（提供者缺失）、`LOCAL_DERIVED_READ`（本地派生）、`LOCAL_INDEX_READ`（本地索引）。
+登记证据取值：`REGISTERED_LOCAL_QUERY`（本地登记的只读分派）、`VERIFIED_ADAPTER`（已注册的专用适配，合成传输验证）、`CONTRACT_ONLY`（只有契约或准备路径）、`BLOCKED_SOURCE_EVIDENCE`（来源证据阻塞）、`NO_VERIFIED_PROTOCOL`（协议未核对）、`NO_PUBLIC_ENTRY`（仅宿主 API）、`NO_PROVIDER`（提供者缺失）、`SWITCHED_OFF`（写开关关闭，对应 `DISABLED`）、`LOCAL_DERIVED_READ`（本地派生）、`LOCAL_INDEX_READ`（本地索引）。
 
 `openthu describe` 与 `openthu health` 输出与下表同源；`health` 不探测真实站点，`PARTIAL` 只表示有已登记但被阻塞的操作。
 
@@ -129,13 +129,13 @@ v0.2.0 候选（未发布）｜编制：7.3｜事实来源：`business-facade-v1
 
 | 能力 | Windows 桌面 | 无桌面 Linux | 说明 |
 |---|---|---|---|
-| 本地加密存储 | 当前用户 DPAPI；旧 `LA-DPAPI-1`、`THU-ACTION-1`、`THU-TODOS-1` 只读保留 | 外部密钥文件 `0600` + 数据目录；两者分离，缺密钥拒绝写入 | 不自动生成密钥，不退化为明文；跨平台复制 DPAPI 密文得到 `UNSUPPORTED_PLATFORM` |
+| 本地加密存储 | 当前用户 DPAPI；旧 `LA-DPAPI-1`、`THU-ACTION-1`、`THU-TODOS-1` 只读保留 | 外部密钥文件 `0600` + 数据目录；两者分离，缺密钥拒绝写入 | 不自动生成密钥，不退化为明文；跨平台迁移预览标 `UNSUPPORTED_PLATFORM`，运行时读取得到 `SECURE_LEGACY_UNAVAILABLE` |
 | 生产校园登录 | 官方统一认证 + MFA；再次验证时明确返回 | 未实现 | Linux 不能宣传“无条件全自动登录” |
 | 静态服务目录与 CLI | 可用 | 可用 | `openthu services`、`describe`、`health`、`query` 的本地部分 |
 | Node 网关 | 需要 Node 24 与锁文件依赖 | 同左 | 缺 Node 时只影响网关相关能力，诊断会指出 |
 | 浏览器能力 | Playwright Chromium，可选 | 同左 | 缺 Chromium 只影响浏览器，不影响只读目录 |
 | 本地看板 API | 回环 HTTP，可用 | 可用 | 只读路由；本地会话由 `0600` 引导文件建立 |
-| 看板 HTML 外壳 | 随看板模块安装 | 同左 | 未安装时 `/` 为 `LOCAL_API_UI_NOT_INSTALLED`，JSON 路由仍可用 |
+| 看板 HTML 外壳 | 由同批 7.1 提供，待 8.1 接线 | 同左 | 在 `static_dir` 接入 CLI 前，`/` 为 `LOCAL_API_UI_NOT_INSTALLED`，JSON 路由仍可用 |
 | 模型文本 | 需要本人学校额度与上游认证 | 同左（上游代理自带登录流程） | 目录、生成、取消分别记录证据；不批量探测生成 |
 | 模型图片 | 管线已实现，协议未验证 | 同左 | 当前 `MODEL_IMAGE_INPUT_UNAVAILABLE`；工程上限见 §7 |
 
@@ -161,16 +161,16 @@ v0.2.0 候选（未发布）｜编制：7.3｜事实来源：`business-facade-v1
 
 ## 7. 未登记或仅宿主 API 的能力
 
-| 能力 | 当前状态 | 原因与下一步 |
-|---|---|---|
-| `local.resources_export`（4.2 导出） | `MISSING / NO_PUBLIC_ENTRY` | 只在宿主 API 可用；没有 CLI/MCP 入口，不进入默认可用表 |
-| `local.media_prepare`（3.3 媒体登记） | `MISSING / NO_PUBLIC_ENTRY` | 只在宿主 API 可用；没有 CLI/MCP 入口 |
-| `local.model_image_input`（4.5） | `BLOCKED / NO_VERIFIED_PROTOCOL` | 协议注册表为空；目录 `supportImage` 只是标注 |
-| `local.resources`（4.2 索引） | `MISSING / RESOURCE_PROVIDER_UNAVAILABLE` | CLI/MCP/默认看板未注入提供者；宿主注入后可用 |
-| `academics.timetable` / `exams` / `grades` | `BLOCKED / BLOCKED_SOURCE_EVIDENCE` | 没有已验证的个人课表、考试、成绩来源；教学日历不能代替 |
-| `learn.submit_assignment` | `BLOCKED / BLOCKED_SOURCE_EVIDENCE` | 上传、草稿、正式提交、结果查询均无已验证接口；写开关 `THU_LEARN_SUBMIT` 默认关闭 |
-| `visitors.create` / `cancel` | `MISSING / ADAPTER_REQUIRED` | 只有公开入口；通用浏览器看到表单不代表业务接通 |
-| `sports.create` / `cancel`、`library-seat.create` / `cancel`、`library-rooms.create` / `cancel` | `MISSING / ADAPTER_REQUIRED` | 旧兼容契约保留；新调用使用 `sports.create_reservation` 等登记操作 |
+| 能力 | 状态 | 原因 | 登记证据 | 下一步 |
+|---|---|---|---|---|
+| `local.resources_export`（4.2 导出） | `MISSING` | `NO_PUBLIC_ENTRY` | `NO_PUBLIC_ENTRY` | 只在宿主 API 可用；没有 CLI/MCP 入口，不进入默认可用表 |
+| `local.media_prepare`（3.3 媒体登记） | `MISSING` | `NO_PUBLIC_ENTRY` | `NO_PUBLIC_ENTRY` | 只在宿主 API 可用；没有 CLI/MCP 入口 |
+| `local.model_image_input`（4.5） | `BLOCKED` | `MODEL_IMAGE_INPUT_UNAVAILABLE` | `NO_VERIFIED_PROTOCOL` | 公共路径未注入媒体管道；协议注册表为空；目录 `supportImage` 只是标注 |
+| `local.resources`（4.2 索引） | `MISSING` | `RESOURCE_PROVIDER_UNAVAILABLE` | `LOCAL_INDEX_READ` | CLI/MCP/默认看板未注入提供者；宿主注入后可用 |
+| `academics.timetable` / `exams` / `grades` | `BLOCKED` | `BLOCKED_SOURCE_EVIDENCE` | `BLOCKED_SOURCE_EVIDENCE` | 没有已验证的个人课表、考试、成绩来源；教学日历不能代替 |
+| `learn.submit_assignment` | `BLOCKED` | `BLOCKED_SOURCE_EVIDENCE` | `BLOCKED_SOURCE_EVIDENCE` | 上传、草稿、正式提交、结果查询均无已验证接口；写开关 `THU_LEARN_SUBMIT` 默认关闭 |
+| `visitors.create` / `cancel` | `MISSING` | `ADAPTER_REQUIRED` | `NO_PROVIDER` | 只有公开入口；通用浏览器看到表单不代表业务接通 |
+| `sports.create` / `cancel`、`library-seat.create` / `cancel`、`library-rooms.create` / `cancel` | `MISSING` | `ADAPTER_REQUIRED` | `NO_PROVIDER` | 旧兼容契约保留；新调用使用 `sports.create_reservation` 等登记操作 |
 
 图片与资料边界：单图 8 MiB、每次 4 图、合计 16 MiB、单图 1600 万像素（另有单边 20000 像素工程保护），只接受 JPEG/PNG/WebP；平台契约更严格时取较小值。已登记协议档案默认更保守（1 图 / 1 MiB / 合计 4 MiB / 400 万像素），要用满上限必须显式声明。任何路径都不会隐式发送未选择的图片或用户文件。
 

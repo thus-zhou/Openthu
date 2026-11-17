@@ -27,6 +27,7 @@ python -m venv .venv
 python -m pip install -r requirements-dev.txt
 python -m pip install -e .
 python scripts/dev.py setup-node
+python -m playwright install chromium
 python scripts/dev.py doctor
 python scripts/dev.py check
 python scripts/dev.py test
@@ -74,7 +75,7 @@ python scripts/dev.py test
 
 常用环境变量包括 `OPENTHU_STATE_DIR`、`OPENTHU_DOWNLOAD_DIR`、`OPENTHU_TEMP_DIR`、`OPENTHU_LOG_DIR`、`OPENTHU_NODE`、`OPENTHU_PYTHON`、`OPENTHU_NPM_REGISTRY`、`OPENTHU_LISTEN_HOST`、`OPENTHU_LISTEN_PORT`、`OPENTHU_PAGE_SIZE` 和 `OPENTHU_REFRESH_SECONDS`。旧调用者的 `THU_ASSISTANT_STATE_DIR`、`THU_NODE`、`THU_PYTHON` 仍作为低优先级别名可用；规范化环境变量优先。
 
-Linux 本地加密存储另需 `THU_SECURE_KEY_FILE`（`0600` 外部密钥文件）与 `THU_SECURE_DATA_DIR`（数据目录），两者必须分离；缺少密钥时拒绝写入，不自动生成密钥或退化为明文。Windows 使用当前用户 DPAPI，不导入其他机器或账号的凭据。
+Linux 本地加密存储另需 `THU_SECURE_KEY_FILE`（`0600` 外部密钥文件）与 `THU_SECURE_DATA_DIR`（数据目录），两者必须分离。密钥文件用 `thu_assistant.secure_store.create_key_file()` 创建（见[用户手册](docs/USER_GUIDE.md)），不是任意 32 字节文件；缺少密钥时拒绝写入，不自动生成密钥或退化为明文。Windows 使用当前用户 DPAPI，不导入其他机器或账号的凭据。
 
 状态、下载、临时和日志目录必须是绝对路径，支持 `~` 展开并会规范化。默认状态目录在代码库之外；用户自选位置不得指向源码包、程序资源、`.git` 或密钥子目录，相对路径会被拒绝。旧状态只通过 `python scripts/migrate_state.py preview` 只读预览；`apply` 需要逐项明确 `replace`/`keep`，只复制不移动，失败保留原文件与日志，下载与日志保持原位。升级不会自动搬迁个人凭据、重建会话或撤销远端业务。
 

@@ -8,13 +8,13 @@
 
 - 新增统一业务门面与命令行子命令：`openthu describe`、`health`、`query`、`agenda`、`dashboard`。旧的 `services`、`discover`、`login`、`read`、`courses`、`model` 调用和参数继续可用。
 - 只读查询按登记操作执行：`query --service <id> --operation <op>` 支持参数文件、游标和分页；每次结果都带来源、检查时间、完整性和证据级别。
-- 本地只读看板：只绑定回环地址，只提供 `/api/v1/health`、`/services`、`/query`、`/todos`、`/calendar`、`/resources`；`dashboard --check` 可先验证启动，再常驻。
+- 本地只读看板：只绑定回环地址，只提供 `/api/v1/health`、`/services`、`/services/{service_id}`、`/query`、`/todos`、`/calendar`、`/resources`；`dashboard --check` 可先验证启动，再常驻。
 - 统一日程：按需汇总作业、借阅、图书馆预约和体育订单，支持日期窗口、来源筛选、已完成/逾期视图与冲突提示；日期级与精确时刻分开建模。
 - 日程增量：`agenda_changes` 输出新增、修改、取消、删除、来源不可用和来源不完整；来源失败时保留历史事件，不产生假删除。
 - 日历导出：`openthu agenda --export` 写出 ICS、Markdown 或 JSON，必须使用绝对路径；默认拒绝覆盖，结果不完整时默认拒绝导出。
 - 课程资料中心：按账号与学期隔离的本地加密索引，支持课程文件、公告附件、作业附件的跨课程检索、批量预览下载和 JSON 摘要导出；归档路径按 UTF-8 字节预算截断，不覆盖已有文件。
 - 图书馆与体育办理：座位、研讨间、体育的创建与取消使用“预览 → 授权执行 → 结果核对”四步；续借只能准备并移交官方页面。
-- 统一能力登记：`describe`/`health` 给出每个操作的可用、关闭、阻塞或缺失状态和原因，不再用一张“支持”表隐藏限制。
+- 统一能力登记：`openthu describe --service <id>` 给出逐操作的可用、关闭、阻塞或缺失状态与原因；`openthu health` 给出服务级计数和阻塞列表，不再用一张“支持”表隐藏限制。
 - 安装自检：源码检出用 `python scripts/dev.py doctor`，wheel/sdist 用 `openthu-doctor`；分类报告 Python、Node、浏览器、生产认证、打包与配置状态。
 - Linux 本地加密存储：外部 `0600` 密钥文件与数据目录分离，使用 AES-256-GCM；Windows 继续使用当前用户 DPAPI 并保留旧记录读取。
 - 错误对象新增 `category`、`retryable`、`automatic_replay_allowed`、`user_action`；`UNKNOWN`、`PARTIAL`、`PENDING_PAYMENT`、`PENDING_APPROVAL` 保持原义。
@@ -22,7 +22,7 @@
 ### 兼容性
 
 - 29 个 MCP 工具名称、schema 字段与含义保持不变；新增字段一律可选。协议标识继续使用 `tsinghua-assistant`。
-- 7 个入口点保留：`openthu`、`openthu-mcp`、`openthu-doctor`、`learn-assistant`、`learn-assistant-mcp`、`tsinghua-assistant`、`tsinghua-assistant-mcp`。
+- 6 个旧入口保持兼容：`openthu`、`openthu-mcp`、`learn-assistant`、`learn-assistant-mcp`、`tsinghua-assistant`、`tsinghua-assistant-mcp`；新增 `openthu-doctor`。`contracts/v0.2/compatibility-baseline.json` 的 `entry_points` 仍记录 v0.1 的 6 个，新增入口不改变旧入口语义。
 - Python 导入路径 `thu_assistant`、`learn_assistant` 不变；旧命令行参数继续解析。
 - 最低 Python 提升到 3.12（CI 覆盖 3.12 与 3.13）；仍使用 3.10/3.11 的用户保留 v0.1。
 - Windows 默认状态目录仍是 `%LOCALAPPDATA%\TsinghuaAssistant`，默认迁移预览为成功空操作；迁移是显式动作，只复制、不移动、不删除旧目录。

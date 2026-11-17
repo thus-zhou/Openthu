@@ -460,13 +460,12 @@ class BusinessFacade:
             envelope.update(extra)
         return envelope
 
-    @staticmethod
-    def _local_failure(service_id: str, operation: str, error) -> dict:
+    def _local_failure(self, service_id: str, operation: str, error) -> dict:
         """A classified failure envelope; never a fake empty success."""
         public = source_state.classify_error(error)
         code = public.get('code')
         status = code if code in source_state.ENVELOPE_STATUSES else 'ERROR'
-        envelope = BusinessFacade._local_read(
+        envelope = self._local_read(
             service_id, operation, [], status=status, verification_level='NONE',
             warnings=[code if isinstance(code, str) else 'UNKNOWN'])
         envelope['error'] = public
@@ -527,7 +526,8 @@ class BusinessFacade:
 
     # -- local, explicitly non-campus operations ---------------------------
     def export_agenda(self, path, *, start_date=None, end_date=None, services=None,
-                      format='ics', overwrite=False, allow_partial=False) -> dict:
+                      semester=None, format='ics', overwrite=False,
+                      allow_partial=False) -> dict:
         entry = self.capability(_LOCAL, 'agenda')
         if entry is None or entry.state != 'AVAILABLE':
             raise gap('FACADE_CAPABILITY_UNAVAILABLE',
@@ -542,7 +542,8 @@ class BusinessFacade:
         # calendar_export; the facade only refuses an unusable call shape.
         result = self.owner.todos.export_agenda(
             path, start_date=start_date, end_date=end_date, services=services,
-            format=format, overwrite=overwrite, allow_partial=allow_partial)
+            semester=semester, format=format, overwrite=overwrite,
+            allow_partial=allow_partial)
         return self._stamp(result, _LOCAL, 'agenda_export', 'LOCAL_WRITE', entry)
 
     # -- internals ---------------------------------------------------------

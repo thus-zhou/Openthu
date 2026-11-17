@@ -46,14 +46,18 @@ python scripts/dev.py doctor
 
 `storage.state_dir`、`download_dir`、`temp_dir`、`log_dir` 必须是绝对路径，支持 `~` 展开并会规范化。它们不能位于源码包、安装包资源、`.git` 或状态目录的 `keys/`、`keyrings/`、`secrets/`、`credentials/` 之下；相对路径会被拒绝。默认状态目录在代码库之外；迁移只提供旧位置到新位置的预览，本模块不搬移真实会话或凭据。旧 Windows DPAPI 记录仍由后续认证模块按原格式读取，不因路径变更自动迁移。
 
-Linux 的本地加密存储需要独立的外部密钥文件，不能把密钥放进数据目录：
+Linux 的本地加密存储需要独立的外部密钥文件，不能把密钥放进数据目录。密钥文件不是任意 32 字节随机文件，必须包含 `THU-KEY-1\0` 文件头和 32 字节随机主密钥；用 `create_key_file()` 创建：
 
 ```sh
-export THU_SECURE_KEY_FILE=/absolute/owner-only/master.key   # 0600，普通文件，不是符号链接
-export THU_SECURE_DATA_DIR=/absolute/user/state              # 与密钥文件分离
+python - <<'PY'
+from thu_assistant.secure_store import create_key_file
+create_key_file("/absolute/owner-only/master.key", "file-key")
+PY
+export THU_SECURE_KEY_FILE=/absolute/owner-only/master.key
+export THU_SECURE_DATA_DIR=/absolute/user/state
 ```
 
-缺少密钥时相关写入被拒绝（`SECURE_KEY_NOT_CONFIGURED`），程序不会自动生成密钥，也不会退化为明文。`THU_SECURE_BACKEND` 选择提供者，`THU_SECURE_RETIRED_KEY_FILES` 用于轮换后的旧记录读取。Windows 使用当前用户 DPAPI，不读取 Linux 密钥文件。
+`create_key_file()` 拒绝覆盖已有文件，父目录不存在时以 `0700` 创建；文件必须是当前用户所有、`0600`、普通文件且不是符号链接。缺少密钥时相关写入被拒绝（`SECURE_KEY_NOT_CONFIGURED`）；格式或权限不符得到 `SECURE_KEY_FORMAT` 或权限错误。程序不会自动生成密钥，也不会退化为明文。`THU_SECURE_BACKEND` 选择提供者，`THU_SECURE_RETIRED_KEY_FILES` 用于轮换后的旧记录读取。Windows 使用当前用户 DPAPI，不读取 Linux 密钥文件。
 
 ## 安装来源与能力边界
 
@@ -63,7 +67,7 @@ export THU_SECURE_DATA_DIR=/absolute/user/state              # 与密钥文件�
 | Python wheel / sdist | Python 包、静态服务目录、兼容命令，以及打包进 `thu_assistant/_bundled/` 的 Windows 认证辅助、固定上游 Proxy 与许可证 | 可做静态目录、库调用和认证辅助解析；`node_modules` 与离线测试不在包内，需要时自行 `npm ci --ignore-scripts`；安装后用 `openthu-doctor` 自检 |
 | 云端离线开发检出 | 完整源码、Python、Node.js 24、Chromium | 可运行 `doctor` / `check` / `smoke` / `test`；不访问校园账户，不保存或导入 Windows 凭据 |
 
-wheel 与源码包的差别只在 `node_modules`、离线测试和开发脚本；认证辅助与固定上游代码由同一份 `build_support/distribution.json` 生成，不再各自维护一份。`doctor` 的 `release-layout` 检查会核对程序版本与包内资源配置是否配套，混装旧版本会直接阻止启动。
+运行时功能差异主要是 `node_modules`、离线测试和开发脚本；wheel 用 `thu_assistant/_bundled/` 携带认证辅助与固定上游代码，不包含 `docs/`、`plans/`、`contracts/`、`tests/`、`scripts/` 和顶层 `vendor/`/`runtime/` 等源码树资料。`doctor` 的 `release-layout` 检查会核对程序版本与包内资源配置是否配套，混装旧版本会直接阻止启动。
 
 ## 云端开发
 

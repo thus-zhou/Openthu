@@ -44,7 +44,7 @@ python scripts/dev.py doctor
 `python scripts/dev.py doctor` 按 `development`、`readonly`、`browser`、`production-auth`、`packaging`、`config` 分类检查。条目状态为“通过 / 警告 / 失败 / 不适用”，只有标记为阻塞的失败才阻止开始：
 
 - Linux 上 `production-auth` 为“不适用”，不会因为缺少 Windows 辅助而把合法安装判成损坏。
-- 缺少 Chromium 只影响浏览器能力，静态目录、只读查询和命令行仍可用。
+- 缺少 Chromium 只影响浏览器能力，静态目录、只读查询和命令行仍可用；但离线全量测试中的真实浏览器用例需要 Chromium，未安装时 `python scripts/dev.py test` 不会通过。
 - 未安装 `pytest`、`build`、`playwright` 或 `openthu` 会使 `development` 阻塞，按输出的修复命令安装。
 - 显式配置无效时用 `--config PATH` 重新指定，不会静默回退到旧目录或另一账号。
 
@@ -56,14 +56,20 @@ python scripts/dev.py doctor
 | 无桌面 Linux | 仅本地加密存储：外部密钥文件 `0600`、与数据目录分离；缺少密钥时拒绝写入，不生成密钥、不退化为明文 | 离线开发、合成测试、静态目录、本地派生读取、看板 API；**没有生产级校园登录** |
 | 云端开发机 | 与 Linux 相同，且不应导入任何人的 Windows 凭据 | 开发、检查、测试；不访问校园账户 |
 
-Windows 首次认证按官方流程完成，需要再次 MFA 时会明确返回，不会索要或输出密码。Linux 的生产登录没有实现，不能用“明文 Cookie”或“把 DPAPI 文件复制过来”绕过；跨平台复制的密文只会得到 `UNSUPPORTED_PLATFORM`。
+Windows 首次认证按官方流程完成，需要再次 MFA 时会明确返回，不会索要或输出密码。Linux 的生产登录没有实现，不能用“明文 Cookie”或“把 DPAPI 文件复制过来”绕过。跨平台复制时，迁移预览把 `.dpapi` 密文标为 `UNSUPPORTED_PLATFORM`；如果用 `LegacyDpapiReader` 在当前平台直接读取，运行时会得到 `SECURE_LEGACY_UNAVAILABLE`。两个标记都不是成功，需要重新认证。
 
-Linux 本地加密存储使用以下环境变量，密钥文件必须由使用者自己创建并保管：
+Linux 本地加密存储使用以下环境变量。密钥文件不是任意 32 字节随机文件：它必须包含 `THU-KEY-1\0` 文件头和 32 字节随机主密钥，权限 `0600`。用模块提供的 `create_key_file()` 创建，不能手工写随机字节：
 
 ```sh
-export THU_SECURE_KEY_FILE=/absolute/owner-only/master.key   # 0600，普通文件，不是符号链接
-export THU_SECURE_DATA_DIR=/absolute/user/state              # 与密钥文件分离
+python - <<'PY'
+from thu_assistant.secure_store import create_key_file
+create_key_file("/absolute/owner-only/master.key", "file-key")
+PY
+export THU_SECURE_KEY_FILE=/absolute/owner-only/master.key
+export THU_SECURE_DATA_DIR=/absolute/user/state
 ```
+
+`create_key_file()` 拒绝覆盖已有文件，父目录不存在时以 `0700` 创建，随后仍然要求密钥文件是当前用户所有、`0600`、普通文件且不是符号链接。格式或权限不符时得到 `SECURE_KEY_FORMAT` 或权限错误，不会自动修复。
 
 `THU_SECURE_BACKEND` 选择提供者；`THU_SECURE_RETIRED_KEY_FILES` 用于轮换后的旧记录读取。把密钥放在数据目录内、放宽权限或使用符号链接都会被拒绝。密钥和状态目录不要提交到 Git，也不要贴到聊天或 Issue。
 
@@ -112,7 +118,7 @@ openthu dashboard --port 8765             # 常驻；先打印地址与实例号
 - 只允许回环地址：`127.0.0.1`、`localhost`、`::1`。公网绑定会被拒绝。
 - 只提供只读路由：`/api/v1/health`、`/services`、`/services/{id}`、`/query/{service}/{operation}`、`/todos`、`/calendar`、`/resources`。没有写入、付款、密钥配置或模型生成入口。
 - 本地会话由实例以 `0600` 文件交付一次性引导令牌；直接用 `curl`（不带令牌）会得到 `LOCAL_API_SESSION_REQUIRED`，这不是学校登录失败。浏览器外壳负责完成这一步；没有外壳时先用 JSON 路由。
-- 静态 HTML 外壳随看板模块安装；没有安装外壳时 `/` 返回 `LOCAL_API_UI_NOT_INSTALLED`，JSON 路由仍可用，`--check` 也不受影响。
+- 静态 HTML 外壳由同批 7.1 提供，还需要 8.1 把 `static_dir` 接到 CLI；在接线完成前，`openthu dashboard` 只提供 JSON API，`/` 返回 `LOCAL_API_UI_NOT_INSTALLED`，JSON 路由与 `--check` 不受影响。
 - 工程限制：请求体 64 KiB、默认每页 50（上限 200）、UI 等待 30 秒、同一读取刷新最短间隔 10 秒、最多 16 个本地会话。它们是工程边界，不是学校规定。
 
 `--check` 的已验证输出（端口由系统分配）：
@@ -153,7 +159,7 @@ openthu dashboard --port 8765             # 常驻；先打印地址与实例号
 
 资料中心把课程文件、公告附件和作业附件汇总成一个按账号与学期隔离的本地加密索引，支持跨课程检索、批量预览下载和 JSON 摘要导出。它不解析 PDF、图片、Office 或录音内容；全文检索只覆盖已经读取的公告正文与作业说明，正文被截断时标为 `body_truncated`，检索结果为 `PARTIAL`。
 
-当前公共入口状态：CLI、MCP 和默认看板**没有注入资料库提供者**。`local.resources` 登记为 `MISSING / RESOURCE_PROVIDER_UNAVAILABLE`，看板 `/api/v1/resources` 返回同样的缺口，而不是空列表。宿主可以注入提供者后调用 Python API：
+当前公共入口状态：CLI、MCP 和默认看板**没有注入资料库提供者**。`local.resources` 登记为 `MISSING`（原因 `RESOURCE_PROVIDER_UNAVAILABLE`，证据 `LOCAL_INDEX_READ`）。看板 `/api/v1/resources` 不带 `semester` 时返回 `status=ERROR`、`warnings=["SEMESTER_REQUIRED"]`、`error.code=INVALID_ARGUMENT_VALUE`；带 `semester` 但未注入提供者时返回 `status=ERROR`、`error.code=FACADE_CAPABILITY_UNAVAILABLE`，不是空列表，也不是 502。宿主可以注入提供者后调用 Python API：
 
 ```python
 from thu_assistant.resources import ResourceCenter
@@ -195,6 +201,7 @@ openthu agenda --services learn,library --semester 2026-2027-1
 openthu query --service local --operation agenda --parameters '{
   "start_date":"2026-11-17","end_date":"2026-11-23",
   "services":["learn.assignments","library.loans"],
+  "semester":"2026-2027-1",
   "include_completed":false,"include_overdue":true,"allow_stale":false,
   "max_source_pages":3}'
 ```
@@ -242,14 +249,18 @@ openthu agenda --export /absolute/user/calendar.json --format json --allow-parti
 
 ## 5. 图片输入
 
-`model_chat` 接受 `images` 媒体引用数组，但必须同时满足：媒体已按 3.3 登记、引用未过期、内容签名与声明一致、平台协议已登记。工程上限为单图 8 MiB、每次 4 图、合计 16 MiB、单图 1600 万像素，类型只接受 JPEG、PNG、WebP；平台契约更严格时取较小值。
+`model_chat` 接受 `images` 媒体引用数组，但必须同时满足：媒体已按 3.3 登记、引用未过期、内容签名与声明一致、平台协议已登记。`images` 的每一项是对象 `{"media_id": "media_<8-64 位字母数字或下划线/连字符>"}`，不是路径、URL 或 `media:IMG:...` 字符串；带图片时还必须显式给 `model`，否则返回 `MODEL_REQUIRED_FOR_IMAGE_INPUT`。工程上限为单图 8 MiB、每次 4 图、合计 16 MiB、单图 1600 万像素，类型只接受 JPEG、PNG、WebP；平台契约更严格时取较小值。
 
-当前出厂状态：协议注册表为空，公共路径会在读取图片或发出请求之前失败。看板与 `describe` 显示 `MODEL_IMAGE_INPUT_UNAVAILABLE`，Python 路径返回 `MODEL_IMAGE_PROTOCOL_UNVERIFIED`。目录中的 `supportImage` 标注只是官方目录标记，不构成传输证据。
+当前出厂状态：公共 `model_chat` 路径没有注入媒体管道，图片请求在读取字节或发出请求之前返回 `MODEL_IMAGE_INPUT_UNAVAILABLE`；只有宿主注入媒体管道、但协议注册表仍为空时才返回 `MODEL_IMAGE_PROTOCOL_UNVERIFIED`。看板与 `describe` 把 `local.model_image_input` 标为 `BLOCKED`，原因是 `MODEL_IMAGE_INPUT_UNAVAILABLE`。目录中的 `supportImage` 标注只是官方目录标记，不构成传输证据。
 
 ```json
 {"tool": "model_chat",
- "arguments": {"prompt": "解释这张合成示意图", "images": ["media:IMG:synthetic-0001"]}}
+ "arguments": {"model": "synthetic-model",
+               "prompt": "解释这张合成示意图",
+               "images": [{"media_id": "media_synthetic0001"}]}}
 ```
+
+`model` 必须来自 `list_models` 返回的目录；`media_synthetic0001` 是合成引用，真实调用必须使用本地媒体登记返回的 `media_id`。
 
 规则：
 
@@ -269,6 +280,8 @@ openthu agenda --export /absolute/user/calendar.json --format json --allow-parti
 | `FORBIDDEN` | 账号无该权限 | 不换账号、不绕过 |
 | `RATE_LIMITED` | 请求过快 | 等待后重试只读 |
 | `SECURE_KEY_NOT_CONFIGURED` | 本机没有可用加密存储 | 配置 `THU_SECURE_KEY_FILE`/`THU_SECURE_DATA_DIR`，不要用明文替代 |
+| `SECURE_KEY_FORMAT` | 密钥文件缺少 `THU-KEY-1` 文件头、长度不符或权限不对 | 用 `create_key_file()` 重建；不要手工写 32 字节随机数据 |
+| `SECURE_LEGACY_UNAVAILABLE` | 当前平台不能读取旧 Windows DPAPI 密文 | 回到原来的 Windows 账户重新认证；迁移预览会把它标为 `UNSUPPORTED_PLATFORM` |
 | `LOCAL_API_SESSION_REQUIRED` | 看板请求没有本地会话 | 用实例提供的地址在浏览器打开，不是重新登录学校 |
 | `ADAPTER_REQUIRED` | 没有登记的站点契约 | 在官方页面完成，或等待适配 |
 | `BLOCKED_SOURCE_EVIDENCE` | 来源证据不足 | 保持只读，不猜接口 |
