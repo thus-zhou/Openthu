@@ -309,7 +309,7 @@
       "module_status": {
         "6.1": "accepted",
         "6.2": "accepted",
-        "6.3": "pending"
+        "6.3": "accepted"
       },
       "status": "ready",
       "integration_commit": null,
@@ -326,9 +326,14 @@
           "accepted_at": "2026-11-17",
           "delivery_commit": "198aeb1",
           "evidence": "audit 6.2-audit P0=0/P1=3/P2=16 closed or explicitly scoped; 162 module tests, 57 related regression; 18 audit probes re-run; check 505 files/0 findings; Linux Python 1430/7, Node 66; 0 live calls."
+        },
+        "6.3": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "6f5df604aa21c56229663576353737a72945efec",
+          "evidence": "audit 6.3-audit P0=0/P1=7/P2=14 closed; 49 module tests; deterministic candidate build; verify binds HEAD and checks wheel metadata/entry points/licences/bundled hashes; install-check outside the repository with 29 tools and unchanged user state; 0 live calls."
         }
       },
-      "gate_note": "6.1 accepted at aee2559 and 6.2 accepted at 198aeb1 after their module audits; 6.3 is still pending, so batch 6 remains ready."
+      "gate_note": "6.1 accepted at aee2559, 6.2 at 198aeb1 and 6.3 at 6f5df60 after their module audits. All three module branches are merged into the integration branch and the S1-S4 seams are fixed; the batch acceptance record (integration commit, batch-level checks and CI) is written in the follow-up ledger commit."
     },
     {
       "batch": 7,
@@ -380,5 +385,5 @@
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     }
   ],
-  "gate_note": "Batches 1-5 accepted and reconnected. Batch 6 is ready: 6.1 accepted at aee2559 and 6.2 accepted at 198aeb1 after their module audits; 6.3 still pending. No batch is complete beyond batch 5."
+  "gate_note": "Batches 1-5 accepted and reconnected. Batch 6 is ready: 6.1, 6.2 and 6.3 are accepted and merged into the integration branch with the S1-S4 seams fixed; the batch acceptance record follows in the next ledger commit. No batch is complete beyond batch 5."
 }

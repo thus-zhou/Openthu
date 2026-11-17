@@ -841,9 +841,21 @@
       ],
       "integration_order": 17,
       "status": "accepted",
-      "delivery_commit": "aee2559",
+      "delivery_commit": "aee255924fe58743221ad9830f7f2d70efb3622a",
       "accepted_at": "2026-11-17",
-      "audit_fix": "6.1-audit P0=0/P1=8/P2=15"
+      "audit_fix": "6.1-audit P0=0/P1=8/P2=15",
+      "evidence": [
+        "68 module tests (test_facade 37, test_cli 8, test_facade_audit 23) and 370 related regression tests at aee2559",
+        "check 504 files/0 findings; Linux Python 1336/7, Node 66; 0 live campus/model/business calls",
+        "audit 6.1-audit P0=0, eight P1 and fifteen P2 fixed or explicitly downgraded; probes re-run"
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/queries.py (3.2): adds the local pseudo-service registration and dispatch; the existing query registry, schemas and pagination are unchanged.",
+        "src/thu_assistant/mcp_stdio.py (3.1/4.5/5.1): handlers route through the facade; the 29 tool names, inputs and the legacy result fields are unchanged.",
+        "contracts/v0.2/error-classification.json and src/thu_assistant/source_state.py (1.1): 13 additive codes (7 facade, 5 provider gaps, 1 dashboard), mirrored in both files.",
+        "contracts/v0.2/local-read-api.schema.json (1.1): /resources documents the semester parameter as a compatible x-revisions entry.",
+        "README.md (7.3): CLI subcommand, output field and error-shape migration section; 7.3 owns the final user manual."
+      ]
     },
     {
       "id": "6.2",
@@ -876,9 +888,19 @@
       ],
       "integration_order": 18,
       "status": "accepted",
-      "delivery_commit": "198aeb1",
+      "delivery_commit": "198aeb19c4d0105a0726d51490a5ac9ee936e8c0",
       "accepted_at": "2026-11-17",
-      "audit_fix": "6.2-audit P0=0/P1=3/P2=16"
+      "audit_fix": "6.2-audit P0=0/P1=3/P2=16",
+      "evidence": [
+        "162 module tests and 57 related regression tests at 198aeb1",
+        "check 505 files/0 findings; Linux Python 1430/7, Node 66; 18 audit probes re-run; 0 live calls",
+        "audit 6.2-audit P0=0, three P1 and sixteen P2 fixed or explicitly scoped"
+      ],
+      "cross_module_handoffs": [
+        "contracts/v0.2/error-classification.json and src/thu_assistant/source_state.py (1.1): 32 additive LOCAL_API_* codes placed before the 6.1 block so the two batches merge without a tail conflict.",
+        "src/thu_assistant/local_api/contract.py (6.2): /resources accepts the semester that 6.1's additive contract revision documents; the other six routes keep the frozen argument lists.",
+        "src/thu_assistant/local_api/facade.py (6.2): the consumer protocol gained semester on resources at the batch-6 seam; 6.1 implements it."
+      ]
     },
     {
       "id": "6.3",
@@ -889,10 +911,25 @@
       "exclusive_paths": [
         "pyproject.toml",
         "MANIFEST.in",
+        "requirements.txt",
         "requirements-dev.txt",
-        "scripts/package.py",
-        "scripts/generate_config.py",
-        "tests/test_distribution.py"
+        "setup.py",
+        "build_support/",
+        "scripts/package_release.py",
+        "scripts/migrate_state.py",
+        "scripts/configure_mcp.py",
+        "scripts/dev_diagnostics.py",
+        "src/thu_assistant/version.py",
+        "src/thu_assistant/upgrade.py",
+        "src/thu_assistant/doctor.py",
+        "src/thu_assistant/paths.py",
+        "src/thu_assistant/gateway_client.py",
+        "src/thu_assistant/gateway.js",
+        "src/learn_assistant/__init__.py",
+        "src/learn_assistant/mcp_stdio.py",
+        ".github/workflows/ci.yml",
+        "tests/test_distribution.py",
+        "tests/test_upgrade.py"
       ],
       "input_contracts": [
         "compatibility-baseline-v1",
@@ -913,7 +950,23 @@
         "完整发行布局、依赖锁、配置生成、安装升级迁移和候选包"
       ],
       "integration_order": 19,
-      "status": "pending"
+      "status": "accepted",
+      "delivery_commit": "6f5df604aa21c56229663576353737a72945efec",
+      "accepted_at": "2026-11-17",
+      "audit_fix": "6.3-audit P0=0/P1=7/P2=14",
+      "evidence": [
+        "49 module tests (test_distribution 33, test_upgrade 16) at 6f5df60; full offline suite green on both platforms",
+        "candidate build is deterministic: two builds produce byte-identical source zip/tar, wheel and sdist; verify binds the artifact to HEAD and checks wheel metadata, entry points, licences and bundled hashes",
+        "install-check installs the wheel outside the repository, resolves only bundled resources, starts 29 MCP tools and leaves the synthetic user state unchanged",
+        "audit 6.3-audit P0=0, seven P1 and fourteen P2 fixed; migration refuses unsupported DPAPI copies, path traversal and program-directory targets"
+      ],
+      "cross_module_handoffs": [
+        "pyproject.toml, MANIFEST.in, requirements-dev.txt (1.1/2.2): 6.3 owns the final dependency, packaging and licence layout; the cryptography pin and jsonschema dev pin are preserved.",
+        "scripts/dev_diagnostics.py and src/thu_assistant/paths.py (2.1): 6.3 adds the installed layout, the blocking source-package check and 3.12/3.13 wording; existing check ids keep their meaning.",
+        "src/thu_assistant/gateway_client.py and gateway.js (3.1): 6.3 adds bundled resource resolution (THU_ACCESS_HELPER, THU_MADMODEL_DIR); the gateway protocol and session handling are unchanged.",
+        "src/learn_assistant/__init__.py and mcp_stdio.py (3.1): both MCP servers now report the single product version from thu_assistant.version.",
+        ".github/workflows/ci.yml (7.2): 6.3 adds the Linux 3.13 job; 7.2 owns the final regression workflow."
+      ]
     },
     {
       "id": "7.1",
