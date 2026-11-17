@@ -301,6 +301,7 @@
     "Offline synthetic verification only: no real seat, room or renewal read or write was performed.",
     "Renewal execution is BLOCKED_SOURCE_EVIDENCE: the source registry marks library.renewal PARTIAL and no verified request endpoint exists. The registered renew_loan contract is enabled=false; production can only produce an official-page handoff.",
     "6.1 must register RenewalAction on ('library','renew_loan'); until then the operation reports SOURCE_CONTRACT_UNVERIFIED without an adapter.",
+    "The leaked path was removed from the branch refs by rewriting the two unpublished record commits; hosting-side unreferenced objects may persist until GitHub garbage-collects them.",
     "The Service Worker fix is at the transport level (an unobserved fetch is UNKNOWN). Setting service_workers='block' on the library browser context and adding a history privacy scan remain requests to 4.4/2.1.",
     "Renewal binds the Primo loan record id; the active-loan read does not expose a separate copy/item id.",
     "Pending seat/room plans created before this module persist a business object without precheck_summary, so they re-prepare instead of executing; they fail closed and no write is replayed.",
