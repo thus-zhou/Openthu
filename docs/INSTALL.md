@@ -1,5 +1,7 @@
 # 安装与配置
 
+本页覆盖安装、诊断、配置来源与运行边界。第一次使用请按[用户手册](USER_GUIDE.md)的顺序操作；升级、迁移与回退见[升级与回退](UPGRADE.md)。
+
 ## 首次安装诊断
 
 完成依赖安装后，先运行：
@@ -44,6 +46,15 @@ python scripts/dev.py doctor
 
 `storage.state_dir`、`download_dir`、`temp_dir`、`log_dir` 必须是绝对路径，支持 `~` 展开并会规范化。它们不能位于源码包、安装包资源、`.git` 或状态目录的 `keys/`、`keyrings/`、`secrets/`、`credentials/` 之下；相对路径会被拒绝。默认状态目录在代码库之外；迁移只提供旧位置到新位置的预览，本模块不搬移真实会话或凭据。旧 Windows DPAPI 记录仍由后续认证模块按原格式读取，不因路径变更自动迁移。
 
+Linux 的本地加密存储需要独立的外部密钥文件，不能把密钥放进数据目录：
+
+```sh
+export THU_SECURE_KEY_FILE=/absolute/owner-only/master.key   # 0600，普通文件，不是符号链接
+export THU_SECURE_DATA_DIR=/absolute/user/state              # 与密钥文件分离
+```
+
+缺少密钥时相关写入被拒绝（`SECURE_KEY_NOT_CONFIGURED`），程序不会自动生成密钥，也不会退化为明文。`THU_SECURE_BACKEND` 选择提供者，`THU_SECURE_RETIRED_KEY_FILES` 用于轮换后的旧记录读取。Windows 使用当前用户 DPAPI，不读取 Linux 密钥文件。
+
 ## 安装来源与能力边界
 
 | 来源 | 内容 | 能做什么 / 不能做什么 |
@@ -69,8 +80,9 @@ Node 依赖默认从官方 npm registry 安装，版本和完整性哈希由锁�
 1. 同样安装 Python/Node 依赖和 Chromium，运行 `python scripts/dev.py doctor` 确认 Windows 认证辅助与依赖就位。`doctor` 通过只代表文件可用，不代表已登录或已取得业务权限。保持所有认证文件在版本库之外的用户状态目录。
 2. 先阅读 `vendor/madmodel-proxy/README.md`，按该公开上游项目的官方流程在本机建立自己的认证。可使用单独安装的同版本上游，并通过 `THU_MADMODEL_DIR` 指定其代码目录。不要把密码或 Cookie 贴到 AI 聊天中。
 3. 使用 `python scripts/configure_mcp.py --output .local/mcp.json` 生成当前机器专用 MCP 配置；该输出被 Git 忽略。客户端导入生成的配置，或使用 `openthu-mcp` 命令。
-4. 第一次业务读取按官方登录/MFA 流程完成。模型调用使用使用者自己的学校额度。当前 Linux 实时认证会明确返回 Windows 加密依赖错误。
+4. 第一次业务读取按官方登录/MFA 流程完成。模型调用使用使用者自己的学校额度。Linux 没有生产校园登录，实时认证会返回 Windows 加密依赖错误；Linux 的外部密钥只用于本地状态加密，不能替代校园会话。
 5. 先查状态和只读结果，再进行有明确具体授权的业务。预约和取消的真实验收状态见能力矩阵。
+6. 安装后最小核对：`openthu-doctor`（或 `python scripts/dev.py doctor`）、`openthu health`、`openthu describe --service library`、`openthu dashboard --check`。`health` 的 `PARTIAL` 表示有已登记但被阻塞的操作，不是安装失败。
 
 生成器默认使用当前 Python、可找到的 Node 与仓库中的辅助程序；不读取旧安装配置或复制凭据。正式运行与离线测试使用不同的状态目录。更换代码、回退版本时保留未决加密事务及能读取它们的运行环境。
 
