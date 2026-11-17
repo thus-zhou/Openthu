@@ -1,6 +1,7 @@
 include README.md LICENSE THIRD_PARTY.md CHANGELOG.md AGENTS.md
 include ACTION-FRAMEWORK.md LEARN-READ.md requirements-dev.txt provenance.json
 recursive-include src *.py *.js *.json *.txt LICENSE
+include src/thu_assistant/consent/README.md
 recursive-include runtime *.py *.js
 recursive-include vendor *.js *.json *.md *.txt LICENSE
 recursive-include scripts *.py

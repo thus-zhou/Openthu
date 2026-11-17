@@ -33,9 +33,15 @@ class ActionStore:
         return self.root/(operation_id+'.dpapi')
     @contextmanager
     def lock(self,name):
-        self.root.mkdir(parents=True,exist_ok=True)
-        file=open(self.root/(name+'.lock'),'a+b');file.seek(0,2)
-        if not file.tell():file.write(b'0');file.flush()
+        try:self.root.mkdir(parents=True,exist_ok=True)
+        except OSError:raise CampusError('STATE_WRITE_FAILED') from None
+        try:file=open(self.root/(name+'.lock'),'a+b')
+        except OSError:raise CampusError('STATE_WRITE_FAILED') from None
+        try:
+            file.seek(0,2)
+            if not file.tell():file.write(b'0');file.flush()
+        except OSError:
+            file.close();raise CampusError('STATE_WRITE_FAILED') from None
         deadline=time.monotonic()+3;held=False
         try:
             while not held:
@@ -61,6 +67,7 @@ class ActionStore:
     def read(self,oid):
         try:blob=self.path(oid).read_bytes()
         except FileNotFoundError:raise CampusError('ACTION_NOT_FOUND') from None
+        except OSError:raise CampusError('STATE_READ_FAILED') from None
         if not blob.startswith(b'THU-ACTION-1\0'):raise CampusError('ACTION_LOG_CORRUPT')
         try:raw=self.unprotect(blob[len(b'THU-ACTION-1\0'):])
         except Exception:raise CampusError('ACTION_LOG_DECRYPT_FAILED') from None
@@ -79,7 +86,9 @@ class ActionStore:
             raise CampusError('ACTION_LOG_CORRUPT')
         return record
     def write(self,record):
-        target=self.path(record['operation_id']);self.root.mkdir(parents=True,exist_ok=True)
+        target=self.path(record['operation_id'])
+        try:self.root.mkdir(parents=True,exist_ok=True)
+        except OSError:raise CampusError('STATE_WRITE_FAILED') from None
         try:blob=self.protect(json.dumps(record,ensure_ascii=False,sort_keys=True).encode())
         except Exception:raise CampusError('ACTION_LOG_ENCRYPT_FAILED') from None
         if not blob:raise CampusError('ACTION_LOG_ENCRYPT_FAILED')
@@ -87,7 +96,10 @@ class ActionStore:
         try:
             with open(temporary,'xb') as f:f.write(b'THU-ACTION-1\0'+blob);f.flush();os.fsync(f.fileno())
             os.replace(temporary,target)
-        finally:temporary.unlink(missing_ok=True)
+        except OSError:raise CampusError('STATE_WRITE_FAILED') from None
+        finally:
+            try:temporary.unlink(missing_ok=True)
+            except OSError:pass
     def create(self,record):
         with self.lock('index'):
             for file in self.root.glob('*.dpapi'):

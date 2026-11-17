@@ -26,16 +26,23 @@
 ## 签发路径
 
 - 通用本机入口：在拥有受保护状态的机器上，从真实终端运行
-  `python -m thu_assistant.consent --plan <operation_id>`。命令显示计划业务字段，
-  只有输入大写的 `CONFIRM` 才签发；没有交互终端时返回
-  `SPECIFIC_HUMAN_AUTHORIZATION_REQUIRED`，不生成任何授权。MCP 参数、网页文本、
-  模型输出和普通环境变量都不能驱动该命令。
-- Windows 现有确认：`sports_actions.native_grant` 仍使用系统消息框，只有本机人工
-  点击“是”才返回确认。该回调目前是兼容的进程内确认，尚未迁移为签名授权；
-  5.2 接入时应改为 `HostConsent.issue_for(record)`，从而同时绑定挑战值。
+  `python -m thu_assistant.consent --plan <operation_id>`。命令逐项显示计划中的
+  **全部业务字段**（包括座位/房间/场地/场次编号）和业务摘要前 12 位，只有输入大写的
+  `CONFIRM` 才签发；没有交互终端时返回 `SPECIFIC_HUMAN_AUTHORIZATION_REQUIRED`，
+  不生成任何授权。MCP 参数、网页文本、模型输出和普通环境变量都不能驱动该命令。
+- Windows 现有确认：`sports_actions.native_grant` 仍使用系统消息框。点击“是”返回的
+  旧式确认字典会在引擎内被规范化为带挑战值的签名授权后才落盘；点击“否”是明确的
+  拒绝，会否决并删除此前用 CLI 签发的待用授权。引擎按定义模块和函数名识别这个
+  原生回调；其他确认回调必须返回 `consent.DECLINED` 或
+  `consent.NOT_APPLICABLE`。返回 `None` 视为“没有证据”：本次调用拒绝，待用授权
+  保留，既不会被当作拒绝，也不会被使用。
+  5.2 可直接改为 `HostConsent.issue_for(record)`，但生产语义已不再依赖旧字典。
 - 授权文件以 `THU-CONSENT-1` 容器 + 与事务日志相同的保护函数加密；宿主密钥
   以 `THU-CONSENT-KEY-1` 容器保存，POSIX 权限 0600，缺失时失败关闭。
-  读取授权文件后立即删除，因此同一授权只能使用一次。
+  `peek` 只读校验，预检成功后才用 `take` 消费；读取后立即删除，因此同一授权只能
+  使用一次。拒绝、计划失效或进程内确认成功后都会清理遗留授权。
+- 默认布局：`<state>/actions-v1` 的宿主授权在同级的 `<state>/consent-v1`；其他根
+  （测试或显式 `--state-dir`）的授权放在该根内的 `consent-v1`，不同根不共享宿主密钥。
 
 ## 拒绝语义
 
@@ -44,8 +51,11 @@
 | 没有授权 / 签名无效 / 计划或摘要或挑战值不匹配 | `TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED`，计划保持 `PREPARED` |
 | 另一账号 | `ACTION_ACCOUNT_MISMATCH` |
 | 适配器版本变化 | `ACTION_ADAPTER_CHANGED` |
-| 计划或授权到期 | `ACTION_PLAN_EXPIRED`，计划进入 `FAILED`（预检前） |
+| 计划到期 | `ACTION_PLAN_EXPIRED`，计划进入 `FAILED` |
+| 仅授权到期、计划未到期 | `ACTION_PLAN_EXPIRED`，计划保持 `PREPARED`，可重新本机确认 |
+| 明确拒绝 | `SPECIFIC_HUMAN_AUTHORIZATION_REQUIRED`，删除待用授权，计划保持 `PREPARED` |
 | 授权文件损坏 | `ACTION_LOG_CORRUPT`；解密失败 | `ACTION_LOG_DECRYPT_FAILED` |
+| 本地存储读写失败 | `STATE_READ_FAILED` / `STATE_WRITE_FAILED` |
 | 并发执行时未抢到一次性授权 | 安全失败；先到者最多派发一次，重复调用应查询结果 |
 
 错误、公开结果和 URL 只含错误类别，不含授权值、业务原值、签名或挑战值。
@@ -54,8 +64,8 @@
 
 | 状态 | 进入条件 | 授权 | 远端写入 |
 |---|---|---|---|
-| `PREPARED` | 业务字段完整且有已登记适配器 | 未消费 | 无 |
-| `NEEDS_USER_ACTION` | 缺字段或没有适配器 | 不适用 | 无 |
+| `PREPARED` | 业务字段完整；`reason=ADAPTER_REQUIRED` 表示尚无适配器、不能执行 | 未消费 | 无 |
+| `NEEDS_USER_ACTION` | 缺必需业务字段 | 不适用 | 无 |
 | `AWAITING_OFFICIAL` | 预检把步骤交给官方页面，未发请求 | 仅记录，供人工办理 | 无 |
 | `DISPATCHING` | 原子写入授权、派发意图和进程号后 | 已消费 | 可能已开始 |
 | `UNKNOWN` | 派发无可靠结果，或核对不能唯一匹配 | 已消费 | 未知 |

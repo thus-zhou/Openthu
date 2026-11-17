@@ -1,4 +1,4 @@
-"""Protected storage for the consent host key and one pending signed grant.
+"""Protected storage for the consent host key and pending signed grants.
 
 Both files use the same protection callable as the action journal
 (``ActionStore.protect`` / ``unprotect``): a 2.2 secure-store envelope when a
@@ -7,7 +7,8 @@ never downgrades to plaintext.
 
 The grant file is named by the plan id and is removed when it is taken.  A
 grant is therefore single-use even if two processes race: only the process
-that wins the local lock receives the file.
+that wins the local lock receives the file.  ``peek`` reads without consuming
+so a transient preflight failure does not destroy the human confirmation.
 """
 from __future__ import annotations
 
@@ -31,7 +32,10 @@ def _write_private(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
-    descriptor = os.open(str(temporary), flags, 0o600)
+    try:
+        descriptor = os.open(str(temporary), flags, 0o600)
+    except OSError:
+        raise CampusError("STATE_WRITE_FAILED") from None
     try:
         try:
             view = memoryview(data)
@@ -44,6 +48,8 @@ def _write_private(path: Path, data: bytes) -> None:
         finally:
             os.close(descriptor)
         os.replace(str(temporary), str(path))
+    except OSError:
+        raise CampusError("STATE_WRITE_FAILED") from None
     finally:
         try:
             temporary.unlink()
@@ -59,7 +65,21 @@ class HostConsent:
             from ..action_store import ActionStore
             store = ActionStore()
         self.store = store
-        self.root = Path(root) if root is not None else Path(store.root).parent / _DIRECTORY
+        self.root = Path(root) if root is not None else self._default_root(store)
+
+    @staticmethod
+    def _default_root(store) -> Path:
+        """Keep the production layout, isolate custom and test roots.
+
+        The default journal root is ``<state>/actions-v1`` and the host
+        authority lives beside it in ``<state>/consent-v1``.  Any other root
+        (tests, an explicit CLI ``--state-dir``) keeps its consent state inside
+        that root, so two stores with different roots never share a host key.
+        """
+        root = Path(store.root)
+        if root.name == "actions-v1":
+            return root.parent / _DIRECTORY
+        return root / _DIRECTORY
 
     # The journal's protection callable is authoritative and may be replaced by
     # an explicit test codec after construction; read it dynamically.
@@ -84,7 +104,10 @@ class HostConsent:
         path = self.key_path()
         if path.is_symlink():
             raise CampusError("ACTION_LOG_CORRUPT")
-        raw = path.read_bytes()
+        try:
+            raw = path.read_bytes()
+        except OSError:
+            raise CampusError("STATE_READ_FAILED") from None
         if not raw.startswith(KEY_MAGIC):
             raise CampusError("ACTION_LOG_CORRUPT")
         key = self.unprotect(raw[len(KEY_MAGIC):])
@@ -107,7 +130,10 @@ class HostConsent:
         with self.store.lock("consent-key"):
             if path.exists():
                 return self._read_key_file()
-            self.root.mkdir(parents=True, exist_ok=True)
+            try:
+                self.root.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                raise CampusError("STATE_WRITE_FAILED") from None
             key = secrets.token_bytes(KEY_BYTES)
             blob = self.protect(key)
             if not blob:
@@ -121,13 +147,43 @@ class HostConsent:
                 raise CampusError("ACTION_LOG_ENCRYPT_FAILED")
             return key
 
-    def issue_for(self, record: dict, *, now: float | None = None, ttl_seconds: int = 300) -> dict:
+    def issue_for(self, record: dict, *, now: float | None = None, ttl_seconds: int = 300, reference: str | None = None) -> dict:
         key = self.key(create=True)
         if key is None:
             raise CampusError("TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED")
-        return protocol.issue(record, key, now=time.time() if now is None else now, ttl_seconds=ttl_seconds)
+        return protocol.issue(
+            record,
+            key,
+            now=time.time() if now is None else now,
+            ttl_seconds=ttl_seconds,
+            reference=reference,
+        )
 
-    def put(self, record: dict, grant: dict) -> None:
+    def _read_grant(self, path: Path) -> dict:
+        try:
+            blob = path.read_bytes()
+        except OSError:
+            raise CampusError("STATE_READ_FAILED") from None
+        if not blob.startswith(GRANT_MAGIC):
+            raise CampusError("ACTION_LOG_CORRUPT")
+        plaintext = self.unprotect(blob[len(GRANT_MAGIC):])
+        if plaintext is None:
+            raise CampusError("ACTION_LOG_DECRYPT_FAILED")
+        try:
+            grant = json.loads(plaintext)
+        except (TypeError, ValueError, UnicodeDecodeError):
+            raise CampusError("ACTION_LOG_CORRUPT") from None
+        return grant
+
+    def _verify(self, grant, record, now) -> dict:
+        key = self.key()
+        if key is None:
+            raise CampusError("TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED")
+        protocol.verify(grant, record, key, now=time.time() if now is None else now)
+        return grant
+
+    def put(self, record: dict, grant: dict) -> bool:
+        """Store one pending grant; returns True when an older grant was replaced."""
         if not isinstance(grant, dict) or grant.get("version") != protocol.VERSION:
             raise CampusError("TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED")
         try:
@@ -137,7 +193,18 @@ class HostConsent:
         blob = self.protect(plaintext)
         if not blob:
             raise CampusError("ACTION_LOG_ENCRYPT_FAILED")
-        _write_private(self.grant_path(record["operation_id"]), GRANT_MAGIC + blob)
+        path = self.grant_path(record["operation_id"])
+        with self.store.lock("consent"):
+            replaced = path.exists()
+            _write_private(path, GRANT_MAGIC + blob)
+        return replaced
+
+    def peek(self, record: dict, *, now: float | None = None) -> dict | None:
+        """Read and verify a pending grant without consuming it."""
+        path = self.grant_path(record["operation_id"])
+        if not path.exists():
+            return None
+        return self._verify(self._read_grant(path), record, now)
 
     def take(self, record: dict, *, now: float | None = None) -> dict | None:
         """Atomically consume and verify the pending grant for this plan.
@@ -151,30 +218,30 @@ class HostConsent:
             with self.store.lock("consent"):
                 if not path.exists():
                     return None
-                blob = path.read_bytes()
+                grant = self._read_grant(path)
                 path.unlink()
         except FileNotFoundError:
             return None
-        if not blob.startswith(GRANT_MAGIC):
-            raise CampusError("ACTION_LOG_CORRUPT")
-        plaintext = self.unprotect(blob[len(GRANT_MAGIC):])
-        if plaintext is None:
-            raise CampusError("ACTION_LOG_DECRYPT_FAILED")
-        try:
-            grant = json.loads(plaintext)
-        except (TypeError, ValueError, UnicodeDecodeError):
-            raise CampusError("ACTION_LOG_CORRUPT") from None
-        key = self.key()
-        if key is None:
-            raise CampusError("TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED")
-        protocol.verify(grant, record, key, now=time.time() if now is None else now)
-        return grant
+        except OSError:
+            raise CampusError("STATE_WRITE_FAILED") from None
+        return self._verify(grant, record, now)
 
     def verify_signed(self, grant: dict, record: dict, *, now: float | None = None) -> dict:
-        key = self.key()
-        if key is None:
-            raise CampusError("TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED")
-        return protocol.verify(grant, record, key, now=time.time() if now is None else now)
+        return self._verify(grant, record, now)
+
+    def discard(self, operation_id: str) -> bool:
+        """Remove a pending grant for one plan; never touches a journal."""
+        path = self.grant_path(operation_id)
+        try:
+            with self.store.lock("consent"):
+                if not path.exists():
+                    return False
+                path.unlink()
+                return True
+        except FileNotFoundError:
+            return False
+        except OSError:
+            raise CampusError("STATE_WRITE_FAILED") from None
 
     def pending(self) -> list[str]:
         """Plan ids with an unread grant file; never decrypts or prints values."""

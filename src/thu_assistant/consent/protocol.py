@@ -55,11 +55,6 @@ def sign(payload: dict, key: bytes) -> str:
     return hmac.new(bytes(key), canonical(payload).encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def fingerprint(grant: dict) -> str:
-    """A short non-reversible identifier for internal audit trails only."""
-    return hashlib.sha256(canonical(signed_payload(grant)).encode("utf-8")).hexdigest()[:16]
-
-
 def issue(record: dict, key: bytes, *, now: float, ttl_seconds: int = 300, reference: str | None = None) -> dict:
     """Create one signed grant for ``record``; never writes or sends anything."""
     if not isinstance(key, (bytes, bytearray)) or len(key) != 32:

@@ -1,12 +1,18 @@
 """Fail-closed transaction framework. No campus write adapter is enabled in block 5."""
 from copy import deepcopy
 from dataclasses import dataclass
-import hashlib,json,os,re,secrets,time,uuid
+import hashlib,json,os,re,time,uuid
 from urllib.parse import urlsplit,parse_qsl
 from .action_store import ActionStore
 from .bridge import CampusError,gateway
-from .consent import VERSION as HOST_AUTHORIZATION_VERSION, HostConsent, new_challenge
+from .consent import DECLINED, NOT_APPLICABLE, VERSION as HOST_AUTHORIZATION_VERSION, HostConsent, new_challenge
 from .queries import validate,schema,safe_url
+
+# A trusted in-process confirmation that returns None means "declined" on
+# Windows, where the only production callback is the native message box.  On
+# other platforms None means "this confirmation path does not apply", so a
+# pending signed grant may still be used.
+NATIVE_CONFIRMATION_DECLINES_ON_NONE = os.name == 'nt'
 
 FIELDS={'target':{'type':'string','minLength':1,'maxLength':240},'date':{'type':'string','maxLength':32},
  'start_time':{'type':'string','maxLength':32},'end_time':{'type':'string','maxLength':32},
@@ -62,8 +68,8 @@ TRANSITIONS={
 # subset mechanically; this table is the shared contract for adapters, the
 # facade and recovery, and must change with the transition map.
 STATE_ENTRY={
- 'PREPARED':{'entered_by':'prepare with every required business field and a registered adapter','authorization':'REQUIRED_NOT_CONSUMED','remote_write':'NONE'},
- 'NEEDS_USER_ACTION':{'entered_by':'prepare is missing required business fields or no adapter is registered','authorization':'NOT_APPLICABLE','remote_write':'NONE'},
+ 'PREPARED':{'entered_by':'prepare with every required business field; reason ADAPTER_REQUIRED marks a plan that cannot execute until an adapter is registered','authorization':'REQUIRED_NOT_CONSUMED','remote_write':'NONE'},
+ 'NEEDS_USER_ACTION':{'entered_by':'prepare is missing required business fields','authorization':'NOT_APPLICABLE','remote_write':'NONE'},
  'AWAITING_OFFICIAL':{'entered_by':'preflight handed the step to the official site; no request was sent','authorization':'RECORDED_FOR_HANDOFF_ONLY','remote_write':'NONE'},
  'DISPATCHING':{'entered_by':'the atomic claim saved authorization, dispatch intent and owner process','authorization':'CONSUMED','remote_write':'MAY_HAVE_STARTED'},
  'UNKNOWN':{'entered_by':'dispatch returned without proof, or reconciliation could not match exactly one record','authorization':'CONSUMED','remote_write':'UNKNOWN'},
@@ -81,6 +87,8 @@ def describe_states():
     return deepcopy(STATE_ENTRY)
 
 def next_actions(record):
+    if record.get('state')=='PREPARED' and record.get('reason')=='ADAPTER_REQUIRED':
+        return ['WAIT_FOR_A_REGISTERED_ADAPTER']
     return list({
       'PREPARED':['CONFIRM_AND_EXECUTE_THIS_PLAN'],
       'NEEDS_USER_ACTION':['COMPLETE_BUSINESS_FIELDS'],
@@ -150,6 +158,7 @@ def public(record):
         if record.get('platform'):
             extra['todo_query']={'services':['library.'+record['business']['system']],
                                  'start_date':record['business']['date'],'end_date':record['business']['date'],'include_completed':True}
+    history=[{'state':event.get('state'),'reason':event.get('reason'),'at':event.get('at')} for event in record.get('events',[]) if isinstance(event,dict)]
     result={**extra,'operation_id':record['operation_id'],'plan_id':record['operation_id'],'status':record['state'],
         'service_id':record['service_id'],'operation':record['operation'],'preview':fields,'expires_at':record['expires_at'],
         'missing_fields':record.get('missing_fields',[]),'reason':record.get('reason'),'adapter_version':record['adapter_version'],
@@ -157,8 +166,8 @@ def public(record):
         'record_reference':mask(record.get('record_id')),'authorization_recorded':bool(record.get('authorization')),
         'authorization_is_not_consent_proof':True,'automatic_resend':False,'revision':record['revision'],
         'effects':effect_rows(record),'next_actions':next_actions(record),
-        'state_history':[{'state':event.get('state'),'reason':event.get('reason'),'at':event.get('at')} for event in record.get('events',[]) if isinstance(event,dict)]}
-    if record.get('challenge') and record['state']=='PREPARED':
+        'state_history':history[-20:],'event_count':len(history)}
+    if record.get('challenge') and record['state']=='PREPARED' and record.get('reason')!='ADAPTER_REQUIRED':
         result['authorization_protocol']=HOST_AUTHORIZATION_VERSION
         result['local_confirmation_command']='python -m thu_assistant.consent --plan '+record['operation_id']
     return result
@@ -287,20 +296,66 @@ class ActionEngine:
         # Generic form fields stay encrypted; the generic form has no write contract.
         return self._prepare('browser','submit',payload,[], 'browser-preview-v1',context,account)
     def event(self,record,state,reason=None):
-        if record['events'] and state not in TRANSITIONS[record['state']]:raise CampusError('INVALID_ACTION_TRANSITION')
+        events=record.setdefault('events',[])
+        if events and state not in TRANSITIONS[record['state']]:raise CampusError('INVALID_ACTION_TRANSITION')
+        last=events[-1] if events else None
         record.update(state=state,reason=reason)
-        record['events'].append({'state':state,'reason':reason,'at':self.clock()})
+        if last and last.get('state')==state and last.get('reason')==reason:
+            return  # A repeated readback is not a new transition.
+        events.append({'state':state,'reason':reason,'at':self.clock()})
     def ledger(self,operation_id):
+        record=self.store.read(operation_id)
+        if record.get('state')!='DISPATCHING' or record.get('owner_pid')!=os.getpid():
+            raise CampusError('INVALID_ACTION_TRANSITION')
         return SideEffectLedger(self,operation_id)
+    def _discard_grant(self,operation_id):
+        if self.host_consent is None:return
+        try:self.host_consent.discard(operation_id)
+        except CampusError:pass  # Cleanup must not turn a decline or expiry into a different error.
     def _uncertain_effects(self,operation_id):
         return any(row['status'] in ('SENT','UNKNOWN') for row in effect_rows(self.store.read(operation_id)))
-    def _pending_grant(self,record):
+    def _is_native_prompt(self):
+        verifier=self.consent_verifier
+        return (getattr(verifier,'__module__',None)=='thu_assistant.sports_actions'
+                and getattr(verifier,'__name__',None)=='native_grant')
+    def _native_decline(self):
+        """True only for the known Windows native prompt returning None.
+
+        A callback that returns None means "no evidence" and must not fall back
+        to a pending signed grant; only an explicit ``NOT_APPLICABLE`` (or the
+        native prompt on a non-Windows host, where it does not apply) falls
+        back.  The native message box uses None for an explicit "no".
+        """
+        return NATIVE_CONFIRMATION_DECLINES_ON_NONE and self._is_native_prompt()
+    def _pending_evidence(self,record):
+        """Return ``(grant, from_file)`` without consuming a pending file.
+
+        ``DECLINED`` and the Windows native prompt returning ``None`` are
+        explicit refusals and veto any pending signed grant.
+        ``NOT_APPLICABLE`` and the native prompt on a non-Windows host fall back
+        to the signed grant issued by the local consent CLI.  Any other
+        callback returning ``None`` provides no evidence and does not fall back.
+        """
         grant=None
         if self.consent_verifier is not None:
             grant=self.consent_verifier(deepcopy(record))
-        if grant is None and self.host_consent is not None:
-            grant=self.host_consent.take(record,now=self.clock())
-        return grant
+            if grant is DECLINED:
+                self._discard_grant(record['operation_id'])
+                raise CampusError('SPECIFIC_HUMAN_AUTHORIZATION_REQUIRED')
+            if grant is NOT_APPLICABLE:
+                grant=None
+            elif grant is None:
+                if self._native_decline():
+                    self._discard_grant(record['operation_id'])
+                    raise CampusError('SPECIFIC_HUMAN_AUTHORIZATION_REQUIRED')
+                if not self._is_native_prompt():
+                    raise CampusError('TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED')
+        if grant is not None:
+            grant=self._check_grant(record,grant)
+            self._discard_grant(record['operation_id'])
+            return grant,False
+        grant=self.host_consent.peek(record,now=self.clock()) if self.host_consent is not None else None
+        return (grant,True) if grant is not None else (None,False)
     def _check_grant(self,record,grant):
         expected={'plan_id':record['operation_id'],'account':record['account'],'digest':record['digest'],'adapter_version':record['adapter_version']}
         if not isinstance(grant,dict) or any(grant.get(k)!=v for k,v in expected.items()) or grant.get('source')!='human' or not grant.get('reference'):
@@ -314,12 +369,19 @@ class ActionEngine:
             # Compatibility for in-process confirmation callbacks (existing
             # Windows prompt and synthetic adapters).  A supplied challenge must
             # still match; this path is never reachable from MCP arguments.
+            # The result is normalized into a signed, challenge-bound grant so
+            # unsigned evidence is never stored or dispatched.
             if 'challenge' in grant and grant['challenge']!=record.get('challenge'):
                 raise CampusError('TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED')
             issued=grant.get('issued_at')
             if issued is not None and (isinstance(issued,bool) or not isinstance(issued,(int,float)) or issued>self.clock()+60):
                 raise CampusError('TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED')
-            return grant
+            if self.host_consent is None:raise CampusError('TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED')
+            try:remaining=min(float(expires),float(record['expires_at']))-self.clock()
+            except (KeyError,TypeError,ValueError):raise CampusError('ACTION_LOG_CORRUPT') from None
+            if remaining<=0:raise CampusError('ACTION_PLAN_EXPIRED')
+            return self.host_consent.issue_for(record,now=self.clock(),
+                ttl_seconds=max(1,int(min(300,remaining))),reference=grant['reference'])
         if version!=HOST_AUTHORIZATION_VERSION or self.host_consent is None:
             raise CampusError('TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED')
         self.host_consent.verify_signed(grant,record,now=self.clock())
@@ -332,7 +394,9 @@ class ActionEngine:
             def update(r):
                 if r['state']!='PREPARED' or r['revision']!=record['revision']:raise CampusError('ACTION_ALREADY_CLAIMED')
                 self.event(r,'FAILED',reason)
-            return public(self.store.update(plan_id,update,record['revision']))
+            result=public(self.store.update(plan_id,update,record['revision']))
+            self._discard_grant(plan_id)
+            return result
         if self.clock()>=record['expires_at']:
             return invalidate('ACTION_PLAN_EXPIRED')
         adapter=self._adapter(record)
@@ -340,12 +404,18 @@ class ActionEngine:
         if record['adapter_version']=='sports-action-v1' and not sports_enabled():raise CampusError('SPORTS_WRITES_DISABLED')
         if record['adapter_version']==library_actions.VERSION and not library_actions.enabled():raise CampusError('LIBRARY_WRITES_DISABLED')
         if not isinstance(authorization,str) or len(authorization.strip())<8:raise CampusError('SPECIFIC_HUMAN_AUTHORIZATION_REQUIRED')
-        grant=self._pending_grant(record)
+        if not record.get('challenge'):
+            # A record created before host-authorization-v1 has no challenge.
+            # Add one locally; this changes no business field and no digest.
+            def add_challenge(r):
+                if not r.get('challenge'):
+                    r['challenge']=new_challenge();r['consent_protocol']=HOST_AUTHORIZATION_VERSION
+            record=self.store.update(plan_id,add_challenge,record['revision'])
+        grant,from_file=self._pending_evidence(record)
         if grant is None:
             fresh=self.store.read(plan_id)
             if fresh['state']!='PREPARED':return self.result(plan_id)
             raise CampusError('TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED')
-        grant=self._check_grant(record,grant)
         try:
             fresh=adapter.preflight(deepcopy(record))
             handoff=fresh.get('official_handoff') if record['adapter_version'] in VERIFIED_ADAPTERS else None
@@ -360,6 +430,16 @@ class ActionEngine:
         except CampusError:raise
         except Exception:raise CampusError('ACTION_PREFLIGHT_FAILED') from None
         self._bound(record)
+        if from_file:
+            # Consume the single-use grant only after a successful preflight, so
+            # a transient browser/network failure does not destroy the human
+            # confirmation.
+            grant=self.host_consent.take(record,now=self.clock()) if self.host_consent is not None else None
+            if grant is None:
+                fresh=self.store.read(plan_id)
+                if fresh['state']!='PREPARED':return self.result(plan_id)
+                raise CampusError('TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED')
+            grant=self._check_grant(record,grant)
         if self.clock()>=record['expires_at'] or self.clock()>=grant['expires_at']:raise CampusError('ACTION_PLAN_EXPIRED')
         def claim(r):
             if r['state']!='PREPARED' or r['revision']!=record['revision']:raise CampusError('ACTION_ALREADY_CLAIMED')
@@ -373,7 +453,7 @@ class ActionEngine:
             raise
         if handoff:return public(record)
         # DISPATCHING is durable before the adapter receives the one-use request gate.
-        ledger=SideEffectLedger(self,plan_id)
+        ledger=self.ledger(plan_id)
         try:
             if getattr(adapter,'accepts_ledger',False):receipt=adapter.dispatch(deepcopy(record),gate,ledger)
             else:receipt=adapter.dispatch(deepcopy(record),gate)
@@ -401,6 +481,16 @@ class ActionEngine:
             else:state='AWAITING_OFFICIAL' if record['state']=='AWAITING_OFFICIAL' and complete and not matched else 'UNKNOWN';reason='DUPLICATE_REMOTE_RECORDS' if len(matched)>1 else 'REMOTE_RESULT_NOT_PROVEN';remote=None
         except Exception:state='UNKNOWN';reason='RECONCILIATION_UNAVAILABLE';remote=None
         self._bound(record)
+        unchanged=(record.get('state')==state and record.get('reason')==reason
+                   and (not remote or record.get('record_id')==remote))
+        if unchanged:
+            # A repeated poll with the same result must not rewrite the journal
+            # or grow the public history.
+            shown=public(record)
+            if record.get('adapter_version') in VERIFIED_ADAPTERS:
+                from datetime import datetime, timezone
+                shown['checked_at']=datetime.now(timezone.utc).isoformat()
+            return shown
         def update(r):
             if r['revision']!=revision:raise CampusError('ACTION_RESULT_CHANGED_RECHECK')
             self.event(r,state,reason)
@@ -420,7 +510,10 @@ class ActionEngine:
             if alive and self.clock()-record['dispatch_at']<120:return public(record)
             def interrupted(r):
                 if r['state']=='DISPATCHING' and r['revision']==record['revision']:self.event(r,'UNKNOWN','DISPATCH_INTERRUPTED_RECONCILE_ONLY')
-            record=self.store.update(operation_id,interrupted,record['revision'])
+            try:record=self.store.update(operation_id,interrupted,record['revision'])
+            except CampusError as error:
+                if error.code=='ACTION_RESULT_CHANGED_RECHECK':record=self.store.read(operation_id)
+                else:raise
         if record['state'] in {'UNKNOWN','PENDING_PAYMENT','PENDING_APPROVAL','AWAITING_OFFICIAL'}:
             adapter=self._adapter(record)
             if adapter:return self._reconcile(record,adapter)

@@ -30,7 +30,7 @@ tsinghua-assistant-mcp = "thu_assistant.mcp_stdio:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-thu_assistant = ["*.js", "services.json", "package*.json", "THIRD_PARTY_NOTICES.txt"]
+thu_assistant = ["*.js", "services.json", "package*.json", "THIRD_PARTY_NOTICES.txt", "consent/README.md"]
 learn_assistant = ["vendor/thu-learn-lib/*"]
 
 [tool.pytest.ini_options]
