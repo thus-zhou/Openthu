@@ -34,7 +34,7 @@
     "plans/v0.2.0/VERSION_MANIFEST.json",
     "plans/v0.2.0/进度清单.md",
     "plans/v0.2.0/版本总清单.md",
-    "handoffs/v0.2.0-candidate.md",
+    "handoffs/v020-candidate.md",
     "handoffs/v0.2.0-candidate.json"
   ],
   "contracts": [
@@ -56,7 +56,7 @@
     "候选版本记录.md records the artifact set, verify/install-check results, the fresh-directory probes, privacy scans, known limits and rollback",
     "集成清单.md maps all 24 modules, batches 1-9, the 8.1 seam fixes and the retained external blockers to real commits",
     "The batch gate keeps batch 8 ready with 8.1 implemented, the ownership table and acceptance map agree, and VERSION_MANIFEST/进度清单/版本总清单 describe one candidate",
-    "handoffs/v0.2.0-candidate.md gives Codex the reproduction, evidence and continuation point without claiming a release"
+    "handoffs/v020-candidate.md gives Codex the reproduction, evidence and continuation point without claiming a release"
   ],
   "checks": {
     "module_tests": {
