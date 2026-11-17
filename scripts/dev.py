@@ -12,6 +12,10 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
+# The joint offline suite grows with each batch; 600s was set when it had 644
+# tests. Windows runs roughly 20x slower than Linux, so keep a bounded but
+# larger cap instead of failing a healthy run at the old budget.
+PYTEST_TIMEOUT_SECONDS = 1200
 
 
 def diagnostics_module():
@@ -183,7 +187,7 @@ def main():
         results={}
         if not args.node_only:
             result=run_checked([env.get('THU_PYTHON',sys.executable),'-m','pytest','-o','addopts=','-q','-p','no:cacheprovider'],
-                               label='pytest（runtime.python）',env=env,capture_output=True,timeout=600)
+                               label='pytest（runtime.python）',env=env,capture_output=True,timeout=PYTEST_TIMEOUT_SECONDS)
             print(result.stdout,end=''); print(result.stderr,end='',file=sys.stderr)
             results['python_exit']=result.returncode
             for label in ('passed','skipped','failed','errors'):
