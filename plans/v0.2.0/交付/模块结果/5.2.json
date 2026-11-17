@@ -77,12 +77,14 @@
     ],
     "modes": {
       "SPORT_GROUP": {
+        "create": true,
         "quantity_unit": "SESSION",
         "ticket_quantity": 1,
         "participants": "SELF_ONLY",
         "official_handoff": []
       },
       "SPORT_PERSON": {
+        "create": true,
         "quantity_unit": "TICKET",
         "ticket_quantity": 1,
         "participants": "SELF_ONLY",
