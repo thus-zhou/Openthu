@@ -4,17 +4,18 @@
   "batch": 7,
   "owner": "Hermes",
   "status": "implemented",
-  "status_note": "Audit repair is complete for 7.1-owned findings: 63 module tests grew to 77, P1-3 and all 14 P2 items are fixed and covered by regression tests, and the audit probes were rerun. The record stays implemented, not accepted: P1-1 (6.1/8.1 must pass static_dir) and P1-2 (6.3/8.1 must add web_assets package data) are still open cross-module seams, so an installed `openthu dashboard` serves the JSON API but `/` returns LOCAL_API_UI_NOT_INSTALLED. This module opens no PR, merges nothing and publishes nothing.",
+  "status_note": "Audit repair is complete for 7.1-owned findings: 63 module tests grew to 77, P1-3 and all 14 P2 items are fixed and covered by regression tests; the final code commit bfde78a reuses the library and resource-kind tables instead of duplicating them, and the audit probes were rerun. The record stays implemented, not accepted: P1-1 (6.1/8.1 must pass static_dir) and P1-2 (6.3/8.1 must add web_assets package data) are still open cross-module seams, so an installed `openthu dashboard` serves the JSON API but `/` returns LOCAL_API_UI_NOT_INSTALLED. This module opens no PR, merges nothing and publishes nothing.",
   "target_version": "0.2.0",
   "baseline_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
   "integration_parent_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
   "branch_base_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
-  "delivery_commit": "2f8d87cf517c7827ed37032f85ae81bab19a9ec7",
+  "delivery_commit": "bfde78a38f6ca38f9f47179c4af8da9c94c3119d",
   "implementation_commits": [
     "21b4d7d37d1ebcda5a6676ef8bb040ef833e2c8e",
     "181216cda0eba7d68b70f0012db200ca3d09c315",
     "1c5eb774b36eca41092579c0a26ce247fbc51eec",
-    "2f8d87cf517c7827ed37032f85ae81bab19a9ec7"
+    "2f8d87cf517c7827ed37032f85ae81bab19a9ec7",
+    "bfde78a38f6ca38f9f47179c4af8da9c94c3119d"
   ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/7.1",
@@ -189,16 +190,16 @@
       "background_processes": 0
     },
     "github_actions": {
-      "run_id": 44137435823,
-      "commit": "22fbc1235c9c757905883edcd79c0ede2baedda4",
-      "code_commit": "2f8d87cf517c7827ed37032f85ae81bab19a9ec7",
+      "run_id": 44144269571,
+      "commit": "bfde78a38f6ca38f9f47179c4af8da9c94c3119d",
+      "code_commit": "bfde78a38f6ca38f9f47179c4af8da9c94c3119d",
       "status": "success",
       "jobs": [
         "test (ubuntu-24.04)",
         "test (ubuntu-24.04, 3.13)",
         "test (windows-2025)"
       ],
-      "note": "All three jobs succeeded on the tested tree 22fbc12, which contains the audit repair 2f8d87c and the audit record. The Windows job ran the 77 browser cases. This supersedes run 44122811569; the metadata-only record update that points at this run follows the tested tree."
+      "note": "All three jobs succeeded on bfde78a, the final code commit (audit repair 2f8d87c plus the table-reuse consistency change). The Windows job ran the 77 browser cases. This supersedes runs 44122811569, 44137435823 and 44141199925; a metadata-only record update follows this tested commit."
     }
   },
   "boundaries": [
