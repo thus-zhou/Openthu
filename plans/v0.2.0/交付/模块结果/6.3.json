@@ -6,7 +6,7 @@
   "status": "implemented",
   "baseline_commit": "bb1f963",
   "integration_parent_commit": "bb1f963",
-  "delivery_commit": "27afeaa",
+  "delivery_commit": "f003a8b",
   "implementation_commits": [
     "c8412d8",
     "47ce3d0",
@@ -17,7 +17,8 @@
     "173606d",
     "1ebd5bb",
     "8fc3317",
-    "27afeaa"
+    "27afeaa",
+    "f003a8b"
   ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/6.3",
@@ -87,9 +88,12 @@
   ],
   "checks": {
     "module_tests": {
-      "passed": 48,
+      "passed": 49,
       "failed": 0,
-      "breakdown": {"tests/test_distribution.py": 33, "tests/test_upgrade.py": 15},
+      "breakdown": {
+        "tests/test_distribution.py": 34,
+        "tests/test_upgrade.py": 15
+      },
       "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_distribution.py tests/test_upgrade.py"
     },
     "dev_check": {
@@ -100,7 +104,7 @@
       "command": "python scripts/dev.py check"
     },
     "full_offline_suite_linux": {
-      "python_passed": 1311,
+      "python_passed": 1312,
       "python_skipped": 7,
       "python_failed": 0,
       "node_passed": 66,
