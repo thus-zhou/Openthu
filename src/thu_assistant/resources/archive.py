@@ -3,12 +3,13 @@
 The user chooses the destination directory.  Every file is written under that
 directory with a sanitised course folder and a title plus a token over
 ``(uid, version)``.  A remote title cannot create a parent directory, an
-absolute path or a reserved device name.
+absolute path, a reserved device name or an overlong name.
 
-Writes go to a temporary file in the same directory, are re-read and hash
-checked, then atomically renamed into place.  An existing file is never
-overwritten: identical content is reused, different content is a conflict that
-keeps the original file and reports the new content for a separate decision.
+Writes go to a short temporary file in the same directory, are re-read and hash
+checked, then published with an atomic no-overwrite operation where the
+filesystem supports it.  An existing file is never overwritten: identical
+content is reused, different content is a conflict that keeps the original
+file and reports the new content for a separate decision.
 """
 from __future__ import annotations
 
@@ -31,6 +32,13 @@ from .limits import DEFAULT_LIMITS, ResourceLimits
 from .model import ResourceEntry
 
 _READ_CHUNK = 1024 * 1024
+_LINK_FALLBACK_ERRNOS = {
+    getattr(os, "EPERM", 1),
+    getattr(os, "EACCES", 13),
+    getattr(os, "EOPNOTSUPP", 95),
+    getattr(os, "ENOSYS", 38),
+    getattr(os, "EXDEV", 18),
+}
 
 
 def validate_destination(value: object) -> Path:
@@ -96,6 +104,8 @@ class Archive:
             course_name=entry.course_name,
             title=entry.title,
             max_title_chars=self.limits.max_title_chars,
+            max_file_name_bytes=self.limits.max_file_name_bytes,
+            max_relative_path_bytes=self.limits.max_relative_path_bytes,
         )
 
     def target(self, entry: ResourceEntry) -> Path:
@@ -113,26 +123,42 @@ class Archive:
             raise ResourceTitleUnsafe("archive_outside_destination")
         return resolved
 
-    def inspect(self, entry: ResourceEntry, *, expected_sha256: str | None = None) -> dict[str, object]:
+    def inspect(
+        self,
+        entry: ResourceEntry,
+        *,
+        expected_sha256: str | None = None,
+        max_hash_bytes: int | None = None,
+    ) -> dict[str, object]:
         target = self.target(entry)
+        relative = self.relative_path(entry)
         if not target.exists() and not target.is_symlink():
-            return {"action": "NEW", "sha256": None, "bytes": None, "relative_path": self.relative_path(entry)}
+            return {"action": "NEW", "sha256": None, "bytes": None, "relative_path": relative}
         if target.is_symlink() or not target.is_file():
             return {
                 "action": "CONFLICT",
                 "sha256": None,
                 "bytes": None,
-                "relative_path": self.relative_path(entry),
+                "relative_path": relative,
                 "reason": "TARGET_NOT_REGULAR",
             }
-        hashed = _hash_file(target, max_bytes=self.limits.max_attachment_bytes)
-        if hashed is None:
+        budget = self.limits.max_attachment_bytes if max_hash_bytes is None else max_hash_bytes
+        if budget <= 0:
             return {
-                "action": "CONFLICT",
+                "action": "REVIEW_EXISTING",
                 "sha256": None,
                 "bytes": None,
-                "relative_path": self.relative_path(entry),
-                "reason": "TARGET_UNREADABLE_OR_TOO_LARGE",
+                "relative_path": relative,
+                "reason": "HASH_BUDGET_EXHAUSTED",
+            }
+        hashed = _hash_file(target, max_bytes=min(self.limits.max_attachment_bytes, budget))
+        if hashed is None:
+            return {
+                "action": "REVIEW_EXISTING",
+                "sha256": None,
+                "bytes": None,
+                "relative_path": relative,
+                "reason": "TARGET_UNREADABLE_OR_OVER_BUDGET",
             }
         digest, size = hashed
         expected = expected_sha256 if expected_sha256 is not None else entry.content_sha256
@@ -142,7 +168,7 @@ class Archive:
                 "action": action,
                 "sha256": digest,
                 "bytes": size,
-                "relative_path": self.relative_path(entry),
+                "relative_path": relative,
                 "reason": None if action == "REUSE" else "CONTENT_DIFFERS",
             }
         # The same version token names the same source version, so an existing
@@ -152,9 +178,36 @@ class Archive:
             "action": "REVIEW_EXISTING",
             "sha256": digest,
             "bytes": size,
-            "relative_path": self.relative_path(entry),
+            "relative_path": relative,
             "reason": "CONTENT_UNVERIFIED",
         }
+
+    def _reuse(self, digest: str, size: int, relative: str) -> dict[str, object]:
+        return {
+            "status": "reused",
+            "sha256": digest,
+            "bytes": size,
+            "relative_path": relative,
+            "verified": True,
+        }
+
+    def _publish(self, temporary: Path, target: Path) -> bool:
+        """Atomically publish without overwriting; return ``False`` if it exists."""
+        try:
+            os.link(temporary, target)
+            return True
+        except FileExistsError:
+            return False
+        except OSError as error:
+            # FAT, some network shares and restricted Windows ACLs do not allow
+            # hard links.  Fall back to a raced replace only after a fresh check;
+            # the module documents a single-writer assumption.
+            if getattr(error, "errno", None) not in _LINK_FALLBACK_ERRNOS:
+                raise
+            if target.exists() or target.is_symlink():
+                return False
+            os.replace(temporary, target)
+            return True
 
     def write(self, entry: ResourceEntry, data: bytes) -> dict[str, object]:
         if not isinstance(data, bytes):
@@ -166,13 +219,7 @@ class Archive:
         relative = self.relative_path(entry)
         existing = self.inspect(entry, expected_sha256=digest)
         if existing["action"] == "REUSE":
-            return {
-                "status": "reused",
-                "sha256": digest,
-                "bytes": len(data),
-                "relative_path": relative,
-                "verified": True,
-            }
+            return self._reuse(digest, len(data), relative)
         if existing["action"] in ("CONFLICT", "REVIEW_EXISTING"):
             raise ResourceHashConflict("target_exists")
         try:
@@ -184,7 +231,7 @@ class Archive:
             parent.relative_to(self.root.resolve(strict=True))
         except ValueError:
             raise ResourceTitleUnsafe("archive_outside_destination") from None
-        temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.part")
+        temporary = target.with_name(f".{uuid.uuid4().hex}.part")
         descriptor = None
         try:
             descriptor = os.open(
@@ -204,24 +251,18 @@ class Archive:
             written_hash = _hash_file(temporary, max_bytes=self.limits.max_attachment_bytes)
             if written_hash is None or written_hash[0] != digest or written_hash[1] != len(data):
                 raise ResourceWriteFailed("verify")
-            if target.exists() or target.is_symlink():
-                # Another writer won the race; never overwrite it.
+            if not self._publish(temporary, target):
                 again = self.inspect(entry, expected_sha256=digest)
                 if again["action"] == "REUSE":
-                    return {
-                        "status": "reused",
-                        "sha256": digest,
-                        "bytes": len(data),
-                        "relative_path": relative,
-                        "verified": True,
-                    }
+                    return self._reuse(digest, len(data), relative)
                 raise ResourceHashConflict("target_appeared")
-            os.replace(temporary, target)
             _fsync_directory(target.parent)
         except (ResourceHashConflict, ResourceWriteFailed, ResourceTitleUnsafe):
             raise
         except OSError as error:
             code = getattr(error, "errno", None)
+            if code == getattr(os, "ENAMETOOLONG", 36):
+                raise ResourceTitleUnsafe("archive_name_too_long") from None
             if code in (getattr(os, "ENOSPC", 28), getattr(os, "EDQUOT", 122)):
                 raise ResourceDiskFull("no_space") from None
             if code in (getattr(os, "EACCES", 13), getattr(os, "EPERM", 1), getattr(os, "EBUSY", 16)):

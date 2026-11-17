@@ -1,4 +1,4 @@
-"""Stable resource manifest and duplicate reporting.
+"""Stable resource manifest, pagination and duplicate reporting.
 
 The manifest answers three questions without inventing identity:
 
@@ -15,20 +15,25 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Iterable
 
+from .errors import ResourceInvalidArgument
+from .limits import DEFAULT_LIMITS, ResourceLimits
 from .model import DownloadRecord, ResourceEntry
 
-MANIFEST_VERSION = "resource-manifest-v1"
+MANIFEST_VERSION = "resource-manifest-v2"
 
 
 def _version_row(entry: ResourceEntry) -> dict[str, Any]:
     return {
         "version": entry.version,
+        "base_version": entry.base_version,
         "state": entry.state,
         "title": entry.title,
         "source": entry.source,
         "updated_at": entry.updated_at,
         "size_bytes": entry.size_bytes,
         "content_sha256": entry.content_sha256,
+        "body_state": entry.body_state,
+        "body_truncated": entry.body_truncated,
         "last_checked_at": entry.last_checked_at,
         "version_note": entry.version_note,
     }
@@ -83,7 +88,14 @@ def build_manifest(
     records: Iterable[DownloadRecord] = (),
     *,
     semester: str | None = None,
+    offset: int = 0,
+    limit: int = 200,
+    limits: ResourceLimits = DEFAULT_LIMITS,
 ) -> dict[str, Any]:
+    if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
+        raise ResourceInvalidArgument("offset")
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= limits.max_manifest_limit:
+        raise ResourceInvalidArgument("limit")
     rows = list(entries)
     if semester is not None:
         rows = [entry for entry in rows if entry.semester == semester]
@@ -115,11 +127,18 @@ def build_manifest(
                     "versions": [entry.version for entry in versions],
                 }
             )
+    total = len(resources)
+    page = resources[offset : offset + limit]
     return {
         "format_version": MANIFEST_VERSION,
-        "count": len(resources),
+        "semester": semester,
+        "count": total,
         "entries": len(rows),
-        "resources": resources,
+        "offset": offset,
+        "limit": limit,
+        "next_offset": offset + len(page) if offset + len(page) < total else None,
+        "snapshot_complete": offset + len(page) >= total,
+        "resources": page,
         "same_title_groups": same_title_groups(rows),
         "multiple_versions": multiple_versions,
         "content_duplicate_groups": content_groups(records),

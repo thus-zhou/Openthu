@@ -2,20 +2,21 @@
 
 Every error carries the ``error-classification-v1`` shape so a caller can
 classify it without parsing prose.  The free-form detail is restricted to short
-enum-like tokens: a local path, a download directory, an account name or a
-course body must never appear in an exception message, a log line or an export
-report, because those strings are copied into terminal output and issue
-reports.
+enum-like tokens and the final message is capped at 200 characters: a local
+path, a download directory, an account name or a course body must never appear
+in an exception message, a log line or an export report, because those strings
+are copied into terminal output and issue reports.
 
 Codes stay module-local until the business facade (6.1) registers them in
-``contracts/v0.2/error-classification.json``.  Each class already uses the
-category policy values frozen there, so registration is mechanical.
+``contracts/v0.2/error-classification.json``.  Authentication and permission
+codes reuse the frozen registry values so a caller can act on them immediately.
 """
 from __future__ import annotations
 
 import re
 
-_DETAIL = re.compile(r"^[A-Za-z0-9_.:=,+-]{0,200}$")
+_DETAIL = re.compile(r"^[A-Za-z0-9_.:=,+-]{0,120}$")
+_MAX_MESSAGE = 200
 
 
 class ResourceError(Exception):
@@ -29,7 +30,8 @@ class ResourceError(Exception):
 
     def __init__(self, detail: str = "") -> None:
         self.detail = detail if _DETAIL.fullmatch(detail or "") else "DETAIL_REDACTED"
-        super().__init__(f"{self.code}:{self.detail}" if self.detail else self.code)
+        message = f"{self.code}:{self.detail}" if self.detail else self.code
+        super().__init__(message[:_MAX_MESSAGE])
 
     def as_error(self) -> dict[str, object]:
         return {
@@ -63,6 +65,23 @@ def _define(
     )
 
 
+def require_bool(value: object, name: str) -> bool:
+    """Only a real bool crosses a safety gate; ``"false"`` is not ``False``."""
+    if not isinstance(value, bool):
+        raise ResourceInvalidArgument(f"{name}_type")
+    return value
+
+
+def require_text(
+    value: object, name: str, *, maximum: int = 200, allow_none: bool = False
+) -> str | None:
+    if value is None and allow_none:
+        return None
+    if not isinstance(value, str) or len(value) > maximum:
+        raise ResourceInvalidArgument(f"{name}_type")
+    return value
+
+
 # INPUT: malformed or unsupported caller input.
 ResourceInvalidArgument = _define(
     "ResourceInvalidArgument", "RESOURCE_INVALID_ARGUMENT", "INPUT", False, "FIX_INPUT"
@@ -93,6 +112,16 @@ ResourceExportEmpty = _define(
     "ResourceExportEmpty", "RESOURCE_EXPORT_EMPTY", "INPUT", False, "FIX_INPUT"
 )
 
+# AUTH / PERMISSION: reuse frozen registry codes and categories.
+ResourceAuthRequired = _define(
+    "ResourceAuthRequired", "AUTH_REQUIRED", "AUTH", False, "REAUTHENTICATE",
+    "The existing campus session expired; complete the official login again.",
+)
+ResourceForbidden = _define(
+    "ResourceForbidden", "FORBIDDEN", "PERMISSION", False, "CONTACT_SUPPORT",
+    "The account is not allowed to read this source.",
+)
+
 # PERMISSION: refused by policy.
 ResourceExportInRepository = _define(
     "ResourceExportInRepository", "RESOURCE_EXPORT_IN_REPOSITORY", "PERMISSION", False,
@@ -108,13 +137,18 @@ ResourceIndexIncomplete = _define(
     "ResourceIndexIncomplete", "RESOURCE_INDEX_INCOMPLETE", "COMPLETENESS", True, "RETRY",
     "The index was built from an incomplete source read.",
 )
+ResourceSourceIncomplete = _define(
+    "ResourceSourceIncomplete", "RESOURCE_SOURCE_INCOMPLETE", "COMPLETENESS", True, "RETRY",
+    "A requested source range (detail page, attachment list or course) was not read.",
+)
 
 # CONFLICT: a local or account binding changed.
 ResourceAccountMismatch = _define(
     "ResourceAccountMismatch", "RESOURCE_ACCOUNT_MISMATCH", "CONFLICT", False, "FIX_INPUT"
 )
 ResourceVersionConflict = _define(
-    "ResourceVersionConflict", "RESOURCE_VERSION_CONFLICT", "CONFLICT", False, "FIX_INPUT"
+    "ResourceVersionConflict", "RESOURCE_VERSION_CONFLICT", "CONFLICT", False, "FIX_INPUT",
+    "A source or content version cannot be selected without breaking monotonicity.",
 )
 ResourcePlanChanged = _define(
     "ResourcePlanChanged", "RESOURCE_PLAN_CHANGED", "CONFLICT", False, "FIX_INPUT",
@@ -123,6 +157,10 @@ ResourcePlanChanged = _define(
 ResourceHashConflict = _define(
     "ResourceHashConflict", "RESOURCE_HASH_CONFLICT", "CONFLICT", False, "FIX_INPUT",
     "The target file exists with different content; it is never overwritten.",
+)
+ResourceExportExists = _define(
+    "ResourceExportExists", "RESOURCE_EXPORT_EXISTS", "CONFLICT", False, "FIX_INPUT",
+    "The export target exists; an explicit overwrite flag is required.",
 )
 
 # UPSTREAM_CONTRACT: the source read or transfer failed for one item.
@@ -169,7 +207,10 @@ ERROR_CLASSES = tuple(
 
 __all__ = [
     "ERROR_CLASSES",
+    "require_bool",
+    "require_text",
     "ResourceAccountMismatch",
+    "ResourceAuthRequired",
     "ResourceCancelled",
     "ResourceConfirmationRequired",
     "ResourceContentUnavailable",
@@ -177,8 +218,10 @@ __all__ = [
     "ResourceDownloadFailed",
     "ResourceError",
     "ResourceExportEmpty",
+    "ResourceExportExists",
     "ResourceExportInRepository",
     "ResourceFileLocked",
+    "ResourceForbidden",
     "ResourceHashConflict",
     "ResourceIndexCorrupt",
     "ResourceIndexIncomplete",
@@ -188,6 +231,7 @@ __all__ = [
     "ResourcePlanChanged",
     "ResourcePlanExpired",
     "ResourceSelectionInvalid",
+    "ResourceSourceIncomplete",
     "ResourceSourceUnsupported",
     "ResourceStoreUnavailable",
     "ResourceTitleUnsafe",

@@ -2,13 +2,15 @@
 
 A plan is a process-local, account-bound, expiring snapshot.  Preview reports
 the file count, known and unknown sizes, the target directory, the target
-relative path and the action for each item (new, reuse, conflict or review).
-Execution requires explicit confirmation, calls the existing course download
-interface through a narrow port and records every item separately: one failure
-never turns the batch into a success and never discards the items that already
-succeeded.
+relative path and the action for each item (new, reuse, verify, conflict or
+review).  Execution requires explicit confirmation, calls the existing course
+download interface through a narrow port and records every item separately:
+one failure never turns the batch into a success and never discards the items
+that already succeeded.
 
-An existing file is never overwritten.  Identical content is reused; different
+The index is committed only after the archive write succeeds.  A failed write
+therefore cannot leave a phantom content hash or a phantom ``c:`` version.
+An existing file is never overwritten: identical content is reused; different
 content is a conflict that keeps the original file.
 """
 from __future__ import annotations
@@ -35,6 +37,7 @@ from .errors import (
     ResourcePlanChanged,
     ResourcePlanExpired,
     ResourceStoreUnavailable,
+    require_bool,
 )
 from .index import ResourceIndex, destination_id
 from .limits import DEFAULT_LIMITS, ResourceLimits
@@ -44,6 +47,7 @@ PLAN_VERSION = "resource-download-plan-v1"
 TZ = timezone(timedelta(hours=8))
 _ACTIONS = ("NEW", "REUSE", "VERIFY", "CONFLICT", "REVIEW_EXISTING")
 _CONFLICT_POLICIES = ("REPORT", "ABORT")
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
 @dataclass(frozen=True)
@@ -59,7 +63,9 @@ class PlanItem:
     action: str
     existing_sha256: str | None = None
     reason: str | None = None
-    fingerprint: tuple[str, str, str | None, str, int | None, str] = field(default=(), compare=False)
+    fingerprint: tuple[str, str, str | None, str, int | None, str, str] = field(
+        default=(), compare=False
+    )
 
     def public(self) -> dict[str, Any]:
         return {
@@ -110,7 +116,7 @@ class DownloadPlan:
         }
 
 
-def _fingerprint(entry: ResourceEntry) -> tuple[str, str, str | None, str, int | None, str]:
+def _fingerprint(entry: ResourceEntry) -> tuple[str, str, str | None, str, int | None, str, str]:
     return (
         entry.stable_resource_uid,
         entry.version,
@@ -118,6 +124,7 @@ def _fingerprint(entry: ResourceEntry) -> tuple[str, str, str | None, str, int |
         entry.title,
         entry.size_bytes,
         entry.state,
+        entry.base_version,
     )
 
 
@@ -137,6 +144,14 @@ def _digest(items: Sequence[PlanItem]) -> str:
     ).hexdigest()
 
 
+def _media_kind(entry: ResourceEntry) -> str:
+    if entry.mime_type and entry.mime_type.startswith("image/"):
+        return "IMAGE"
+    if Path(entry.title).suffix.casefold() in _IMAGE_EXTENSIONS:
+        return "IMAGE"
+    return "ATTACHMENT"
+
+
 def build_plan(
     entries: Iterable[ResourceEntry],
     *,
@@ -148,19 +163,28 @@ def build_plan(
     limits: ResourceLimits = DEFAULT_LIMITS,
     clock: Callable[[], datetime] = lambda: datetime.now(TZ),
 ) -> DownloadPlan:
+    require_bool(verify_known, "verify_known")
     if conflict_policy not in _CONFLICT_POLICIES:
         raise ResourceInvalidArgument("conflict_policy")
     root = validate_destination(destination)
     archive = Archive(root, limits=limits)
     seen: set[tuple[str, str]] = set()
     items: list[PlanItem] = []
+    hash_budget = limits.max_preview_hash_bytes
+    budget_exhausted = False
     for entry in entries:
         key = (entry.stable_resource_uid, entry.version)
         if key in seen:
             continue
         seen.add(key)
-        inspection = archive.inspect(entry)
+        inspection = archive.inspect(entry, max_hash_bytes=hash_budget)
         action = str(inspection["action"])
+        if inspection.get("bytes") is not None:
+            hash_budget = max(0, hash_budget - int(inspection["bytes"]))
+        if inspection.get("reason") in ("HASH_BUDGET_EXHAUSTED", "TARGET_UNREADABLE_OR_OVER_BUDGET"):
+            budget_exhausted = True
+        if hash_budget == 0:
+            budget_exhausted = True
         if action in ("REUSE", "REVIEW_EXISTING") and verify_known:
             # Explicit content re-check: fetch and compare instead of trusting
             # the saved copy, so a same-version content change is detected and
@@ -168,6 +192,9 @@ def build_plan(
             action = "VERIFY"
         if action not in _ACTIONS:
             raise ResourceInvalidArgument("archive_action")
+        estimated = entry.size_bytes
+        if estimated is None and action == "VERIFY" and inspection.get("bytes") is not None:
+            estimated = int(inspection["bytes"])
         items.append(
             PlanItem(
                 stable_resource_uid=entry.stable_resource_uid,
@@ -176,7 +203,7 @@ def build_plan(
                 course_id=entry.course_id,
                 course_name=entry.course_name,
                 source=entry.source,
-                estimated_bytes=entry.size_bytes,
+                estimated_bytes=estimated,
                 archive_relative_path=str(inspection["relative_path"]),
                 action=action,
                 existing_sha256=inspection.get("sha256"),  # type: ignore[arg-type]
@@ -188,9 +215,9 @@ def build_plan(
             raise ResourceLimitExceeded("plan_items")
     if not items:
         raise ResourceInvalidArgument("empty_selection")
-    new_items = [item for item in items if item.action == "NEW"]
-    known = sum(item.estimated_bytes for item in new_items if item.estimated_bytes is not None)
-    unknown = sum(1 for item in new_items if item.estimated_bytes is None)
+    write_items = [item for item in items if item.action in ("NEW", "VERIFY")]
+    known = sum(item.estimated_bytes for item in write_items if item.estimated_bytes is not None)
+    unknown = sum(1 for item in write_items if item.estimated_bytes is None)
     if known > limits.max_plan_known_bytes:
         raise ResourceLimitExceeded("plan_bytes")
     conflicts = sum(1 for item in items if item.action in ("CONFLICT", "REVIEW_EXISTING"))
@@ -199,13 +226,14 @@ def build_plan(
     expires = (now + timedelta(seconds=limits.plan_ttl_seconds)).isoformat(timespec="seconds")
     totals = {
         "items": len(items),
-        "new": len(new_items),
+        "new": sum(1 for item in items if item.action == "NEW"),
         "verify": sum(1 for item in items if item.action == "VERIFY"),
         "reuse": sum(1 for item in items if item.action == "REUSE"),
         "conflicts": conflicts,
         "estimated_bytes": known,
         "unknown_size_items": unknown,
         "estimate_complete": unknown == 0,
+        "hash_budget_exhausted": budget_exhausted,
     }
     plan = DownloadPlan(
         plan_id="rplan_" + uuid.uuid4().hex,
@@ -236,11 +264,13 @@ def _record(
     written_at: str,
     error_code: str | None = None,
     media_asset_id: str | None = None,
+    media_expires_at: str | None = None,
     duplicate_of: tuple[str, ...] = (),
     verified: bool = False,
+    download_id: str | None = None,
 ) -> DownloadRecord:
     return DownloadRecord(
-        download_id="dl_" + uuid.uuid4().hex[:24],
+        download_id=download_id or ("dl_" + uuid.uuid4().hex[:24]),
         stable_resource_uid=uid,
         version=version,
         content_sha256=sha256,
@@ -251,9 +281,51 @@ def _record(
         written_at=written_at,
         error_code=error_code,
         media_asset_id=media_asset_id,
+        media_expires_at=media_expires_at,
         duplicate_of=duplicate_of,
         verified=verified,
     )
+
+
+def _register_media(
+    media: Any,
+    entry: ResourceEntry,
+    path: Path,
+    *,
+    account_scope: str,
+    task_id: str,
+    limits: ResourceLimits,
+) -> tuple[str | None, str | None]:
+    if media is None:
+        return None, None
+    try:
+        reference = media.register_downloaded_attachment(
+            path,
+            kind=_media_kind(entry),
+            account_scope=account_scope,
+            task_id=task_id,
+            purpose="COURSE_RESOURCE",
+            service_domain="LEARN",
+            display_name=entry.title,
+            source_evidence_id="learn.resource_download",
+            synthetic=entry.synthetic,
+            retention="EXPLICIT_DELETE",
+            expires_in=limits.media_reference_ttl_seconds,
+        )
+        media_id = getattr(reference, "media_id", None)
+        expires = getattr(reference, "expires_at", None)
+        return media_id, expires.isoformat() if hasattr(expires, "isoformat") else None
+    except Exception:
+        return None, None
+
+
+def _persist(index: ResourceIndex, record: DownloadRecord) -> bool:
+    """Persist one item; a missing entry is a plan-wide change, not a failure."""
+    try:
+        index.add_download(record)
+        return True
+    except ResourceNotFound:
+        raise ResourcePlanChanged("entry_disappeared") from None
 
 
 def execute_plan(
@@ -265,6 +337,7 @@ def execute_plan(
     limits: ResourceLimits = DEFAULT_LIMITS,
     clock: Callable[[], datetime] = lambda: datetime.now(TZ),
     media: Any = None,
+    media_scope: str | None = None,
     cancel: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     if confirm is not True:
@@ -304,6 +377,10 @@ def execute_plan(
                 written_at=written_at,
                 error_code=ResourceCancelled.code,
             )
+            try:
+                _persist(index, record)
+            except ResourceStoreUnavailable:
+                warnings.add("INDEX_RECORD_NOT_SAVED")
             results.append({"item": item.public(), "result": record.public()})
             counts["cancelled"] += 1
             continue
@@ -320,15 +397,17 @@ def execute_plan(
                 error_code=ResourceHashConflict.code,
                 verified=False,
             )
-            try:
-                index.add_download(record, persist=False)
-            except ResourceStoreUnavailable:
-                raise
+            _persist(index, record)
             results.append({"item": item.public(), "result": record.public()})
             counts["conflict"] += 1
             continue
         try:
-            current = index.find(item.stable_resource_uid, version=item.version, include_superseded=True)
+            current = index.find(
+                item.stable_resource_uid,
+                version=item.version,
+                include_superseded=True,
+                allow_historical=True,
+            )
             if _fingerprint(current) != item.fingerprint:
                 raise ResourcePlanChanged("entry_changed")
             if item.action == "REUSE":
@@ -348,7 +427,7 @@ def execute_plan(
                     written_at=written_at,
                     verified=True,
                 )
-                index.add_download(record, persist=False)
+                _persist(index, record)
                 results.append(
                     {
                         "item": item.public(),
@@ -369,12 +448,23 @@ def execute_plan(
             if len(payload) > limits.max_attachment_bytes:
                 raise ResourceLimitExceeded("attachment_bytes")
             digest = hashlib.sha256(payload).hexdigest()
-            current, bumped = index.apply_content_hash(
-                current, digest, checked_at=written_at, persist=False
-            )
+            # 1. Compute the target entry without touching the index.
+            target_entry, bumped = index.content_target(current, digest, checked_at=written_at)
+            # 2. Write bytes; failure here leaves the index untouched.
+            outcome = archive.write(target_entry, payload)
+            # 3. Commit the content hash/new version only after a verified write.
+            index.commit_content(target_entry, bumped=bumped)
             if bumped:
                 warnings.add("CONTENT_CHANGED_NEW_VERSION")
-            outcome = archive.write(current, payload)
+            download_id = "dl_" + uuid.uuid4().hex[:24]
+            media_id, media_expires_at = _register_media(
+                media,
+                target_entry,
+                archive.target(target_entry),
+                account_scope=media_scope or index.account_scope,
+                task_id=download_id,
+                limits=limits,
+            )
             duplicates = tuple(
                 sorted(
                     {
@@ -383,29 +473,13 @@ def execute_plan(
                         if other.content_sha256 == digest
                         and other.status in ("DOWNLOADED", "REUSED")
                         and (other.stable_resource_uid, other.version)
-                        != (current.stable_resource_uid, current.version)
+                        != (target_entry.stable_resource_uid, target_entry.version)
                     }
                 )
             )
-            media_id = None
-            if media is not None:
-                try:
-                    reference = media.register_downloaded_attachment(
-                        archive.target(current),
-                        kind="ATTACHMENT",
-                        account_scope=index.account_scope,
-                        task_id=plan.plan_id,
-                        purpose="COURSE_RESOURCE",
-                        display_name=current.title,
-                        source_evidence_id="learn.resource_download",
-                        synthetic=current.synthetic,
-                    )
-                    media_id = getattr(reference, "media_id", None)
-                except Exception:
-                    warnings.add("MEDIA_REGISTRATION_FAILED")
             record = _record(
-                uid=current.stable_resource_uid,
-                version=current.version,
+                uid=target_entry.stable_resource_uid,
+                version=target_entry.version,
                 sha256=digest,
                 byte_size=len(payload),
                 relative=str(outcome["relative_path"]),
@@ -413,10 +487,12 @@ def execute_plan(
                 status="REUSED" if outcome["status"] == "reused" else "DOWNLOADED",
                 written_at=written_at,
                 media_asset_id=media_id,
+                media_expires_at=media_expires_at,
                 duplicate_of=duplicates,
                 verified=bool(outcome.get("verified")),
+                download_id=download_id,
             )
-            index.add_download(record, persist=False)
+            _persist(index, record)
             results.append(
                 {
                     "item": item.public(),
@@ -443,6 +519,10 @@ def execute_plan(
                 written_at=written_at,
                 error_code=ResourceCancelled.code,
             )
+            try:
+                _persist(index, record)
+            except ResourceStoreUnavailable:
+                warnings.add("INDEX_RECORD_NOT_SAVED")
             results.append({"item": item.public(), "result": record.public()})
             counts["cancelled"] += 1
         except ResourceError as error:
@@ -458,9 +538,9 @@ def execute_plan(
                 error_code=error.code,
             )
             try:
-                index.add_download(record, persist=False)
+                _persist(index, record)
             except ResourceStoreUnavailable:
-                raise
+                warnings.add("INDEX_RECORD_NOT_SAVED")
             results.append({"item": item.public(), "result": record.public()})
             counts["failed"] += 1
         except Exception:
@@ -476,12 +556,11 @@ def execute_plan(
                 error_code=ResourceDownloadFailed.code,
             )
             try:
-                index.add_download(record, persist=False)
+                _persist(index, record)
             except ResourceStoreUnavailable:
-                raise
+                warnings.add("INDEX_RECORD_NOT_SAVED")
             results.append({"item": item.public(), "result": record.public()})
             counts["failed"] += 1
-    index.save()
     complete = not counts["failed"] and not counts["conflict"] and not counts["cancelled"]
     return {
         "format_version": PLAN_VERSION,

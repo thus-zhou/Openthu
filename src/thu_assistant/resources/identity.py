@@ -7,9 +7,11 @@ instant, or ``UNKNOWN`` when the source gives only a date or no time; the index
 then derives a bounded sequence token instead of pretending to know an order.
 
 Archive names are built from a sanitised course name, a sanitised title and a
-short token over ``(stable uid, version)``.  A remote title can therefore never
-add a parent directory, an absolute path, a drive letter, a reserved Windows
-device name or a trailing dot that Windows silently drops.
+short token over ``(stable uid, version)``.  Components are bounded by UTF-8
+bytes, not characters, so a Chinese title cannot produce a 257-byte filename
+that preview accepts and the filesystem rejects.  A remote title can never add a
+parent directory, an absolute path, a drive letter, a reserved Windows device
+name or a trailing dot that Windows silently drops.
 """
 from __future__ import annotations
 
@@ -34,9 +36,10 @@ _IDENT = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 _SEMESTER = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 _UNSAFE = re.compile(r"[\x00-\x1f\x7f/\\:*?\"<>|\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
 _WHITESPACE = re.compile(r"\s+")
-_RESERVED = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
-_RESERVED.update(f"COM{index}" for index in range(1, 10))
-_RESERVED.update(f"LPT{index}" for index in range(1, 10))
+_RESERVED = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", "CLOCK$"}
+_RESERVED.update(f"COM{index}" for index in range(0, 10))
+_RESERVED.update(f"LPT{index}" for index in range(0, 10))
+_SUPERSCRIPT = str.maketrans("¹²³", "123")
 _EXTENSION = re.compile(r"^\.[A-Za-z0-9]{1,10}$")
 
 
@@ -83,6 +86,16 @@ def version_for(updated_at: object) -> str:
     return normalized if normalized is not None else "UNKNOWN"
 
 
+def _trim_bytes(text: str, max_bytes: int | None) -> str:
+    if max_bytes is None or len(text.encode("utf-8")) <= max_bytes:
+        return text
+    budget = max_bytes
+    while budget > 0 and len(text.encode("utf-8")) > max_bytes:
+        text = text[:-1]
+        budget -= 1
+    return text.rstrip(" .")
+
+
 def display_title(value: object, *, limits_title_chars: int) -> str:
     if not isinstance(value, str):
         raise ResourceTitleUnsafe("title_type")
@@ -98,8 +111,14 @@ def display_title(value: object, *, limits_title_chars: int) -> str:
     return text
 
 
-def safe_component(value: object, *, fallback: str, max_length: int) -> str:
-    """One path segment, never a relative path or a device name."""
+def safe_component(
+    value: object,
+    *,
+    fallback: str,
+    max_length: int,
+    max_bytes: int | None = None,
+) -> str:
+    """One path segment, never a relative path, a device name or an overlong name."""
     text = value if isinstance(value, str) else ""
     text = unicodedata.normalize("NFC", text)
     text = _UNSAFE.sub("_", text)
@@ -107,11 +126,14 @@ def safe_component(value: object, *, fallback: str, max_length: int) -> str:
     if not text:
         text = fallback
     # Windows treats ``CON.txt`` and ``CON`` alike; check the part before the
-    # first dot.  A leading underscore keeps the name readable and safe.
-    if text.split(".", 1)[0].strip().upper() in _RESERVED:
+    # first dot.  Superscript digits and CLOCK$ are reserved too.  A leading
+    # underscore keeps the name readable and safe.
+    base = text.split(".", 1)[0].strip().upper().translate(_SUPERSCRIPT)
+    if base in _RESERVED:
         text = "_" + text
     if len(text) > max_length:
         text = text[:max_length].rstrip(" .")
+    text = _trim_bytes(text, max_bytes)
     if not text or text in (".", ".."):
         text = fallback
     return text
@@ -129,12 +151,23 @@ def archive_relative_path(
     course_name: str,
     title: str,
     max_title_chars: int = 240,
+    max_file_name_bytes: int = 200,
+    max_relative_path_bytes: int = 240,
 ) -> str:
-    """A stable relative path inside the user's chosen download directory."""
+    """A stable relative path inside the user's chosen download directory.
+
+    The stem is bounded to 120 UTF-8 bytes, leaving room for the token and a
+    short extension inside the 255-byte limit used by ext4 and many Windows
+    configurations.  The complete relative path is also checked by bytes.
+    """
     parse_uid(uid)
-    course_component = safe_component(
-        course_name, fallback="course", max_length=48
-    ) + "__" + safe_component(course_id, fallback="id", max_length=40)
+    course_component = (
+        safe_component(
+            course_name, fallback="course", max_length=48, max_bytes=100
+        )
+        + "__"
+        + safe_component(course_id, fallback="id", max_length=40, max_bytes=40)
+    )
     safe_title = display_title(title, limits_title_chars=max_title_chars)
     suffix = PurePosixPath(safe_title).suffix
     if _EXTENSION.fullmatch(suffix):
@@ -143,13 +176,15 @@ def archive_relative_path(
     else:
         stem = safe_title
         extension = ""
-    stem = safe_component(stem, fallback="resource", max_length=80)
+    stem = safe_component(stem, fallback="resource", max_length=80, max_bytes=120)
     token = resource_token(uid, version)
     file_name = f"{stem} [{token}]{extension}"
     relative = PurePosixPath(course_component, file_name)
     if relative.is_absolute() or any(part in (".", "..") for part in relative.parts):
         raise ResourceTitleUnsafe("archive_escape")
-    if len(relative.as_posix()) > 240:
+    if len(file_name.encode("utf-8")) > max_file_name_bytes:
+        raise ResourceTitleUnsafe("archive_name_too_long")
+    if len(relative.as_posix().encode("utf-8")) > max_relative_path_bytes:
         raise ResourceTitleUnsafe("archive_too_long")
     return relative.as_posix()
 

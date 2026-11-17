@@ -19,21 +19,23 @@ from ..source_state import now_iso
 from . import sources
 from .archive import Archive
 from .errors import (
+    ResourceConfirmationRequired,
     ResourceError,
     ResourceIndexIncomplete,
     ResourceInvalidArgument,
+    ResourceLimitExceeded,
     ResourcePlanExpired,
-    ResourceStoreUnavailable,
+    require_bool,
 )
 from .export import export_summary as _export_summary
-from .identity import validate_semester
+from .identity import validate_identifier, validate_semester
 from .index import ResourceIndex, clean_codes, default_clock
 from .limits import DEFAULT_LIMITS, ResourceLimits
 from .manifest import build_manifest
 from .model import ResourceCandidate, ResourceEntry
 from .plan import DownloadPlan, build_plan, execute_plan
 
-FACADE_VERSION = "resource-centre-v1"
+FACADE_VERSION = "resource-centre-v2"
 
 
 def _selection(value: Any) -> tuple[str, str | None]:
@@ -86,6 +88,12 @@ class ResourceCenter:
         if not isinstance(scope, str) or not scope.startswith("acct_"):
             raise ResourceInvalidArgument("account_scope")
         self.account_scope = scope
+        self.media_scope = store.account_scope(
+            account,
+            purpose="MEDIA",
+            account_domain="CAMPUS",
+            service_domain="LEARN",
+        )
         self._indices: dict[str, ResourceIndex] = {}
         self._plans: dict[str, DownloadPlan] = {}
 
@@ -143,21 +151,29 @@ class ResourceCenter:
             not isinstance(item, ResourceCandidate) for item in candidates
         ):
             raise ResourceInvalidArgument("candidates")
+        complete = require_bool(observation.get("complete"), "complete")
+        full_semester = require_bool(observation.get("full_semester"), "full_semester")
+        course_id = observation.get("course_id")
+        if course_id is not None:
+            validate_identifier(course_id, name="course_id")
+        stale_courses = observation.get("stale_courses") or ()
+        if isinstance(stale_courses, str) or not isinstance(stale_courses, (list, tuple, set)):
+            raise ResourceInvalidArgument("stale_courses")
         index = self.index(semester)
         stats = index.merge(
             candidates,
             checked_at=checked_at,
-            complete=bool(observation.get("complete")),
+            complete=complete,
             source_errors=observation.get("source_errors") or (),
             warnings=observation.get("warnings") or (),
-            mark_absent=bool(observation.get("full_semester") and observation.get("complete")),
-            stale_unseen=not bool(observation.get("complete")),
+            mark_absent=bool(full_semester and complete and course_id is None),
+            stale_courses=[item for item in stale_courses if isinstance(item, str)],
         )
         return {
             "format_version": FACADE_VERSION,
             "semester": semester,
             "checked_at": checked_at,
-            "complete": bool(observation.get("complete")),
+            "complete": complete,
             "source_errors": clean_codes(observation.get("source_errors")),
             "warnings": clean_codes(observation.get("warnings")),
             "merge": stats,
@@ -199,20 +215,46 @@ class ResourceCenter:
     def coverage(self, semester: str) -> dict[str, Any]:
         return self.index(semester).coverage()
 
-    def manifest(self, semester: str, *, include_superseded: bool = True) -> dict[str, Any]:
+    def manifest(
+        self,
+        semester: str,
+        *,
+        include_superseded: bool = True,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        require_bool(include_superseded, "include_superseded")
         index = self.index(semester)
         entries = [
             entry
             for entry in index.entries
             if include_superseded or entry.state not in ("SUPERSEDED", "MISSING")
         ]
-        manifest = build_manifest(entries, index.downloads(), semester=semester)
+        size = self.limits.default_manifest_limit if limit is None else limit
+        manifest = build_manifest(
+            entries,
+            index.downloads(),
+            semester=semester,
+            offset=offset,
+            limit=size,
+            limits=self.limits,
+        )
         manifest["coverage"] = index.coverage()
         return manifest
 
-    def resource(self, semester: str, stable_resource_uid: str, *, version: str | None = None) -> dict[str, Any]:
+    def resource(
+        self,
+        semester: str,
+        stable_resource_uid: str,
+        *,
+        version: str | None = None,
+        allow_historical: bool = False,
+    ) -> dict[str, Any]:
+        require_bool(allow_historical, "allow_historical")
         index = self.index(semester)
-        entry = index.find(stable_resource_uid, version=version)
+        entry = index.find(
+            stable_resource_uid, version=version, allow_historical=allow_historical
+        )
         records = index.downloads(stable_resource_uid=stable_resource_uid)
         return {
             "format_version": FACADE_VERSION,
@@ -228,9 +270,16 @@ class ResourceCenter:
         *,
         allow_historical: bool = False,
     ) -> list[ResourceEntry]:
+        require_bool(allow_historical, "allow_historical")
+        if selections is None or isinstance(selections, (str, bytes)):
+            raise ResourceInvalidArgument("selections_type")
+        try:
+            iterator = iter(selections)
+        except TypeError:
+            raise ResourceInvalidArgument("selections_type") from None
         rows: list[ResourceEntry] = []
         seen: set[tuple[str, str]] = set()
-        for value in selections:
+        for value in iterator:
             uid, version = _selection(value)
             entry = index.find(uid, version=version, allow_historical=True)
             if entry.state == "STALE" and not allow_historical:
@@ -255,7 +304,11 @@ class ResourceCenter:
         verify_known: bool = False,
         allow_historical: bool = False,
     ) -> dict[str, Any]:
+        require_bool(verify_known, "verify_known")
+        require_bool(allow_historical, "allow_historical")
         self._prune_plans()
+        if len(self._plans) >= self.limits.max_pending_plans:
+            raise ResourceLimitExceeded("pending_plans")
         index = self.index(semester)
         entries = self._select_entries(index, selections, allow_historical=allow_historical)
         plan = build_plan(
@@ -294,8 +347,6 @@ class ResourceCenter:
         cancel: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
         if confirm is not True:
-            from .errors import ResourceConfirmationRequired
-
             raise ResourceConfirmationRequired("download")
         if not isinstance(plan_id, str) or plan_id not in self._plans:
             raise ResourcePlanExpired("unknown_plan")
@@ -309,19 +360,39 @@ class ResourceCenter:
             limits=self.limits,
             clock=self.clock,
             media=self.media_assets,
+            media_scope=self.media_scope,
             cancel=cancel,
         )
 
     def download_records(
-        self, semester: str, *, stable_resource_uid: str | None = None
+        self,
+        semester: str,
+        *,
+        stable_resource_uid: str | None = None,
+        offset: int = 0,
+        limit: int | None = None,
     ) -> dict[str, Any]:
         index = self.index(semester)
         records = index.downloads(stable_resource_uid=stable_resource_uid)
+        if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
+            raise ResourceInvalidArgument("offset")
+        size = self.limits.default_download_record_limit if limit is None else limit
+        if (
+            not isinstance(size, int)
+            or isinstance(size, bool)
+            or not 1 <= size <= self.limits.max_download_record_limit
+        ):
+            raise ResourceInvalidArgument("limit")
+        page = records[offset : offset + size]
         return {
             "format_version": FACADE_VERSION,
             "semester": semester,
             "count": len(records),
-            "records": [record.public() for record in records],
+            "offset": offset,
+            "limit": size,
+            "next_offset": offset + len(page) if offset + len(page) < len(records) else None,
+            "snapshot_complete": offset + len(page) >= len(records),
+            "records": [record.public() for record in page],
         }
 
     # -- export --------------------------------------------------------
@@ -334,7 +405,11 @@ class ResourceCenter:
         fields: Iterable[str] | None = None,
         include_body: bool = False,
         acknowledge_personal: bool = False,
+        overwrite: bool = False,
     ) -> dict[str, Any]:
+        require_bool(include_body, "include_body")
+        require_bool(acknowledge_personal, "acknowledge_personal")
+        require_bool(overwrite, "overwrite")
         index = self.index(semester)
         if selections is None:
             entries = [
@@ -344,27 +419,29 @@ class ResourceCenter:
             ]
         else:
             entries = self._select_entries(index, selections)
-        result = _export_summary(
+        return _export_summary(
             entries,
             destination=destination,
             fields=fields,
             include_body=include_body,
             acknowledge_personal=acknowledge_personal,
+            overwrite=overwrite,
             records=index.downloads(),
             limits=self.limits,
             clock=self.clock,
         )
-        return result
 
     # -- lifecycle -----------------------------------------------------
     def delete_cache(self, semester: str) -> dict[str, Any]:
         semester = validate_semester(semester)
         index = self.index(semester)
         cleared_plans = sum(1 for plan in self._plans.values() if plan.semester == semester)
+        # Delete the encrypted index first; a failure must leave the plan table
+        # and the readable index intact.
+        index.delete()
         self._plans = {
             plan_id: plan for plan_id, plan in self._plans.items() if plan.semester != semester
         }
-        index.delete()
         self._indices.pop(semester, None)
         return {
             "format_version": FACADE_VERSION,
@@ -377,8 +454,6 @@ class ResourceCenter:
     @staticmethod
     def public_error(error: BaseException) -> dict[str, Any]:
         if isinstance(error, ResourceError):
-            return error.as_error()
-        if isinstance(error, ResourceStoreUnavailable):
             return error.as_error()
         return {
             "code": "RESOURCE_ERROR",

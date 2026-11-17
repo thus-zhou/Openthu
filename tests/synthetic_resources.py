@@ -11,9 +11,9 @@ from dataclasses import dataclass
 from datetime import timedelta, timezone
 from typing import Any, Iterable
 
-from .identity import stable_uid
-from .limits import DEFAULT_LIMITS
-from .model import ResourceCandidate
+from thu_assistant.resources.identity import stable_uid
+from thu_assistant.resources.limits import DEFAULT_LIMITS
+from thu_assistant.resources.model import ResourceCandidate
 
 TZ = timezone(timedelta(hours=8))
 
@@ -40,6 +40,8 @@ def candidate(
     updated_at: str | None = "2026-09-01T10:00:00+08:00",
     body_state: str = "NOT_READ",
     body_excerpt: str | None = None,
+    body_truncated: bool = False,
+    mime_type: str | None = None,
     limits: Any = DEFAULT_LIMITS,
 ) -> ResourceCandidate:
     if body_state == "READ" and body_excerpt is None:
@@ -55,6 +57,8 @@ def candidate(
         updated_at=updated_at,
         body_state=body_state,
         body_excerpt=body_excerpt,
+        body_truncated=body_truncated,
+        mime_type=mime_type,
         attachment_hint=source != "COURSE_FILE",
         synthetic=True,
         max_title_chars=limits.max_title_chars,
@@ -75,6 +79,7 @@ class FixtureFile:
     name: str
     size: int = 128
     uploaded_at: str | None = "2026-09-01T10:00:00+08:00"
+    mime_type: str = "application/pdf"
 
 
 @dataclass(frozen=True)
@@ -93,6 +98,7 @@ class FixtureAssignment:
     attachment_ids: tuple[str, ...] = ()
     instructions_state: str = "READ"
     attachments_hint: bool | None = None
+    attachments_state: str = "LIST_READ"
 
     def __post_init__(self) -> None:
         if self.attachments_hint is None:
@@ -183,8 +189,9 @@ class FixtureProvider:
             "checked_at": "2026-09-02T09:00:00+08:00",
         }
 
-    def notice_detail(self, course_id: str, notice_id: str) -> dict[str, Any]:
+    def notice_detail(self, course: Any, notice_id: str) -> dict[str, Any]:
         self.read_calls += 1
+        course_id = getattr(course, "id", course)
         for notice in self.notices.get(course_id, ()):
             if notice.id != notice_id:
                 continue
@@ -202,7 +209,7 @@ class FixtureProvider:
                     }
                     for fid in notice.attachment_ids
                 ],
-                "attachments_state": "LIST_READ",
+                "attachments_state": "LIST_READ" if notice.attachment_ids else "READ",
             }
         raise RuntimeError("SYNTHETIC_NOTICE_NOT_FOUND")
 
