@@ -1,0 +1,206 @@
+{
+  "module": "8.1",
+  "title": "全版本集成、候选构建与交审",
+  "batch": 8,
+  "owner": "Hermes",
+  "status": "implemented",
+  "baseline_commit": "8d0606daf9bc121f3db1c5a5dba7ca62d343d0d8",
+  "integration_parent_commit": "8d0606daf9bc121f3db1c5a5dba7ca62d343d0d8",
+  "delivery_commit": "9b1bef59685bab1be1922219f6fc53f67f1601ad",
+  "implementation_commits": [
+    "9b1bef5"
+  ],
+  "record_commit": "the commit containing this record file",
+  "branch": "hermes/8.1",
+  "worktree": "~/projects/Openthu/.local/worktrees/8.1",
+  "worktree_note": "Recorded relative to the user home because contracts/v0.2/validate.py rejects absolute home-directory paths under plans/; the absolute path stays in the execution session and the pushed branch.",
+  "version_pr": 2,
+  "batch_state": "batch 8 is ready with 8.1 implemented; accepted belongs to the review phase. 8.1 opens no PR, merges nothing, tags nothing and publishes nothing.",
+  "paths": [
+    "contracts/v0.2/local-read-api.schema.json",
+    "src/thu_assistant/local_api/contract.py",
+    "src/thu_assistant/local_api/samples.py",
+    "src/thu_assistant/actions.py",
+    "docs/contracts/source-matrix.md",
+    "tests/test_local_api.py",
+    "tests/test_batch8_integration.py",
+    "plans/v0.2.0/交付/集成清单.md",
+    "plans/v0.2.0/交付/候选版本记录.md",
+    "plans/v0.2.0/交付/模块结果/8.1.md",
+    "plans/v0.2.0/交付/模块结果/8.1.json",
+    "plans/v0.2.0/交付/批次门禁.json",
+    "plans/v0.2.0/交付/模块负责表.json",
+    "plans/v0.2.0/交付/验收映射.json",
+    "plans/v0.2.0/VERSION_MANIFEST.json",
+    "plans/v0.2.0/进度清单.md",
+    "plans/v0.2.0/版本总清单.md",
+    "handoffs/v0.2.0-candidate.md",
+    "handoffs/v0.2.0-candidate.json"
+  ],
+  "contracts": [
+    "result-envelope-v1",
+    "error-classification-v1",
+    "secure-storage-header-v1",
+    "source-evidence-v1",
+    "media-reference-v1",
+    "calendar-event-v1",
+    "business-facade-v1",
+    "local-read-api-v1",
+    "compatibility-baseline-v1"
+  ],
+  "outputs": [
+    "Batches 1-7 are integrated on one tree; every module delivery commit and every accepted batch integration commit is verified as an ancestor of the candidate tree by tests/test_batch8_integration.py",
+    "local-read-api-v1 revision 8.1 declares the request-side cursor on /todos, /calendar and /resources; the runtime router matches the frozen parameter list exactly and the 6.2 QUERY_EXTENSION record is removed",
+    "src/thu_assistant/actions.py no longer claims that no campus write adapter exists; the docstring names the registered seat, room and sports create/cancel operations and keeps the per-item authorization boundary",
+    "docs/contracts/source-matrix.md replaces the pending-difference table with a resolved/retained register that names the 8.1 confirmation and the retained v0.1 preview boundary",
+    "候选版本记录.md records the artifact set, verify/install-check results, the fresh-directory probes, privacy scans, known limits and rollback",
+    "集成清单.md maps all 24 modules, batches 1-9, the 8.1 seam fixes and the retained external blockers to real commits",
+    "The batch gate keeps batch 8 ready with 8.1 implemented, the ownership table and acceptance map agree, and VERSION_MANIFEST/进度清单/版本总清单 describe one candidate",
+    "handoffs/v0.2.0-candidate.md gives Codex the reproduction, evidence and continuation point without claiming a release"
+  ],
+  "checks": {
+    "module_tests": {
+      "passed": 9,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_batch8_integration.py",
+      "breakdown": {
+        "tests/test_batch8_integration.py": 9
+      }
+    },
+    "related_tests": {
+      "passed": 224,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_local_api.py tests/test_facade_audit.py tests/test_batch6_integration.py tests/test_batch7_integration.py tests/test_docs_consistency.py"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 1798,
+      "python_skipped": 8,
+      "python_failed": 0,
+      "python_errors": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test",
+      "tree": "the record-commit tree on a clean worktree; this text-only update changes no test code",
+      "live_campus_calls": 0,
+      "model_calls": 0,
+      "business_submissions": 0
+    },
+    "dev_check": {
+      "ok": true,
+      "files_checked": 563,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check"
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "legacy_tools": 29,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "candidate_build": {
+      "commit": "9b1bef5",
+      "dirty": false,
+      "artifacts": 4,
+      "source_files": 559,
+      "wheel_members": 214,
+      "bundled_files": 54,
+      "sdist_members": 493,
+      "verify": "ok=true; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
+      "release_status": "candidate-not-released",
+      "published": false,
+      "command": "python scripts/package_release.py build"
+    },
+    "install_check": {
+      "source_root": null,
+      "missing": [],
+      "mcp_tools": 29,
+      "doctor_ok": true,
+      "user_state_unchanged": true,
+      "venv": "temporary",
+      "command": "python scripts/package_release.py install-check --dist dist"
+    },
+    "fresh_install": {
+      "location": "a new venv outside the repository",
+      "import_root": "site-packages/thu_assistant",
+      "doctor": "available with all five checks; missing _bundled/runtime/windows/access.js fails runtime-resources with exit 1 and recovers after restore",
+      "dashboard": "GET / returns 200 with the packaged Openthu dashboard shell; /assets/app.js and /assets/app.css are served from the package",
+      "health_without_session": "HTTP 401 AUTH_REQUIRED",
+      "missing_key": "SECURE_KEY_NOT_CONFIGURED, no test codec or plaintext fallback",
+      "missing_gateway_runtime": "GATEWAY_EXITED classified error with automatic_replay_allowed=false, no empty success",
+      "live_campus_calls": 0
+    },
+    "privacy_scan": {
+      "source": {
+        "ok": true,
+        "files_checked": 563,
+        "findings": 0
+      },
+      "archives": {
+        "ok": true,
+        "files_checked": 1825,
+        "findings": 0
+      },
+      "git_diff": "added absolute paths are synthetic test markers (alice/synthetic/example); no real host path, credential or private key block",
+      "author_identity": "Openthu Maintainers <maintainers@openthu.invalid>"
+    },
+    "github_actions": {
+      "commit": null,
+      "status": "recorded in the follow-up record commit",
+      "source": "GitHub Actions; Windows is not reproduced on a local host"
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "browser_calls": 0,
+    "business_submissions": 0,
+    "message_sends": 0
+  },
+  "verified_cases": [
+    "git merge-base --is-ancestor accepts all 21 module delivery commits and the batch 2-7 integration commits against the candidate tree",
+    "the batch gate is accepted for batches 1-7, ready for 8 and locked for 9, and 8.1 is implemented rather than accepted",
+    "contracts/v0.2 contains seven JSON schemas plus error-classification and the compatibility baseline; the set of contract versions is exactly the frozen eight",
+    "every local-read API route accepts exactly the parameters declared by local-read-api-v1, and /todos, /calendar and /resources accept the request-side cursor",
+    "the 8.1 revision is present in x-revisions and no QUERY_EXTENSION attribute remains on the runtime contract",
+    "thu_assistant.version, VERSION_MANIFEST, the 0.2.0 changelog head and README all describe one candidate and none claims a published release",
+    "the wheel package data still carries web_assets HTML/CSS/JS and services.json, and MANIFEST.in matches",
+    "both distribution bundles list existing must-include files, all six licence files exist, and forbidden directories include .local, dist and node_modules",
+    "the six legacy entry points plus openthu-doctor resolve in pyproject, and the compatibility baseline keeps 29 MCP tools and 6 entry points",
+    "the source-matrix difference register no longer assigns work to 4.4/7.3 or 5.3 and records the 8.1 confirmation",
+    "the integration checklist names all 24 modules; the candidate record carries the SHA256 set and the module record reports implemented status",
+    "the candidate build at 9b1bef5 produced four artifacts with a clean tree; verify bound the commit and install-check ran outside the repository",
+    "a fresh venv install served the dashboard shell from the package, refused /api/v1/health with 401, failed doctor on a missing bundled resource and reported SECURE_KEY_NOT_CONFIGURED without a key",
+    "privacy_scan found nothing in 563 source files and 1825 archive members"
+  ],
+  "limits": [
+    "The candidate record documents the local artifact set built at 9b1bef5; the release gate rebuilds the same source at the final head, so source-archive hashes and the manifest commit field change with the record commit while packaged product code does not.",
+    "Windows results come from GitHub Actions, not a local Windows host; Linux was executed locally.",
+    "Firefox and Safari static-subresource behaviour (Sec-Fetch-Mode) remains unverified; only Chromium was exercised.",
+    "The local read API HEAD performs one read without consuming the 10-second refresh budget, and a bootstrap token is single-use; sessions expire without a restart command.",
+    "The legacy learn_assistant.core.prepare_submission still writes an unencrypted local preview JSON containing a local path; it never uploads or submits and is retained as a v0.1 compatibility boundary.",
+    "The wheel does not ship node_modules; gateway-backed capabilities report GATEWAY_EXITED until the documented npm ci step runs.",
+    "Real campus login, writes, payments, submissions and model image transfers remain unverified; engineering checks do not raise their evidence level."
+  ],
+  "rollback": "Restore the five code paths (local-read-api.schema.json, local_api/contract.py, local_api/samples.py, tests/test_local_api.py and the actions.py docstring) to 8d0606d; /todos, /calendar and /resources then depend on the 6.2 QUERY_EXTENSION and its PENDING_CONTRACT_OWNER_REVISION status returns. Delete the 8.1 records and handoff, and restore the ledgers (batch gate, ownership, acceptance map, VERSION_MANIFEST, progress and version lists) to the batch-7 state. The rollback does not touch user state, keys, sessions, downloads or pending transactions, and the candidate dist directory can be deleted because it is not committed.",
+  "next": "Codex reviews the candidate on version PR #2, requests fixes on the same branch if needed, then merges main, tags v0.2.0, publishes the Release and verifies the downloads. Hermes does not merge, tag or publish in this phase.",
+  "cross_module_requests": [
+    "1.1 (contract owner): local-read-api-v1 was revised in place with a compatible 8.1 record instead of waiting for a separate contract batch; the revision adds only the request-side cursor that paired with the already declared next_cursor.",
+    "4.4: the actions.py module docstring was corrected by the integrator because the stale sentence contradicted the registered operations; no behaviour changed.",
+    "2.3: the source-matrix difference register was updated by the integrator to the observed state; the retained v0.1 preview boundary is recorded instead of silently rewritten.",
+    "6.2: the QUERY_EXTENSION note and describe_api field were removed once the contract declared the parameter; no route, limit or session behaviour changed.",
+    "9.1: rebuild and re-verify the candidate at the final merged head before tagging; do not reuse the local artifact hashes blindly."
+  ]
+}

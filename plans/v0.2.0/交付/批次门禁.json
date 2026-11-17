@@ -411,13 +411,30 @@
         "8.1"
       ],
       "module_status": {
-        "8.1": "pending"
+        "8.1": "implemented"
       },
       "status": "ready",
       "integration_commit": null,
       "accepted_at": null,
       "entry_condition": "all batch 7 modules accepted and integrated",
-      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
+      "exit_condition": "all modules accepted; candidate built, restored and reviewed",
+      "implementation": {
+        "implemented_at": "2026-11-18",
+        "code_commit": "9b1bef59685bab1be1922219f6fc53f67f1601ad",
+        "summary": "All 24 modules integrated on one tree; the deferred local-read-api cursor revision, the stale actions.py docstring and the source-matrix difference register are folded in; one candidate is built and restored outside the repository.",
+        "checks": [
+          "plan validator ok: 24 modules, 9 batches",
+          "contract validator ok: 8 contracts + 1 compatibility baseline; local-read-api revision 8.1",
+          "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures",
+          "scripts/dev.py check: 563 files, 0 findings, 29 MCP tools",
+          "candidate build/verify at 9b1bef5: 4 artifacts, wheel 214 members (54 bundled), sdist 493 members",
+          "install-check outside the repository: 29 tools, doctor_ok=true, user state unchanged",
+          "fresh wheel install outside the repository: dashboard shell served, /api/v1/health 401, missing resource fails doctor, no key gives SECURE_KEY_NOT_CONFIGURED",
+          "GitHub Actions on the record commit: ubuntu-24.04 (3.12/3.13) and windows-2025 (3.12) plus the release gate"
+        ],
+        "note": "Batch 8 stays ready: `implemented` is the implementer's state; `accepted` is written only by the review phase after the audit and the final candidate evidence."
+      },
+      "gate_note": "8.1 is implemented on hermes/8.1 and prepared the v0.2.0 candidate; batch 8 is not accepted yet, so batch 9 stays locked. No PR, merge, tag or release was created."
     },
     {
       "batch": 9,

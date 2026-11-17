@@ -919,7 +919,12 @@
       "id": "8.1",
       "title": "全版本集成、候选构建与交审",
       "batch": 8,
-      "code_paths": [],
+      "code_paths": [
+        "contracts/v0.2/local-read-api.schema.json",
+        "src/thu_assistant/local_api/contract.py",
+        "src/thu_assistant/local_api/samples.py",
+        "src/thu_assistant/actions.py"
+      ],
       "contracts": [
         "result-envelope-v1",
         "error-classification-v1",
@@ -932,11 +937,14 @@
         "compatibility-baseline-v1"
       ],
       "tests": [
-        "tests/release_regression/"
+        "tests/test_batch8_integration.py",
+        "tests/test_local_api.py"
       ],
       "docs": [
-        "CHANGELOG.md",
-        "docs/INSTALL.md"
+        "plans/v0.2.0/交付/集成清单.md",
+        "plans/v0.2.0/交付/候选版本记录.md",
+        "docs/contracts/source-matrix.md",
+        "CHANGELOG.md"
       ],
       "install_assets": [
         "dist/",
@@ -947,7 +955,13 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "全版本集成、候选构建、恢复安装验证和交审说明",
-      "evidence": []
+      "evidence": [
+        "Module 8.1 integrates batches 1-7 on hermes/8.1; every module delivery commit and every accepted batch integration commit is verified as an ancestor of the candidate tree.",
+        "local-read-api-v1 revision 8.1 declares the request-side cursor on /todos, /calendar and /resources; the runtime router matches the frozen list exactly and no QUERY_EXTENSION remains.",
+        "Candidate build at 9b1bef5: 4 artifacts, verify ok, wheel 214 members (54 bundled), sdist 493 members; install-check outside the repository passes with 29 tools and unchanged user state.",
+        "A fresh wheel installed outside the repository serves the dashboard shell, refuses /api/v1/health without a local session, fails doctor on a missing bundled resource and reports SECURE_KEY_NOT_CONFIGURED without a key.",
+        "Batch 8 is ready with 8.1 implemented; status accepted is written by the review phase, not here."
+      ]
     },
     {
       "id": "9.1",

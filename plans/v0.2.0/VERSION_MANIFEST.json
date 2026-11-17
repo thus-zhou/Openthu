@@ -97,8 +97,9 @@
   },
   "modules": {
     "total": 24,
-    "accepted": 19,
-    "pending": 5,
+    "accepted": 22,
+    "implemented": 1,
+    "pending": 1,
     "ownership_file": "交付/模块负责表.json",
     "acceptance_file": "交付/验收映射.json"
   },
@@ -118,9 +119,9 @@
   },
   "batches": {
     "total": 9,
-    "current": 7,
-    "current_status": "accepted",
-    "module_status_note": "1.1, 2.1-2.3, 3.1-3.3, 4.1-4.5, 5.1-5.4, 6.1-6.3 and 7.1-7.3 accepted. Batch 7 is reconnected at d81c81c0f51325bdd99c64b733ec29b45ef4f9e6 (7.1 e2b45fa, 7.2 3eeb2d3, 7.3 9726535; seams X1-X4) with the dashboard shell wired and packaged, the coverage matrix resolved, 561 files/0 findings, Linux Python 1789/8, Windows green in CI, Node 66/0 and zero live calls. Batch 8 is ready; batch 9 stays locked.",
+    "current": 8,
+    "current_status": "ready",
+    "module_status_note": "Batches 1-7 accepted and reconnected. 8.1 is implemented on hermes/8.1 at 9b1bef5: the local-read-api request-side cursor revision, the actions.py docstring and the source-matrix difference register are folded into the candidate tree, and the v0.2.0 candidate is built, verified and restored outside the repository. Batch 8 stays ready until the review phase writes accepted; batch 9 stays locked.",
     "next": 8,
     "gate_file": "交付/批次门禁.json",
     "status_model": "accepted prefix -> one ready -> locked remainder; all accepted only at version completion",
@@ -205,5 +206,24 @@
       "extra_samples": 8
     },
     "commit_note": "current audit-fix commit; see PR #2 head"
+  },
+  "candidate": {
+    "status": "candidate-not-released",
+    "code_commit": "9b1bef59685bab1be1922219f6fc53f67f1601ad",
+    "artifacts": 4,
+    "artifact_names": [
+      "Openthu-0.2.0-source.tar.gz",
+      "Openthu-0.2.0-source.zip",
+      "openthu-0.2.0-py3-none-any.whl",
+      "openthu-0.2.0.tar.gz"
+    ],
+    "wheel_members": 214,
+    "bundled_files": 54,
+    "sdist_members": 493,
+    "source_files": 559,
+    "verify": "ok=true; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
+    "install_check": "outside the repository; 29 MCP tools, doctor ok, user state unchanged",
+    "published": false,
+    "record": "交付/候选版本记录.md"
   }
 }
