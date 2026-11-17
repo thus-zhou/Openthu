@@ -400,10 +400,13 @@ class BrowserManager:
         s,element=self._element(session_id,snapshot_id,element_id)
         payload,_=self._form_state(s,element)
         result=self.actions.prepare_browser(payload,s['account_id'],{'session_id':session_id,'document':payload.get('document'),'frame_index':payload.get('frameIndex')})
+        from .consent import VERSION as HOST_AUTHORIZATION_VERSION
         # Generic fields cannot be reliably classified as nonpersonal without a site adapter.
         result.update(expiresInSeconds=600,submitted=False,form_complete=False,
             fields=[{'type':f['type'],'value':'[REDACTED]','checked':f.get('checked'),
                 'selected_count':len(f.get('selected') or [])} for f in payload['fields']],
+            authorization_protocol=HOST_AUTHORIZATION_VERSION,
+            local_confirmation_command='python -m thu_assistant.consent --plan '+result['plan_id'],
             authorizationRequired='A specific human instruction plus trusted host evidence and a registered site adapter are required.')
         return result
 

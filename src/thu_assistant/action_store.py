@@ -7,13 +7,29 @@ from .bridge import CampusError
 from .catalog import state_root
 
 STATES={'PREPARED','NEEDS_USER_ACTION','AWAITING_OFFICIAL','DISPATCHING','PENDING_PAYMENT','PENDING_APPROVAL','SUCCEEDED','FAILED','UNKNOWN'}
+EFFECT_STATES={'NOT_SENT','SENT','UNKNOWN'}
+_OPERATION=re.compile('[a-f0-9]{32}')
+_CHALLENGE=re.compile('[a-f0-9]{64}')
+_EFFECT_STEP=re.compile('[a-z][a-z0-9_-]{0,39}')
+
+def _check_effects(value):
+    if value is None:return []
+    if not isinstance(value,list):return None
+    for row in value:
+        if not isinstance(row,dict) or set(row)-{'step','status','at','history'}:return None
+        if not isinstance(row.get('step'),str) or not _EFFECT_STEP.fullmatch(row['step']):return None
+        if row.get('status') not in EFFECT_STATES:return None
+        if 'at' in row and (isinstance(row['at'],bool) or not isinstance(row['at'],(int,float))):return None
+        history=row.get('history',[])
+        if not isinstance(history,list) or any(not isinstance(old,dict) or old.get('status') not in EFFECT_STATES for old in history):return None
+    return value
 
 class ActionStore:
     def __init__(self,root=None,protect=_dpapi_protect,unprotect=_dpapi_unprotect):
         self.root=Path(root) if root else state_root()/'actions-v1'
         self.protect=protect;self.unprotect=unprotect
     def path(self,operation_id):
-        if not isinstance(operation_id,str) or not re.fullmatch('[a-f0-9]{32}',operation_id):raise CampusError('INVALID_OPERATION_ID')
+        if not isinstance(operation_id,str) or not _OPERATION.fullmatch(operation_id):raise CampusError('INVALID_OPERATION_ID')
         return self.root/(operation_id+'.dpapi')
     @contextmanager
     def lock(self,name):
@@ -53,6 +69,14 @@ class ActionStore:
         except Exception:raise CampusError('ACTION_LOG_CORRUPT') from None
         if record.get('version')!=1 or record.get('operation_id')!=oid or record.get('state') not in STATES or type(record.get('revision')) is not int:
             raise CampusError('ACTION_LOG_CORRUPT')
+        challenge=record.get('challenge')
+        if challenge is not None and (not isinstance(challenge,str) or not _CHALLENGE.fullmatch(challenge)):
+            raise CampusError('ACTION_LOG_CORRUPT')
+        if _check_effects(record.get('effects')) is None:
+            raise CampusError('ACTION_LOG_CORRUPT')
+        protocol=record.get('consent_protocol')
+        if protocol is not None and (not isinstance(protocol,str) or len(protocol)>80):
+            raise CampusError('ACTION_LOG_CORRUPT')
         return record
     def write(self,record):
         target=self.path(record['operation_id']);self.root.mkdir(parents=True,exist_ok=True)
@@ -72,7 +96,10 @@ class ActionStore:
                     if old['state'] in {'AWAITING_OFFICIAL','DISPATCHING','UNKNOWN','PENDING_PAYMENT','PENDING_APPROVAL','SUCCEEDED'} or old['state'] in {'PREPARED','NEEDS_USER_ACTION'} and old['expires_at']>time.time() and old['context']==record['context'] and old['adapter_version']==record['adapter_version']:return old
             if self.path(record['operation_id']).exists():raise CampusError('ACTION_ID_CONFLICT')
             self.write(record);return record
-    def update(self,oid,change):
+    def update(self,oid,change,expected_revision=None):
         self.path(oid)
         with self.lock('index'),self.lock(oid):
-            record=self.read(oid);change(record);record['revision']+=1;self.write(record);return record
+            record=self.read(oid)
+            if expected_revision is not None and record['revision']!=expected_revision:
+                raise CampusError('ACTION_RESULT_CHANGED_RECHECK')
+            change(record);record['revision']+=1;self.write(record);return record
