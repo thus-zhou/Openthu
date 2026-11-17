@@ -1344,7 +1344,10 @@ def main(argv=None) -> int:
     release.add_argument("--platform")
     release.add_argument("--markers", help="JSON object of exact injected marker values")
     release.add_argument("--expected-commit")
-    release.add_argument("--require-python-matrix", action="store_true")
+    release.add_argument("--require-python-matrix", action=argparse.BooleanOptionalAction,
+                         default=True,
+                         help="require the evidence-floor Python matrix (default; "
+                              "use --no-require-python-matrix only for diagnostics)")
 
     args = parser.parse_args(argv)
     if args.command in ("report", "gate"):

@@ -578,6 +578,21 @@ def test_dependency_and_defaults_audits_use_the_distribution_manifest():
 # CLI exit codes
 # ---------------------------------------------------------------------------
 
+def test_cli_release_gate_requires_the_python_matrix_by_default(tmp_path):
+    reports = write_reports(tmp_path / "reports", include_linux_313=False)
+    output = tmp_path / "cli-gate.json"
+    markers = tmp_path / "markers.json"
+    markers.write_text(json.dumps(MARKERS), encoding="utf-8")
+    exit_code = REPORT.main(["release-gate", "--reports", str(reports),
+                             "--dist", str(tmp_path / "missing"),
+                             "--markers", str(markers),
+                             "--expected-commit", "abc",
+                             "--output", str(output)])
+    assert exit_code == 1
+    value = json.loads(output.read_text(encoding="utf-8"))
+    assert any(gap["kind"] == "python_matrix_incomplete" for gap in value["gaps"])
+
+
 def test_cli_report_diagnostic_writes_a_safe_json_file(tmp_path, capsys):
     junit = write_junit(tmp_path / "cli.xml", [passed()])
     output = tmp_path / "report.json"
