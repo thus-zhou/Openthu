@@ -97,8 +97,8 @@
   },
   "modules": {
     "total": 24,
-    "accepted": 7,
-    "pending": 17,
+    "accepted": 12,
+    "pending": 12,
     "ownership_file": "交付/模块负责表.json",
     "acceptance_file": "交付/验收映射.json"
   },
@@ -118,10 +118,10 @@
   },
   "batches": {
     "total": 9,
-    "current": 3,
+    "current": 4,
     "current_status": "accepted",
-    "module_status_note": "1.1, 2.1-2.3 and 3.1-3.3 accepted; batch 3 reconnected at 400adbe with the joint check and full offline suite green on both platforms. Batch 4 is ready.",
-    "next": 4,
+    "module_status_note": "1.1, 2.1-2.3, 3.1-3.3 and 4.1-4.5 accepted; batch 4 reconnected at 2cc1c05 with the joint check and full offline suite; seam fixes X1-X3 register the batch-4 error codes and update the model-image docs/source refs. Batch 5 is ready.",
+    "next": 5,
     "gate_file": "交付/批次门禁.json",
     "status_model": "accepted prefix -> one ready -> locked remainder; all accepted only at version completion",
     "gate_validation": {

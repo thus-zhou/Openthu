@@ -172,17 +172,57 @@
         "4.5"
       ],
       "module_status": {
-        "4.1": "pending",
-        "4.2": "pending",
-        "4.3": "pending",
-        "4.4": "pending",
-        "4.5": "pending"
+        "4.1": "accepted",
+        "4.2": "accepted",
+        "4.3": "accepted",
+        "4.4": "accepted",
+        "4.5": "accepted"
       },
-      "status": "ready",
-      "integration_commit": null,
-      "accepted_at": null,
+      "status": "accepted",
+      "integration_commit": "2cc1c05443d8846a92fb0dafbbc3da40cbe2b00c",
+      "accepted_at": "2026-11-17",
       "entry_condition": "all batch 3 modules accepted and integrated",
-      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
+      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
+      "acceptance_record": "the commit containing this accepted record",
+      "gate_note": "4.1 accepted at bbe620a; 4.2 at c66ee2e; 4.3 at e14c11c; 4.4 at cf255de plus the follow-up ec21045 (consent authorize re-export); 4.5 at 2df5772. The single batch-4 integration commit 2cc1c05 records the joint check, the full offline suite and the seam fixes X1-X3. Push and PR CI at that SHA must be green on both platforms. Batch 5 is ready.",
+      "module_acceptance": {
+        "4.1": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "bbe620a",
+          "evidence": "98 module tests; audit 4.1-audit 4 P1 + 9 P2 fixed; three adapters BLOCKED_SOURCE_EVIDENCE; codes registered in X1; joint tree Linux 1005/7, Node 66."
+        },
+        "4.2": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "c66ee2e",
+          "evidence": "98 module tests; audit 4.2-audit P0-1 + 11 P1 + 18 P2 closed; encrypted index; codes registered in X1; joint tree Linux 1005/7, Node 66."
+        },
+        "4.3": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "e14c11c",
+          "evidence": "52 module tests + 277 related read regressions; audit 4.3-audit 4 P1 + 16 P2 fixed; precheck additive; joint tree Linux 1005/7, Node 66."
+        },
+        "4.4": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "cf255de",
+          "followup_commit": "ec21045",
+          "evidence": "47 module + 199 compatibility tests; audit 4.4-audit 3 P1 + 14 P2 fixed; signed host authorization and single dispatch; Windows CI 44009070509 green."
+        },
+        "4.5": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "2df5772",
+          "evidence": "58 module tests; audit 4.5-audit 3 P1 + 11 P2 fixed in scope; P2-3 closed by X1 and P2-13 by X3; shipped registry empty."
+        }
+      },
+      "checks": [
+        "plan validator ok: 24 modules, 9 batches",
+        "contract validator ok: 8 contracts + 1 compatibility baseline; 9/35/8 samples; 238 registered error codes",
+        "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures",
+        "scripts/dev.py check: 460 files, 0 findings, 29 MCP tools",
+        "Linux: Python 1005 passed/7 skipped/0 failed; Node 66 passed/0 failed",
+        "tests/test_batch4_integration.py: 4 seam tests (registry, classification, ledger, media purpose)",
+        "live campus/model/business calls: 0/0/0",
+        "GitHub Actions at 2cc1c05: ubuntu-24.04 and windows-2025 push and pull_request runs"
+      ]
     },
     {
       "batch": 5,
@@ -199,7 +239,7 @@
         "5.3": "pending",
         "5.4": "pending"
       },
-      "status": "locked",
+      "status": "ready",
       "integration_commit": null,
       "accepted_at": null,
       "entry_condition": "all batch 4 modules accepted and integrated",
@@ -274,5 +314,5 @@
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     }
   ],
-  "gate_note": "Batches 1-3 accepted and reconnected. Batch 3 integration commit 400adbe: 403 files/0 findings, 29 MCP tools, Linux Python 648/7 and Windows 644/11, Node 66/0, push and PR CI green at 400adbe. Batch 4 is ready."
+  "gate_note": "Batches 1-4 accepted and reconnected. Batch 4 integration commit 2cc1c05: 460 files/0 findings, 29 MCP tools, Linux Python 1005/7 and Node 66, seam fixes X1-X3, zero live calls. Batch 5 is ready."
 }
