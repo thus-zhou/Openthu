@@ -5,10 +5,11 @@
   "owner": "Hermes",
   "status": "implemented",
   "baseline_commit": "323a98b",
-  "delivery_commit": "b6677a6",
+  "delivery_commit": "72e03ed",
   "record_commit": "the commit containing this record",
   "branch": "hermes/4.1",
-  "worktree": "/home/ubuntu/projects/Openthu/.local/worktrees/4.1",
+  "worktree": "~/projects/Openthu/.local/worktrees/4.1",
+  "worktree_note": "The contract privacy validator rejects absolute home-directory paths, so the worktree is recorded relative to the user home.",
   "batch_state": "4.1 implemented on its module branch; batch 4 has no integration commit yet",
   "paths": [
     "src/thu_assistant/academics/__init__.py",
@@ -67,9 +68,9 @@
   ],
   "checks": {
     "module_tests_linux": {
-      "passed": 74,
+      "passed": 78,
       "failed": 0,
-      "command": "/home/ubuntu/projects/Openthu/.venv/bin/python -m pytest -o addopts='' -q tests/test_academics.py"
+      "command": "python -m pytest -o addopts='' -q tests/test_academics.py"
     },
     "plan_validator": {
       "ok": true,
@@ -103,13 +104,13 @@
       "command": "python scripts/dev.py check"
     },
     "full_offline_suite_linux": {
-      "python_passed": 722,
+      "python_passed": 726,
       "python_skipped": 7,
       "python_failed": 0,
       "node_passed": 66,
       "node_failed": 0,
       "command": "python scripts/dev.py test",
-      "worktree": "clean tree at b6677a6"
+      "worktree": "clean tree at 72e03ed"
     },
     "live_campus_calls": 0,
     "model_calls": 0,
