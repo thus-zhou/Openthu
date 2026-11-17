@@ -209,7 +209,11 @@ def test_materialize_copies_bundles_and_writes_the_layout(tmp_path):
     assert layout["product_version"] == "9.9.9"
     assert layout["commit"] == "deadbeef"
     assert layout["resources"] == {"source.windows_auth": "runtime/windows/access.js"}
-    assert oct((package / "_bundled/runtime/windows/access.js").stat().st_mode & 0o777) == "0o644"
+    if os.name != "nt":
+        # POSIX keeps the documented read-only resource mode; Windows only
+        # exposes the read-only attribute through chmod.
+        assert oct((package / "_bundled/runtime/windows/access.js").stat().st_mode & 0o777) == "0o644"
+    assert os.access(package / "_bundled/runtime/windows/access.js", os.R_OK)
 
 
 def test_materialize_refuses_an_incomplete_bundle(tmp_path):
