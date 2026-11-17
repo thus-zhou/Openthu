@@ -594,7 +594,8 @@
         "src/thu_assistant/library_wire.py",
         "src/thu_assistant/library_contracts.py",
         "src/thu_assistant/renewal/",
-        "tests/test_library_actions.py"
+        "tests/test_library_actions.py",
+        "tests/test_library_renewal.py"
       ],
       "input_contracts": [
         "business-facade-v1",
@@ -618,7 +619,14 @@
         "图书馆预约、取消、续借适配和精确核对"
       ],
       "integration_order": 13,
-      "status": "pending"
+      "status": "implemented",
+      "delivery_commit": "12146a8",
+      "evidence": [
+        "106 module tests at 12146a8; 319 related read/action regressions passed/1 skipped; Linux Python 1031 passed/7 skipped/0 failed, Node 66 passed; check 466 files/0 findings",
+        "seat/room plans persist the 4.3 precheck states; unknown availability, map changes and rule gaps hand off instead of writing",
+        "renew_loan binds one own loan and requires the same record with a later due_at; the production default is an official handoff because no verified source contract exists",
+        "no PR created, main not merged, no release published"
+      ]
     },
     {
       "id": "5.2",
