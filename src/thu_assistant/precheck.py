@@ -802,9 +802,9 @@ def _snapshot_version():
     # Import lazily so precheck has no module-import cycle with queries.
     try:
         from .queries import SNAPSHOT_VERSION
-        return SNAPSHOT_VERSION
     except Exception:
-        return 'snapshot-v2'
+        return None
+    return SNAPSHOT_VERSION
 
 
 def retrieval(service, operation, *, checked_at, parameters=None, reused_snapshot=False):
