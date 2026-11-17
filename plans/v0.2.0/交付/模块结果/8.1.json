@@ -36,7 +36,8 @@
     "plans/v0.2.0/版本总清单.md",
     "handoffs/v020-candidate.md",
     "handoffs/v0.2.0-candidate.json",
-    ".github/workflows/ci.yml"
+    ".github/workflows/ci.yml",
+    "scripts/regression_report.py"
   ],
   "contracts": [
     "result-envelope-v1",
@@ -277,7 +278,8 @@
     "the candidate build at 9b1bef5 produced four artifacts with a clean tree; verify bound the commit and install-check ran outside the repository",
     "a fresh venv install served the dashboard shell from the package, refused /api/v1/health with 401, failed doctor on a missing bundled resource and reported SECURE_KEY_NOT_CONFIGURED without a key",
     "privacy_scan found nothing in 568 source files and 1825 archive members",
-    "the test job checks out the full history, so the ancestry case runs in CI instead of skipping on a depth-1 clone"
+    "the test job checks out the full history, so the ancestry case runs in CI instead of skipping on a depth-1 clone",
+    "every new integration test file is registered for failure attribution, so a failure is attributed to its batch instead of unmapped"
   ],
   "limits": [
     "The candidate record documents the local artifact set built at 9b1bef5; the release gate rebuilds the same source at the final head, so source-archive hashes and the manifest commit field change with the record commit while packaged product code does not.",
@@ -296,6 +298,7 @@
     "2.3: the source-matrix difference register was updated by the integrator to the observed state; the retained v0.1 preview boundary is recorded instead of silently rewritten.",
     "6.2: the QUERY_EXTENSION note and describe_api field were removed once the contract declared the parameter; no route, limit or session behaviour changed.",
     "9.1: rebuild and re-verify the candidate at the final merged head before tagging; do not reuse the local artifact hashes blindly.",
-    "7.2 (.github/workflows/ci.yml): the test job now checks out the full history so the batch-8 ancestry test can resolve module commits in CI; job names, matrix and the release gate are unchanged."
+    "7.2 (.github/workflows/ci.yml): the test job now checks out the full history so the batch-8 ancestry test can resolve module commits in CI; job names, matrix and the release gate are unchanged.",
+    "7.2 (scripts/regression_report.py): the batch-7 and batch-8 integration test files are registered in MODULE_BY_FILE so their cases are attributed to batch-7/batch-8 instead of unmapped; report semantics are unchanged."
   ]
 }

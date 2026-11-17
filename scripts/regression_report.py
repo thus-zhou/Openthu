@@ -68,6 +68,8 @@ MODULE_BY_FILE = {
     "tests/test_batch4_integration.py": "batch-4",
     "tests/test_batch5_integration.py": "batch-5",
     "tests/test_batch6_integration.py": "batch-6",
+    "tests/test_batch7_integration.py": "batch-7",
+    "tests/test_batch8_integration.py": "batch-8",
     "tests/test_calendar_export.py": "5.4",
     "tests/test_campus.py": "3.1",
     "tests/test_cli.py": "6.1",
