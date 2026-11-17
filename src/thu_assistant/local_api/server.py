@@ -82,11 +82,19 @@ class Response:
 
 class _ThreadingServer(ThreadingHTTPServer):
     daemon_threads = True
-    allow_reuse_address = True
+    # On Windows SO_REUSEADDR lets a second process bind a port another socket
+    # is already listening on, so the "port busy" guard would silently hand two
+    # boards the same port.  The Windows equivalent is SO_EXCLUSIVEADDRUSE.
+    allow_reuse_address = os.name != 'nt'
 
     def __init__(self, address, handler, api: 'LocalApiServer'):
         self.api = api
         super().__init__(address, handler)
+
+    def server_bind(self):
+        if os.name == 'nt' and hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
     def handle_error(self, request, client_address):  # noqa: ARG002 - stdlib signature
         self.api.record_internal_error()
