@@ -535,10 +535,10 @@
       ],
       "completion_standard": "图书馆预约、取消、续借适配和精确核对",
       "evidence": [
-        "implemented at 12146a8; 106 module tests and 319 related regressions passed/1 skipped; Linux Python 1031 passed/7 skipped/0 failed, Node 66 passed; check 466 files/0 findings",
-        "seat/room create and cancel consume the 4.3 precheck and keep unknown states, map changes and rule gaps as official handoffs; cancel never proves success from an empty list alone",
-        "renewal reads eligibility, binds one loan and proves success only by a later due_at on the same record; no verified request contract exists, so renew_loan is registered enabled=false and execution is blocked",
-        "status is implemented, not accepted; batch-5 reconnection and the fix phase own acceptance"
+        "accepted at 6788e1a after the 5.1 audit (P0=0, P1=7, P2=16 fixed); 127 module tests and 342 collected/341 passed/1 skipped related regression; Linux Python 1052 passed/7 skipped/0 failed, Node 66 passed; check 468 files/0 findings",
+        "seat/room create consumes the 4.3 precheck summary and keeps unknown states, map changes and rule gaps as official handoffs; cancel behaviour is batch-4 code verified by 5.1 tests",
+        "renewal binds one loan, the Primo account and the exact request contract; only a later due instant proves success and no verified request contract exists, so renew_loan stays enabled=false",
+        "branch history was rewritten before integration to drop the absolute worktree path; no PR, merge or release"
       ]
     },
     {
