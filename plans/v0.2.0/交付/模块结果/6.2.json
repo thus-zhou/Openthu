@@ -93,9 +93,19 @@
     "merge_with_6_1": {
       "ok": true,
       "conflicts": 0,
+      "registry_conflicts": 0,
+      "full_tree_conflicts": 5,
+      "ledger_conflict_files": [
+        "plans/v0.2.0/交付/批次门禁.json",
+        "plans/v0.2.0/交付/批次门禁记录.md",
+        "plans/v0.2.0/交付/模块负责表.md",
+        "plans/v0.2.0/版本总清单.md",
+        "plans/v0.2.0/进度清单.md"
+      ],
       "merged_codes": 359,
       "both_sets_present": true,
-      "command": "git merge-tree --write-tree --name-only hermes/6.2 hermes/6.1"
+      "command": "git merge-tree --write-tree --name-only hermes/6.2 hermes/6.1",
+      "note": "conflicts/registry_conflicts count the error registries: both modules' codes auto-merge with no loss. The full tree also reports five content conflicts in the shared delivery ledgers because 6.1 and 6.2 both accepted in batch 6; those are status-row/count conflicts to resolve by union (18 accepted / 6 pending), not code or contract losses."
     },
     "plan_validator": {
       "ok": true,
@@ -173,7 +183,7 @@
     "a local 429 reports LOCAL_API_RATE_LIMITED with local error and display text, not a school-source message",
     "the shared stores tolerate eight threads of concurrent issue/validate/rate/page operations without an unexpected exception",
     "serve() maps localhost to 127.0.0.1, starts and stops through the 6.1 CLI contract",
-    "the 6.2 and 6.1 error registries merge with zero conflicts and the merged tree contains 359 codes from both modules"
+    "the 6.2 and 6.1 error registries merge with zero conflicts and contain 359 codes from both modules"
   ],
   "limits": [
     "The real 6.1 facade adapter is still the batch integration step. 6.2 now requires all seven methods (health, services, query, describe, todos, calendar, resources), exact source.service_id/operation, a declared cancel parameter and bounded upstream I/O; a missing method is 501 LOCAL_API_FACADE_UNAVAILABLE, not a fabricated result.",
@@ -189,7 +199,7 @@
     "Display projection is not a general DLP. It drops exact and credential-shaped keys (auth_state is intentionally dropped) and redacts known token/path shapes, but adapters must still keep raw credentials, member values and private paths out of envelopes.",
     "The response ceiling is 8 MiB and the local paging store shares it; a larger facade page becomes 502 LOCAL_API_RESPONSE_TOO_LARGE instead of a truncated success. A correct facade should page at the source.",
     "One earlier full-suite attempt hit tests/test_action_framework.py::test_concurrent_execute_dispatches_once with STATE_READ_FAILED. It is a 4.4-owned concurrency race, touches no 6.2 code and did not reproduce in the audit or the final two full runs; it stays visible for 4.4/8.1.",
-    "The error-registry block was moved to the head of both files. `git merge-tree` against hermes/6.1 now reports zero conflicts and 359 union codes; the integrator must still take the union and rerun both contract validators rather than choosing one side.",
+    "The error-registry block was moved to the head of both files. `git merge-tree` against hermes/6.1 reports zero conflicts in the error registries and 359 union codes. Because 6.2's acceptance also updates the shared delivery ledgers, the full tree has five expected ledger-status conflicts (the 6.1/6.2 rows and the 17/17 counts); the integrator resolves them by union (18 accepted / 6 pending) and reruns both contract validators rather than choosing one side.",
     "This module was verified with synthetic facades and loopback HTTP only. No real campus account, source, model or browser was used, and no booking, submission or payment exists in the route table."
   ],
   "rollback": "Revert to 2c8a218 for the accepted pre-audit tree or delete src/thu_assistant/local_api/ and tests/test_local_api.py and revert the additive LOCAL_API_* registrations in contracts/v0.2/error-classification.json and src/thu_assistant/source_state.py. There is no store or schema migration. Remove leftover <state>/local-api/bootstrap-*.json files from a crashed instance; sessions are memory-only and expire with the process. MCP, CLI, campus adapters and the dashboard assets are untouched.",
@@ -200,7 +210,7 @@
     "7.1: build the dashboard against describe_api() and samples(); pass static_dir=src/thu_assistant/web_assets; use display.state/next_step; expect a single-use bootstrap token, HEAD without a refresh charge, and LOCAL_API_BUSY under capacity pressure.",
     "7.2: add the 18 audit probes and the non-cooperative-adapter case to the cross-platform security regression; keep the loopback bind, Host/Origin and one-time bootstrap assertions.",
     "6.3: no new runtime dependency and no package-data change are required (stdlib only, pure Python package). Keep the local_api directory in the wheel and verify the installed layout can import it.",
-    "8.1: merge the two error registries as a union (merge-tree is clean at 359 codes), rerun tests/test_local_api.py plus the full offline suite, and confirm the installed route inventory still equals the frozen contract."
+    "8.1: merge the two error registries as a union (the error registries are clean at 359 codes), resolve the five shared-ledger status rows by union, rerun tests/test_local_api.py plus the full offline suite, and confirm the installed route inventory still equals the frozen contract."
   ],
   "audit_fixes": {
     "P0": [],
@@ -299,8 +309,8 @@
       },
       {
         "id": "P2-16",
-        "fix": "the LOCAL_API_* block moved to the head of both error registries, away from 6.1's tail append; the record instructs the integrator to take the union",
-        "verification": "git merge-tree --write-tree --name-only hermes/6.2 hermes/6.1 reports zero conflicts and the merged tree has 359 codes from both modules"
+        "fix": "the LOCAL_API_* block moved to the head of both error registries, away from 6.1's tail append; the record instructs the integrator to take the union. The shared delivery ledgers now also record 6.2's acceptance, so the full merge-tree reports five expected ledger-status conflicts (6.1/6.2 same-batch rows plus the 17/17 counts); those are resolved by union, not by dropping either module.",
+        "verification": "git merge-tree --write-tree --name-only hermes/6.2 hermes/6.1 reports zero conflicts in the error registries and 359 codes from both modules; the five ledger-status conflicts are listed in checks.merge_with_6_1 and are a documented integration-union step"
       }
     ]
   },
