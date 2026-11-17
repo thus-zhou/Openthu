@@ -1,0 +1,99 @@
+{
+  "synthetic": true,
+  "note": "合成成绩。零分、未发布、扣留、等级制、通过制、未知制式与缺编号均为示例，不是真实成绩。",
+  "coverage": {
+    "declared": true,
+    "complete": true,
+    "scope": "合成夹具声明的成绩范围"
+  },
+  "grades": [
+    {
+      "grade_id": "G-1",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A",
+      "grade_value": 92,
+      "grade_scale": "百分制",
+      "credits": 3,
+      "state": "graded",
+      "published_at": "2027-01-20T10:00:00+08:00"
+    },
+    {
+      "grade_id": "G-2",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A2",
+      "grade_value": 0,
+      "grade_scale": "百分制",
+      "credits": 2,
+      "state": "graded"
+    },
+    {
+      "grade_id": "G-3",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-B",
+      "grade_text": "A",
+      "grade_scale": "等级制",
+      "credits": 3,
+      "state": "graded"
+    },
+    {
+      "grade_id": "G-4",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-B",
+      "grade_text": "P",
+      "grade_scale": "通过制",
+      "credits": 1,
+      "state": "graded"
+    },
+    {
+      "grade_id": "G-5",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A",
+      "grade_scale": "百分制",
+      "credits": 3,
+      "state": "unpublished"
+    },
+    {
+      "grade_id": "G-6",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A2",
+      "grade_scale": "百分制",
+      "credits": 2,
+      "state": "withheld"
+    },
+    {
+      "grade_id": "G-7",
+      "semester": "2026-2027-2",
+      "course_id": "SYNTH-COURSE-C",
+      "grade_value": 4,
+      "grade_scale": "五分制",
+      "credits": 2,
+      "state": "graded"
+    },
+    {
+      "grade_id": "",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A",
+      "grade_value": 85,
+      "grade_scale": "百分制",
+      "credits": 3,
+      "state": "graded"
+    },
+    {
+      "grade_id": "G-9",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-B",
+      "grade_value": 88.5,
+      "grade_scale": "百分制",
+      "credits": 2.5,
+      "state": "graded"
+    },
+    {
+      "grade_id": "G-10",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A",
+      "grade_scale": "百分制",
+      "credits": 3,
+      "state": "奇怪状态"
+    }
+  ]
+}

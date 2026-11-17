@@ -1,0 +1,66 @@
+{
+  "synthetic": true,
+  "note": "刻意非法的合成行，只用于验证失败关闭；不得生成替代值。",
+  "exam_rows": [
+    {
+      "exam_id": "BAD-EX-1",
+      "semester": "2026-2027-1",
+      "title": "合成结束早于开始",
+      "date": "2027-02-01",
+      "start_time": "11:00",
+      "end_time": "09:00",
+      "state": "scheduled"
+    },
+    {
+      "exam_id": "BAD-EX-2",
+      "semester": "2026-2027-1",
+      "title": "合成只有时刻没有日期",
+      "start_time": "09:00",
+      "state": "scheduled"
+    }
+  ],
+  "grade_rows": [
+    {
+      "grade_id": "BAD-G-1",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A",
+      "grade_value": "92",
+      "grade_scale": "百分制",
+      "state": "graded"
+    },
+    {
+      "grade_id": "BAD-G-2",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A",
+      "grade_value": 80,
+      "grade_scale": "百分制",
+      "credits": -1,
+      "state": "graded"
+    },
+    {
+      "grade_id": "BAD-G-3",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A",
+      "grade_scale": "百分制",
+      "state": "graded"
+    },
+    {
+      "grade_id": "BAD-G-4",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A",
+      "grade_value": 80,
+      "grade_scale": "百分制",
+      "state": "withheld"
+    }
+  ],
+  "timetable_rows": [
+    {
+      "entry_id": "BAD-TT-1",
+      "semester": "2026-2027-1",
+      "weekday": 1,
+      "periods": [1, 2],
+      "start_week": 1,
+      "end_week": 16
+    }
+  ]
+}
