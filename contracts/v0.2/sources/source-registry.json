@@ -578,7 +578,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Scene directory read through the official PC frontend client.",
       "entry_ref": "https://www.sports.tsinghua.edu.cn/venue/index.html",
-      "code_refs": ["src/thu_assistant/sports.py:155-192", "src/thu_assistant/sports_transport.py:15-53"],
+      "code_refs": ["src/thu_assistant/sports.py:155-192", "src/thu_assistant/sports_transport.py:15-54"],
       "pagination": {
         "kind": "NONE",
         "page_parameter": null,
@@ -616,7 +616,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Scene, room and session availability read through the signed official frontend client.",
       "entry_ref": "https://www.sports.tsinghua.edu.cn/venue/index.html#/sports",
-      "code_refs": ["src/thu_assistant/sports.py:193-282", "src/thu_assistant/sports_transport.py:55-116"],
+      "code_refs": ["src/thu_assistant/sports.py:193-282", "src/thu_assistant/sports_transport.py:57-133"],
       "pagination": {
         "kind": "PAGE",
         "page_parameter": "pageNum",
@@ -656,7 +656,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Own reservation list and detail; payment, approval and refund are kept as separate axes.",
       "entry_ref": "https://www.sports.tsinghua.edu.cn/venue/index.html#/personal?type=0",
-      "code_refs": ["src/thu_assistant/sports.py:283-412", "src/thu_assistant/sports_actions.py:209-270"],
+      "code_refs": ["src/thu_assistant/sports.py:283-412"],
       "pagination": {
         "kind": "PAGE",
         "page_parameter": "pageNum",
@@ -1089,7 +1089,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Sports create adapter exists with a signed-URL single-dispatch gate; real transactions are not verified.",
       "entry_ref": "https://www.sports.tsinghua.edu.cn/venue/index.html#/sports",
-      "code_refs": ["src/thu_assistant/sports_actions.py:36-173", "src/thu_assistant/sports_transport.py:138-211"],
+      "code_refs": ["src/thu_assistant/sports_actions.py:143-276", "src/thu_assistant/sports_actions.py:336-366", "src/thu_assistant/sports_transport.py:145-227"],
       "pagination": {
         "kind": "NONE",
         "page_parameter": null,
@@ -1125,7 +1125,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Sports cancel adapter exists with refund/approval handoff rules; real transactions are not verified.",
       "entry_ref": "https://www.sports.tsinghua.edu.cn/venue/index.html#/personal?type=0",
-      "code_refs": ["src/thu_assistant/sports_actions.py:108-135", "src/thu_assistant/sports_actions.py:209-247"],
+      "code_refs": ["src/thu_assistant/sports_actions.py:279-333", "src/thu_assistant/sports_actions.py:444-468"],
       "pagination": {
         "kind": "NONE",
         "page_parameter": null,
