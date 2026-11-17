@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import platform as host_platform
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -139,8 +140,10 @@ def test_report_includes_commit_contracts_platform_totals_and_side_effects(tmp_p
     report = build(tmp_path, [passed(), passed("test_two"), skipped()])
     assert report["schema"] == REPORT.REPORT_SCHEMA
     assert report["source"]["commit"] == "deadbeef"
-    assert report["platform"]["name"] == "linux"
-    assert report["platform"]["system"] == "Linux"
+    assert report["platform"]["name"] == "linux"  # the declared evidence platform
+    # P1-1 records the observed host separately from the declared name, so a
+    # report relabelled as another platform is detectable by `aggregate`.
+    assert report["platform"]["system"] == host_platform.system()
     assert isinstance(report["platform"]["ci"], dict)
     assert report["platform"]["python"]
     assert report["product_version"] == "0.2.0"

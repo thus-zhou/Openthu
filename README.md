@@ -44,7 +44,7 @@ python scripts/dev.py test
 1. **诊断**：`python scripts/dev.py doctor`（源码）或 `openthu-doctor`（安装包）。失败条目只有标记为阻塞时才阻止开始；Linux 上 Windows 生产认证为“不适用”，缺少 Chromium 只影响浏览器能力。
 2. **建立本人认证**：Windows 按官方统一认证与 MFA 流程完成；Linux 只配置本地加密存储，不提供生产校园登录，不能用明文 Cookie 代替。
 3. **只读查询**：先 `openthu describe --service library` 看登记操作，再 `openthu query --service learn --operation courses`。`openthu health` 只报告本地能力，不探测真实站点。
-4. **看板**：`openthu dashboard --check` 验证可启动；`openthu dashboard --port 8765` 常驻。只绑定回环地址，只提供只读 API。
+4. **看板**：`openthu dashboard --check` 验证可启动；`openthu dashboard --port 8765` 常驻并打开 `http://127.0.0.1:8765/`。只绑定回环地址，只提供只读页面与只读 API。
 5. **授权办理**：`prepare_service_action` → 使用者在可信宿主确认 → `execute_service_action` → `get_action_result`。准备不等于提交，`authorization` 文本不是授权证据。
 
 ## 命令行

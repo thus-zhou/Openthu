@@ -118,10 +118,10 @@
   },
   "batches": {
     "total": 9,
-    "current": 6,
+    "current": 7,
     "current_status": "accepted",
-    "module_status_note": "1.1, 2.1-2.3, 3.1-3.3, 4.1-4.5, 5.1-5.4 and 6.1-6.3 accepted. Batch 6 is reconnected at 4f5c62ee (6.1 aee2559, 6.2 198aeb1, 6.3 6f5df60; seams X1-X7) with 529 files/0 findings, Linux Python 1571/7, Windows green in CI, Node 66/0, a reproducible candidate build, verify bound to HEAD and an install-check outside the repository, and zero live calls. Batch 7 is ready.",
-    "next": 7,
+    "module_status_note": "1.1, 2.1-2.3, 3.1-3.3, 4.1-4.5, 5.1-5.4, 6.1-6.3 and 7.1-7.3 accepted. Batch 7 is reconnected at d81c81c0f51325bdd99c64b733ec29b45ef4f9e6 (7.1 e2b45fa, 7.2 3eeb2d3, 7.3 9726535; seams X1-X4) with the dashboard shell wired and packaged, the coverage matrix resolved, 561 files/0 findings, Linux Python 1789/8, Windows green in CI, Node 66/0 and zero live calls. Batch 8 is ready; batch 9 stays locked.",
+    "next": 8,
     "gate_file": "交付/批次门禁.json",
     "status_model": "accepted prefix -> one ready -> locked remainder; all accepted only at version completion",
     "gate_validation": {
