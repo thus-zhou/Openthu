@@ -15,6 +15,7 @@
 | [action-boundaries.md](action-boundaries.md) | 上传/草稿/正式提交、续借、付款与取消的边界 |
 | [model-image.md](model-image.md) | 模型目录标记与实际图片传输能力的区分 |
 | [evidence-policy.md](evidence-policy.md) | 公开证据的脱敏、版本、检查和回退规则 |
+| [library-sports-read.md](library-sports-read.md) | 图书馆/体育只读操作矩阵、预检对象、规则单位和分页退化 |
 
 ## 证据等级
 

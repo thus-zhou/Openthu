@@ -336,7 +336,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Public guest Primo search with a scoped PrimoAuthorization token retained in memory.",
       "entry_ref": "https://discover.lib.tsinghua.edu.cn/tsinghuasearch/primo/listData",
-      "code_refs": ["src/thu_assistant/library.py:12-176"],
+      "code_refs": ["src/thu_assistant/library.py:143-191"],
       "pagination": {
         "kind": "WINDOW",
         "page_parameter": null,
@@ -379,7 +379,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Public detail reads plus bounded holdings and copy reads.",
       "entry_ref": "https://discover.lib.tsinghua.edu.cn/tsinghuasearch/primo/pnxDetail",
-      "code_refs": ["src/thu_assistant/library.py:187-264"],
+      "code_refs": ["src/thu_assistant/library.py:202-282"],
       "pagination": {
         "kind": "WINDOW",
         "page_parameter": null,
@@ -420,7 +420,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Public database guide search and detail; only official entry points are registered.",
       "entry_ref": "https://ecollection.lib.tsinghua.edu.cn/databaseguide/guide/searchDesc",
-      "code_refs": ["src/thu_assistant/library.py:266-290"],
+      "code_refs": ["src/thu_assistant/library.py:284-314"],
       "pagination": {
         "kind": "WINDOW",
         "page_parameter": null,
@@ -460,7 +460,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Active loans are read inside the authenticated Primo browser context and cross-checked with the official page.",
       "entry_ref": "https://discover.lib.tsinghua.edu.cn/entrance/myLibEntrance/myLibIndex/MyLibBorrowNow",
-      "code_refs": ["src/thu_assistant/library.py:292-382"],
+      "code_refs": ["src/thu_assistant/library.py:316-419"],
       "pagination": {
         "kind": "PAGE",
         "page_parameter": null,
@@ -501,7 +501,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Seat area, slot and seat-state reads inside the authenticated seat browser context.",
       "entry_ref": "https://seat.lib.tsinghua.edu.cn/",
-      "code_refs": ["src/thu_assistant/spaces.py:10-286"],
+      "code_refs": ["src/thu_assistant/spaces.py:23-309"],
       "pagination": {
         "kind": "NONE",
         "page_parameter": null,
@@ -539,7 +539,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Room types, availability and own reservations are read inside the authenticated room context.",
       "entry_ref": "https://cab.lib.tsinghua.edu.cn/ic-web/reserve",
-      "code_refs": ["src/thu_assistant/spaces.py:288-442", "src/thu_assistant/library_wire.py:45-63"],
+      "code_refs": ["src/thu_assistant/spaces.py:310-484", "src/thu_assistant/library_wire.py:45-63"],
       "pagination": {
         "kind": "PAGE",
         "page_parameter": "page",
@@ -578,7 +578,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Scene directory read through the official PC frontend client.",
       "entry_ref": "https://www.sports.tsinghua.edu.cn/venue/index.html",
-      "code_refs": ["src/thu_assistant/sports.py:75-89", "src/thu_assistant/sports_transport.py:15-53"],
+      "code_refs": ["src/thu_assistant/sports.py:155-192", "src/thu_assistant/sports_transport.py:15-53"],
       "pagination": {
         "kind": "NONE",
         "page_parameter": null,
@@ -616,7 +616,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Scene, room and session availability read through the signed official frontend client.",
       "entry_ref": "https://www.sports.tsinghua.edu.cn/venue/index.html#/sports",
-      "code_refs": ["src/thu_assistant/sports.py:92-188", "src/thu_assistant/sports_transport.py:55-116"],
+      "code_refs": ["src/thu_assistant/sports.py:193-282", "src/thu_assistant/sports_transport.py:55-116"],
       "pagination": {
         "kind": "PAGE",
         "page_parameter": "pageNum",
@@ -656,7 +656,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Own reservation list and detail; payment, approval and refund are kept as separate axes.",
       "entry_ref": "https://www.sports.tsinghua.edu.cn/venue/index.html#/personal?type=0",
-      "code_refs": ["src/thu_assistant/sports.py:191-300", "src/thu_assistant/sports_actions.py:209-270"],
+      "code_refs": ["src/thu_assistant/sports.py:283-412", "src/thu_assistant/sports_actions.py:209-270"],
       "pagination": {
         "kind": "PAGE",
         "page_parameter": "pageNum",
