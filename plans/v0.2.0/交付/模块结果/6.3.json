@@ -6,7 +6,7 @@
   "status": "implemented",
   "baseline_commit": "bb1f963",
   "integration_parent_commit": "bb1f963",
-  "delivery_commit": "1ebd5bb",
+  "delivery_commit": "8fc3317",
   "implementation_commits": [
     "c8412d8",
     "47ce3d0",
@@ -15,7 +15,8 @@
     "f21f751",
     "2a68db0",
     "173606d",
-    "1ebd5bb"
+    "1ebd5bb",
+    "8fc3317"
   ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/6.3",
@@ -47,6 +48,7 @@
     "docs/UPGRADE.md",
     "README.md",
     "CHANGELOG.md",
+    "THIRD_PARTY.md",
     "tests/test_distribution.py",
     "tests/test_upgrade.py"
   ],
@@ -133,9 +135,9 @@
     "candidate_build": {
       "artifacts": 4,
       "reproducible_on_linux": true,
-      "wheel_members": 193,
-      "sdist_members": 437,
-      "bundled_files": 53,
+      "wheel_members": 192,
+      "sdist_members": 440,
+      "bundled_files": 54,
       "install_check_mcp_tools": 29,
       "install_check_source_root": null
     },
