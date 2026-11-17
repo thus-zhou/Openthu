@@ -55,6 +55,25 @@ class SourceContract:
     def url(self):
         return self.origin + self.path
 
+    @property
+    def digest(self):
+        """Stable identity of this exact request shape, bound into the plan."""
+        from hashlib import sha256
+        import json
+        value = {'contract_id': self.contract_id, 'origin': self.origin, 'path': self.path,
+                 'encoding': self.encoding, 'success_field': self.success_field,
+                 'success_value': self.success_value, 'evidence_state': self.evidence_state}
+        return sha256(json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+    def usable(self, allow_synthetic=False):
+        """Only a verified contract may dispatch; synthetic needs an explicit opt-in.
+
+        The opt-in is a constructor argument of the adapter, never an environment
+        variable, tool argument or model output.
+        """
+        return self.evidence_state == VERIFIED or (
+            self.evidence_state == SYNTHETIC and allow_synthetic is True)
+
     def body(self, loan_id, due_at):
         """Canonical fields; a verified contract's exact mapping lands in 2.3."""
         return {_BODY_FIELDS[0]: loan_id, _BODY_FIELDS[1]: due_at}

@@ -72,21 +72,13 @@ def seat_detail(reader, row):
     return value
 
 
-def precheck_summary(block):
-    """Compact, time-free precheck states persisted with one bound plan.
-
-    ``checked_at`` is deliberately excluded: a replay of the same read must not
-    change the digest, while a change of any decision axis must.
-    """
-    return {'version':str(block.get('version') or ''),'operation':str(block.get('operation') or ''),
-            'selection_state':block['selection']['state'],'availability_state':block['availability']['state'],
-            'eligibility_state':block['eligibility']['state'],'fees_state':block['fees']['state'],
-            'rules_state':block['rules']['state'],'preparation_state':block['preparation_state']}
-
-
 def plan_precheck(summary,item):
-    """The bound resource's axes plus the read's selection/rules verdict."""
-    states=precheck_summary(item)
+    """The bound resource's axes plus the read's selection/rules verdict.
+
+    ``checked_at`` is excluded: a replay of the same read must not change the
+    digest, while a change of any decision axis must.
+    """
+    states=c.precheck_states(item)
     states['selection_state']=summary['selection']['state']
     if summary['rules']['state']!='NOT_APPLICABLE':
         states['rules_state']=summary['rules']['state']
@@ -143,7 +135,7 @@ def seat_proposal(reader, args):
     business={**args,'system':'seat','target':' / '.join(path+[label or '官方座位图选择']),
               'location':location,'rules_summary':'；'.join(rules)[:1800],'cancel_rule':seat_cancellation_terms(rules),
               'official_url':url,'handoff':','.join(flags),'proof':digest([segment,rules,location]),
-              'precheck':plan_precheck(selection,block) if block is not None else precheck_summary(selection),
+              'precheck_summary':plan_precheck(selection,block) if block is not None else c.precheck_states(selection),
               'prior_ids':sorted(x['reservation_id'] for x in rows if x['start_time']==start.isoformat() and x['end_time']==end.isoformat())}
     return Proposal(business,'/api.php/spaces/'+args['seat_id']+'/book',{'segment':segment or '', 'type':1})
 
@@ -218,13 +210,9 @@ def room_proposal(reader,args):
     item=built['items'][0]
     prestates=plan_precheck(built['summary'],item)
     flags=[]
+    # find_room already enforces party/eligibility/only_view; the only reachable
+    # non-free state left is a missing duration rule.
     if item['availability']['state']=='RULE_UNVERIFIED':flags.append('CONFIRM_ROOM_DURATION_RULE')
-    elif item['availability']['state']!='FREE':flags.append('CONFIRM_ROOM_AVAILABILITY')
-    if item['eligibility']['state']=='INELIGIBLE':
-        reason=next(iter(item['eligibility']['reasons']),'ROOM_INELIGIBLE')
-        raise CampusError({'PARTY_TOO_SMALL':'PARTY_TOO_SMALL','PARTY_TOO_LARGE':'PARTY_TOO_LARGE',
-                           'VIEW_ONLY_RESOURCE':'ROOM_VIEW_ONLY',
-                           'ACCOUNT_RESTRICTIONS_REPORTED':'ROOM_ACCOUNT_RESTRICTED'}.get(reason,'ROOM_INELIGIBLE'))
     if not room_window(start,end,room,datetime.now(s.TZ)):flags.append('CONFIRM_OPENING_RULE')
     if room['platform_open_state']!=0 or room['platform_device_status']!=0 or room['only_view'] is not False:
         flags.append('CONFIRM_ROOM_ELIGIBILITY')
@@ -248,7 +236,7 @@ def room_proposal(reader,args):
     business={**args,'system':'room','target':kind['name']+' / '+room['name'],
               'rules_summary':summary,'cancel_rule':cancel_terms(rule,user),
               'handoff':','.join(flags),'official_url':PERSONAL_ROOM,'resolved_members':ids,'applicant':ids[0],
-              'precheck':prestates,
+              'precheck_summary':prestates,
               'prior_ids':sorted(s.ident(row['resvId']) for row in rows if s.stamp(row.get('resvBeginTime'))==start.isoformat()
                                  and s.stamp(row.get('resvEndTime'))==end.isoformat()),
               'proof':digest([kind['class_kind'],room['rules'],room['min_people'],room['max_people'],room['reservation_notice'],

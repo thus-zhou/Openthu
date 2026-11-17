@@ -976,9 +976,9 @@
       "runtime_availability": "LIMITED",
       "evidence_level": "SYNTHETIC_TRANSPORT",
       "checked_at": "2026-11-17",
-      "version_note": "Eligibility, a one-loan bound plan, official-page handoff and new-due reconciliation are implemented; no verified renewal request endpoint exists, so the registered operation stays disabled for dispatch.",
+      "version_note": "Eligibility, a one-loan bound plan, contract-bound dispatch, official-page handoff and new-due reconciliation are implemented; SYNTHETIC contracts need an explicit opt-in and no verified request endpoint exists, so the registered operation stays disabled.",
       "entry_ref": "https://discover.lib.tsinghua.edu.cn/entrance/myLibEntrance/myLibIndex/MyLibBorrowNow",
-      "code_refs": ["src/thu_assistant/library.py:301-321", "src/thu_assistant/renewal/adapter.py:76-216", "src/thu_assistant/renewal/transport.py:42-76", "src/thu_assistant/renewal/contract.py:1-91", "src/thu_assistant/library_contracts.py:69-91"],
+      "code_refs": ["src/thu_assistant/library.py:301-321", "src/thu_assistant/renewal/adapter.py:34-287", "src/thu_assistant/renewal/transport.py:46-99", "src/thu_assistant/renewal/contract.py:26-110", "src/thu_assistant/library_contracts.py:26-115", "src/thu_assistant/library_wire.py:147-192"],
       "pagination": {
         "kind": "PAGE",
         "page_parameter": null,
@@ -996,7 +996,7 @@
         {"raw_field": "loanid", "canonical_field": "renewal.loan_uid", "transform": "derive library.loans:ORDER:<loanid> from the joined loan record", "required": true, "disposition": "DERIVED", "note": "Renewal identity must link to the source loan, not a session label."},
         {"raw_field": "source_id + loanid", "canonical_field": "renewal.renewal_uid", "transform": "derive <source_id>:RENEWAL:<loan_uid>", "required": true, "disposition": "DERIVED", "note": "The renewal uid must contain the loan uid exactly."}
       ],
-      "errors": ["AUTH_REQUIRED", "LIBRARY_LOAN_PAGE_FAILED", "LIBRARY_WRITES_DISABLED", "LIBRARY_RENEW_DISABLED", "RENEWAL_NOT_ELIGIBLE", "RENEWAL_OVERDUE", "RENEWAL_DUE_DATE_UNVERIFIED", "RENEWAL_PAGE_DISAGREES_WITH_API"],
+      "errors": ["AUTH_REQUIRED", "TWO_FACTOR_REQUIRED", "LIBRARY_LOAN_PAGE_FAILED", "LIBRARY_LOAN_DATE_INVALID", "LIBRARY_WRITES_DISABLED", "LIBRARY_RENEW_DISABLED", "RENEWAL_LOGIN_FAILED", "RENEWAL_CONTRACT_INVALID", "RENEWAL_CONTRACT_EVIDENCE_UNVERIFIED", "RENEWAL_CONTRACT_CHANGED_PREPARE_AGAIN", "RENEWAL_ACCOUNT_CHANGED_PREPARE_AGAIN", "RENEWAL_NOT_ELIGIBLE", "RENEWAL_OVERDUE", "RENEWAL_RECORD_NOT_FOUND", "RENEWAL_RECORD_NOT_UNIQUE", "RENEWAL_LOAN_LIST_LIMIT", "RENEWAL_LOAN_PAGE_REPEATED", "RENEWAL_LOAN_PAGINATION_UNVERIFIED", "RENEWAL_PAGE_DISAGREES_WITH_API", "RENEWAL_PREVIEW_FAILED"],
       "unresolved": ["No verified renewal execution endpoint; production default is an official-page handoff.", "Eligibility and a 200 response must never be reported as success; only a later due time on the same loan proves renewal.", "Renewal cannot be undone on the platform; no reverse operation is invented."],
       "write_side_effects": "CAMPUS_WRITE",
       "raw_payload_included": false,
@@ -1017,7 +1017,7 @@
       "checked_at": "2026-11-17",
       "version_note": "Seat create/cancel adapters bind the read precheck (selection, availability, rules) into one plan; real transactions are not verified.",
       "entry_ref": "https://seat.lib.tsinghua.edu.cn/",
-      "code_refs": ["src/thu_assistant/library_actions.py:96-148", "src/thu_assistant/library_actions.py:296-345"],
+      "code_refs": ["src/thu_assistant/library_actions.py:88-142", "src/thu_assistant/library_actions.py:284-333"],
       "pagination": {
         "kind": "NONE",
         "page_parameter": null,
@@ -1053,7 +1053,7 @@
       "checked_at": "2026-11-17",
       "version_note": "Room create/cancel adapters bind the read precheck, member resolution and live room rules into one plan; real transactions are not verified.",
       "entry_ref": "https://cab.lib.tsinghua.edu.cn/",
-      "code_refs": ["src/thu_assistant/library_actions.py:151-344"],
+      "code_refs": ["src/thu_assistant/library_actions.py:143-332"],
       "pagination": {
         "kind": "NONE",
         "page_parameter": null,

@@ -121,3 +121,6 @@
 4. 用 `rules.items` 的字段、单位和检查时间重新核对取消期限；`MISSING` 不等于无限制。
 5. 用 `retrieval` 区分本次读取与旧快照；旧快照不能作为办理前最后核对。
 6. `preparation_state` 不是授权，也不代表平台会接受请求；真实写入仍需独立计划和授权。
+7. 续借的计划用 `precheck.build('library','loans',...)` 生成借阅条目轴，再压缩为八轴
+   `precheck_summary`（不含 `checked_at`）；计划还绑定 `contract_id`/`contract_digest`/
+   `contract_evidence`，没有已验证的请求契约时只给官方页面移交。

@@ -106,7 +106,10 @@ def test_separate_contracts_and_flags(world,monkeypatch):
     assert 'members' not in ops[c.CREATE_SEAT]['parameters_schema']['properties']
     assert ops[c.CREATE_ROOM]['parameters_schema']['properties']['members']['type']=='array'
     assert ops[c.RENEW_LOAN]['enabled'] is False
-    assert ops[c.RENEW_LOAN]['reason']=='ADAPTER_REQUIRED'
+    assert ops[c.RENEW_LOAN]['reason']=='SOURCE_CONTRACT_UNVERIFIED'
+    assert ops[c.RENEW_LOAN]['prechecks']==['eligibility','rules']
+    assert ops[c.CREATE_SEAT]['reconciliation']=='OWN_RECORD_RESOURCE_TIME_MEMBERS_STATUS'
+    assert ops[c.CREATE_SEAT]['reconciliation_scope']=='OWN_RECORD_RESOURCE_TIME_STATUS'
     assert ops[c.RENEW_LOAN]['reconciliation']=='OWN_LOAN_SAME_RECORD_AND_NEW_DUE_AT'
     monkeypatch.setenv('THU_SPORTS_WRITE','0')
     assert all(x['enabled'] for x in describe('library')['actions'] if x['operation']!=c.RENEW_LOAN)
@@ -260,21 +263,24 @@ class Page:
     main_frame=object()
     def __init__(self,url,body,variant,system):
         self.url,self.body,self.variant,self.system=url,body,variant,system
-        self.continued=0
+        self.continued=0;self.cleaned=False
     def evaluate(self,script,args):
         import hashlib
-        if script==w._PREPARE:return hashlib.sha256(self.body.encode()).hexdigest()
+        if script==w._PREPARE:
+            if self.variant=='prepare':raise RuntimeError('AUTH')
+            return hashlib.sha256(self.body.encode()).hexdigest()
         raw=self.body+'!' if self.variant=='body' else self.body
         req=SimpleNamespace(url=self.url,method='GET' if self.variant=='method' else 'POST',
                             frame=object() if self.variant=='frame' else self.main_frame,post_data=raw)
-        self.guard(SimpleNamespace(request=req,abort=lambda:None,continue_=lambda:setattr(self,'continued',self.continued+1)))
+        self.guard(SimpleNamespace(request=req,abort=self._abort,continue_=lambda:setattr(self,'continued',self.continued+1)))
         return True
+    def _abort(self):raise RuntimeError('net::ERR_ABORTED')
     def route(self,pattern,guard):assert pattern.fullmatch(self.url);self.guard=guard
     def unroute(self,*args):self.cleaned=True
 
 
 @pytest.mark.parametrize('system',['seat','room'])
-@pytest.mark.parametrize('variant',['good','body','method','frame'])
+@pytest.mark.parametrize('variant',['good','body','method','frame','prepare'])
 def test_exact_wire_binds_actual_body_and_frame(system,variant):
     path='/api.php/profile/books/11' if system=='seat' else '/ic-web/reserve/delete'
     fields={'_method':'delete','id':'11','operateChannel':2} if system=='seat' else {'uuid':'record-uuid'}
@@ -285,7 +291,21 @@ def test_exact_wire_binds_actual_body_and_frame(system,variant):
         assert w.dispatch_exact(reader,system,path,fields,gate) is True
     else:
         with pytest.raises(NotDispatched):w.dispatch_exact(reader,system,path,fields,gate)
-    assert gate.sent==page.continued==int(variant=='good') and page.cleaned
+    assert gate.sent==page.continued==int(variant=='good')
+    assert page.cleaned==(variant!='prepare')
+
+
+def test_unobserved_library_request_is_not_a_definite_non_dispatch():
+    path='/ic-web/reserve/delete';fields={'uuid':'record-uuid'}
+    spec=w.specification('room',path,fields);gate=RequestGate([spec])
+    class Silent:
+        main_frame=object()
+        def evaluate(self,script,args):
+            return __import__('hashlib').sha256(spec.body.encode()).hexdigest() if script==w._PREPARE else True
+        def route(self,pattern,guard):self.guard=guard
+        def unroute(self,*args):pass
+    with pytest.raises(RuntimeError,match='DISPATCH_RESULT_UNOBSERVED'):
+        w.dispatch_exact(SimpleNamespace(page=Silent(),base=s.SEAT),'room',path,fields,gate)
 
 
 def test_catalog_reads_each_official_root_regardless_of_homepage_order():
@@ -354,18 +374,20 @@ def test_nested_directory_entry_preserves_full_location_for_record_readback():
 
 def test_seat_map_control_change_rejects_the_old_plan_without_dispatching(world):
     p=world.engine.prepare('library',c.CREATE_SEAT,SEAT)
-    assert p['preview']['precheck']['availability_state']=='FREE'
+    assert p['preview']['precheck_summary']['availability_state']=='FREE'
     # The platform renumbers the map control while keeping the numeric id.
     world.map['seat'][0]['control']='999'
-    assert world.engine.execute(p['plan_id'],AUTH)['status']=='FAILED' and world.sent==0
+    result=world.engine.execute(p['plan_id'],AUTH)
+    assert result['status']=='FAILED' and result['reason']=='PRECONDITIONS_CHANGED_PREPARE_AGAIN'
+    assert world.sent==0
 
 
 def test_seat_unknown_state_needs_the_official_map_and_never_dispatches(world):
-    world.seat['items'][0].update(free=None,state='UNKNOWN',state_mapping='UNMAPPED')
+    world.seat['items'][0].update(free=None,state='UNKNOWN',state_mapping='UNKNOWN')
     world.seat['unknown_seat_count']=1
     p=world.engine.prepare('library',c.CREATE_SEAT,SEAT)
     assert 'OFFICIAL_SEAT_SELECTION' in p['preview']['handoff']
-    assert p['preview']['precheck']['availability_state']=='UNKNOWN'
+    assert p['preview']['precheck_summary']['availability_state']=='UNKNOWN'
     assert world.engine.execute(p['plan_id'],AUTH)['status']=='AWAITING_OFFICIAL' and world.sent==0
 
 
@@ -373,7 +395,7 @@ def test_room_rule_gap_hands_off_a_duration_recheck(world):
     world.room['interval_state']='RULE_UNVERIFIED'
     p=world.engine.prepare('library',c.CREATE_ROOM,ROOM)
     assert 'CONFIRM_ROOM_DURATION_RULE' in p['preview']['handoff']
-    assert p['preview']['precheck']['availability_state']=='RULE_UNVERIFIED'
+    assert p['preview']['precheck_summary']['availability_state']=='RULE_UNVERIFIED'
     assert world.engine.execute(p['plan_id'],AUTH)['status']=='AWAITING_OFFICIAL' and world.sent==0
 
 
@@ -417,3 +439,29 @@ def test_empty_cancel_list_without_receipt_stays_unknown(world):
     world.after=lambda:world.seat_rows.clear()
     assert world.engine.execute(plan['plan_id'],AUTH)['status']=='UNKNOWN' and world.sent==1
     assert world.make().result(plan['plan_id'])['status']=='UNKNOWN' and world.sent==1
+
+
+def test_plan_precheck_summary_has_all_eight_axes_without_a_timestamp(world):
+    plan=world.engine.prepare('library',c.CREATE_SEAT,SEAT)
+    business=world.store.read(plan['plan_id'])['business']
+    summary=business['precheck_summary']
+    assert set(summary)==set(c.PRECHECK_KEYS)
+    assert 'checked_at' not in summary
+    assert summary['operation']=='seat_availability'
+    assert summary['selection_state']=='UNIQUE'
+    assert summary['availability_state']=='FREE'
+    assert summary['rules_state']=='READ'
+    assert summary['preparation_state']=='NEEDS_ELIGIBILITY_CHECK'
+    # Replaying the same read returns the same bound plan, not a new digest.
+    again=world.engine.prepare('library',c.CREATE_SEAT,SEAT)
+    assert again['plan_id']==plan['plan_id']
+    assert world.store.read(again['plan_id'])['business']['precheck_summary']==summary
+
+
+def test_room_plan_precheck_summary_uses_the_room_item_axes(world):
+    plan=world.engine.prepare('library',c.CREATE_ROOM,ROOM)
+    summary=world.store.read(plan['plan_id'])['business']['precheck_summary']
+    assert set(summary)==set(c.PRECHECK_KEYS)
+    assert summary['operation']=='room_availability'
+    assert summary['availability_state']=='FREE'
+    assert summary['preparation_state']=='NEEDS_ELIGIBILITY_CHECK'
