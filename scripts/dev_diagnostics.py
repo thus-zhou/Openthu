@@ -187,10 +187,6 @@ def _browser_state():
     return {"available": False, "reason": "binary-missing"}
 
 
-def _browser_available():
-    return _browser_state()["available"]
-
-
 def _read_json(path):
     try:
         return json.loads(path.read_text(encoding="utf-8"))

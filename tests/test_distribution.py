@@ -169,6 +169,18 @@ def test_no_development_tool_is_a_runtime_dependency():
         assert all(tool not in row for row in runtime), tool
 
 
+def test_development_pins_match_the_manifest():
+    pins = {}
+    for line in (ROOT / "requirements-dev.txt").read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or line.startswith("-r"):
+            continue
+        name, _, value = line.partition("==")
+        if value:
+            pins[name] = value
+    assert pins == manifest()["dependencies"]["development"]
+
+
 def test_glob_translation_matches_double_star_without_matching_everything():
     module = load_materialize()
     assert module.matches_any("core/tokenizer.js", ["**/*.js"])
