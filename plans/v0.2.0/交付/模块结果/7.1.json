@@ -195,7 +195,8 @@
         "test (ubuntu-24.04, 3.13)",
         "test (windows-2025)"
       ],
-      "note": "All three jobs succeeded; the Windows job ran the 63 browser cases as well. The run is on the final record commit; the code commits are 21b4d7d and 181216c."
+      "note": "All three jobs succeeded; the Windows job ran the 63 browser cases as well. The run is on tree 4f0f59f (a record commit); the code is 181216c after 21b4d7d.",
+      "code_commit": "181216c"
     }
   },
   "boundaries": [
