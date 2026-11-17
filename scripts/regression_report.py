@@ -660,7 +660,7 @@ def _apply_floor(gaps: list[dict], floor: dict, totals: dict, node_totals: dict,
     if isinstance(max_skip, (int, float)) and totals["total"]:
         ratio = totals["skipped"] / totals["total"]
         if ratio > float(max_skip):
-            gaps.append(_gap("skip_ratio_exceeded", "fail",
+            gaps.append(_gap("skip_ratio_exceeded", "incomplete",
                              skipped=totals["skipped"], total=totals["total"],
                              ratio=round(ratio, 4), max_ratio=float(max_skip)))
     if floor.get("require_node", True) and sum(node_totals.values()) == 0:
@@ -924,6 +924,10 @@ def marker_findings(name: str, data: bytes,
 
 
 def marker_scan_archives(paths: list[Path], markers: dict[str, str] | None = None) -> dict:
+    if not markers:
+        return {"ok": False, "files_checked": 0, "findings": [], "finding_count": 0,
+                "marker_count": 0, "archives": [], "state": "NO_MARKERS",
+                "scope": "public-archives"}
     scanner = _load_script("privacy_scan")
     findings = []
     count = 0

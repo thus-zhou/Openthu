@@ -440,6 +440,16 @@ def test_marker_scan_accepts_a_clean_public_report(tmp_path):
     assert REPORT.marker_scan_archives([archive], MARKERS)["ok"] is True
 
 
+def test_marker_scan_without_markers_does_not_fail_open(tmp_path):
+    archive = tmp_path / "clean.zip"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("report.json", "{}")
+    result = REPORT.marker_scan_archives([archive], {})
+    assert result["ok"] is False
+    assert result["state"] == "NO_MARKERS"
+    assert result["marker_count"] == 0
+
+
 def test_load_markers_returns_a_stable_error_instead_of_failing_open(tmp_path):
     valid = tmp_path / "valid.json"
     valid.write_text(json.dumps(MARKERS), encoding="utf-8")
@@ -481,6 +491,18 @@ def test_release_gate_is_incomplete_without_a_candidate_and_fails_when_required(
                                   require_dist=True, markers=MARKERS,
                                   marker_error=None, expected_commit="abc")
     assert strict["status"] == "FAIL"
+
+
+def test_release_gate_rejects_evidence_from_a_foreign_commit(tmp_path):
+    reports = write_reports(tmp_path / "reports", linux={"commit": "abc"},
+                            windows={"commit": "abc"})
+    value = REPORT.release_gate(reports_dir=reports, dist=tmp_path / "missing",
+                                require_dist=False, markers=MARKERS,
+                                marker_error=None, expected_commit="head")
+    assert value["checks"]["reports"]["ok"] is False
+    assert value["checks"]["reports"]["status"] == "FAIL"
+    assert any(gap["kind"] == "report_commit_mismatch" for gap in value["gaps"])
+    assert value["status"] == "FAIL"
 
 
 def test_release_gate_requires_test_evidence(tmp_path):
