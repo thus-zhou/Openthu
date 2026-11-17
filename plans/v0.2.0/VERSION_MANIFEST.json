@@ -209,7 +209,7 @@
   },
   "candidate": {
     "status": "candidate-not-released",
-    "code_commit": "9b1bef59685bab1be1922219f6fc53f67f1601ad",
+    "code_commit": "f8a026f67e59875552216672b8f2c0deabc905ac",
     "artifacts": 4,
     "artifact_names": [
       "Openthu-0.2.0-source.tar.gz",
@@ -219,11 +219,34 @@
     ],
     "wheel_members": 214,
     "bundled_files": 54,
-    "sdist_members": 493,
-    "source_files": 559,
-    "verify": "ok=true; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
+    "sdist_members": 496,
+    "source_files": 565,
+    "verify": "ok=true at f8a026f; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
     "install_check": "outside the repository; 29 MCP tools, doctor ok, user state unchanged",
     "published": false,
-    "record": "交付/候选版本记录.md"
+    "record": "交付/候选版本记录.md",
+    "release_gate": "PASS; nine checks true, 0 gaps; run 44177697601",
+    "artifact_files": [
+      {
+        "name": "Openthu-0.2.0-source.tar.gz",
+        "size": 3666642,
+        "sha256": "592a7ff09efddf8262a7826b9307aae30d97d76e5e9c6681aa19d670d203e23d"
+      },
+      {
+        "name": "Openthu-0.2.0-source.zip",
+        "size": 4125578,
+        "sha256": "e33fb5ed710cb3783e357d7c1b1fdffd205caf162bbd9918acc8f8893b3464d5"
+      },
+      {
+        "name": "openthu-0.2.0-py3-none-any.whl",
+        "size": 2807202,
+        "sha256": "dfc4a99d857c2e65332552defb58fbb09db7a4fb8d061f42160faa1d021e55b2"
+      },
+      {
+        "name": "openthu-0.2.0.tar.gz",
+        "size": 3436910,
+        "sha256": "70e087c2019b7c17d0998ec21a9022e81cdc88556ed949536ba3e744b060b087"
+      }
+    ]
   }
 }
