@@ -662,8 +662,8 @@
         "src/thu_assistant/queries.py",
         "src/thu_assistant/gateway.js",
         "src/thu_assistant/__main__.py",
-        "src/thu_assistant/facade.py",
-        "tests/test_facade.py"
+        "src/thu_assistant/facade/",
+        "src/thu_assistant/local_ops.py"
       ],
       "contracts": [
         "result-envelope-v1",
@@ -677,21 +677,31 @@
         "compatibility-baseline-v1"
       ],
       "tests": [
-        "tests/test_facade.py"
+        "tests/test_facade.py",
+        "tests/test_cli.py",
+        "tests/test_facade_audit.py"
       ],
       "docs": [
         "docs/CAPABILITIES.md",
-        "docs/HANDOVER.md"
+        "docs/HANDOVER.md",
+        "README.md"
       ],
       "install_assets": [
-        "src/thu_assistant/facade.py"
+        "src/thu_assistant/facade/",
+        "src/thu_assistant/local_ops.py"
       ],
       "acceptance_commands": [
         "python scripts/dev.py check",
         "python scripts/dev.py test"
       ],
       "completion_standard": "公共业务门面、MCP/CLI 接线、29 工具兼容和启用条件",
-      "evidence": []
+      "evidence": [
+        "accepted at aee2559 after the 6.1-audit (P0=0, P1=8, P2=15 fixed or explicitly downgraded)",
+        "68 module tests and 370 related regression tests; real file-keyed ResourceCenter covered; local results validate against result-envelope-v1",
+        "health returns PARTIAL/BLOCKED per row, unregistered reads are refused, unverified sources and switches stay visible in the capability table",
+        "check 504 files/0 findings; Linux full offline suite 1336 passed/7 skipped; Node 66 passed; plan/contract/source validators ok; 0 live campus/model/business calls",
+        "batch-6 reconnection and two-platform CI remain with the integration owner; no delivery PR, main merge or release"
+      ]
     },
     {
       "id": "6.2",

@@ -93,11 +93,19 @@
       "method": "GET",
       "path": "/resources",
       "query": {
+        "semester": "string, 4.2 index semester; the dashboard supplies the user selection or configured current semester (6.1 revision)",
         "query": "string, max 200 characters",
         "course_id": "string, max 128 characters",
         "page_size": "integer 1..200"
       },
       "response": "result-envelope-v1 with media/resource references"
+    }
+  ],
+  "x-revisions": [
+    {
+      "module": "6.1",
+      "change": "/resources accepts the provider semester; the 4.2 index is per semester and cannot resolve a default.",
+      "compatible": true
     }
   ],
   "x-unknown-values": {
