@@ -103,6 +103,8 @@ function imageSpec(batch,meta) {
  for(const key of ['max_images','max_image_bytes','max_total_bytes']){
   if(!Number.isSafeInteger(batch[key])||batch[key]<=0)throw fail('MODEL_IMAGE_PROTOCOL_UNVERIFIED');
  }
+ // Frozen ceilings (contracts/v0.2/README.md, MediaLimits): a batch may ask for
+ // less, never for more. Python enforces the same numbers from one source.
  if(batch.max_images>4||batch.max_image_bytes>8*1024*1024||batch.max_total_bytes>16*1024*1024)
   throw fail('MODEL_IMAGE_PROTOCOL_UNVERIFIED');
  if(!Array.isArray(batch.images)||!batch.images.length||batch.images.length>batch.max_images)
@@ -197,7 +199,10 @@ async function generate({command,directory,configuredModel,getToken,createClient
   catch(error){raise(signal?.aborted?(signal.reason?.code||'CANCELLED'):(error.code||'MODEL_IMAGE_STAGING_MISMATCH'));}
  }
  const target=command.messages||[{role:'user',content:String(command.prompt||'')}];
- const payload={model,messages:spec?imageMessages(command,imageParts):target,
+ let payloadMessages=target;
+ try{payloadMessages=spec?imageMessages(command,imageParts):target;}
+ catch(error){raise(error.code||'MODEL_IMAGE_MESSAGES_INVALID');}
+ const payload={model,messages:payloadMessages,
    max_tokens:command.max_tokens||1024,stream:true,stream_options:{include_usage:true},thinking:false};
  applyThinking(payload,meta);
  try {

@@ -24,7 +24,9 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -37,6 +39,8 @@ from thu_assistant.media_assets import MediaAssets, synthetic
 
 ROOT = Path(__file__).resolve().parents[1]
 NODE = os.environ.get("THU_NODE", "node")
+HAS_NODE = shutil.which(NODE) is not None
+node_only = pytest.mark.skipif(not HAS_NODE, reason="Node.js is not installed")
 SCOPE = "acct_" + "a" * 16
 OTHER_SCOPE = "acct_" + "b" * 16
 TASK = "task-model-45"
@@ -105,9 +109,23 @@ def binding(assets, tmp_path, *, scope=SCOPE, task=TASK, request_id=None):
     )
 
 
+PROFILE = {
+    "protocol_id": "madmodel.image.v1",
+    "evidence_level": "SYNTHETIC_TRANSPORT",
+    "source_id": "model.image_input",
+    "synthetic": True,
+    "checked_at": "2026-11-17T00:00:00+00:00",
+    "max_images": 4,
+    "max_image_bytes": 8 * 1024 * 1024,
+    "max_total_bytes": 16 * 1024 * 1024,
+    "max_pixels": 16_000_000,
+}
+
+
 def registry(*, model=MODEL, **options):
+    values = {**PROFILE, **options}
     return model_media.ProtocolRegistry(
-        [model_media.ProtocolProfile(protocol_id="madmodel.image.v1", model_id=model, **options)]
+        [model_media.ProtocolProfile(model_id=model, **values)]
     )
 
 
@@ -176,8 +194,40 @@ def test_offline_contract_evidence_is_not_transport_evidence(tmp_path, assets):
     media_id = reference_id(tmp_path, assets)
     with pytest.raises(ValueError):
         model_media.ProtocolProfile(
-            protocol_id="madmodel.image.v1", model_id=MODEL,
-            evidence_level="OFFLINE_CONTRACT")
+            model_id=MODEL, **{**PROFILE, "evidence_level": "OFFLINE_CONTRACT"})
+
+
+def test_a_profile_without_explicit_evidence_is_a_construction_error():
+    for missing in ("evidence_level", "source_id", "synthetic", "checked_at"):
+        values = {key: value for key, value in PROFILE.items() if key != missing}
+        with pytest.raises(TypeError):
+            model_media.ProtocolProfile(model_id=MODEL, **values)
+
+
+def test_profile_defaults_are_conservative_not_the_ceiling():
+    values = {
+        key: value for key, value in PROFILE.items()
+        if not key.startswith("max_")
+    }
+    profile = model_media.ProtocolProfile(model_id=MODEL, **values)
+    assert (profile.max_images, profile.max_image_bytes,
+            profile.max_total_bytes, profile.max_pixels) == (
+        1, 1024 * 1024, 4 * 1024 * 1024, 4_000_000)
+    assert profile.max_images < model_media.MAX_IMAGES
+    assert profile.max_image_bytes < model_media.MAX_IMAGE_BYTES
+
+
+def test_capability_rows_keep_profile_evidence_metadata(tmp_path):
+    profile = model_media.ProtocolProfile(
+        model_id=MODEL,
+        **{**PROFILE, "evidence_level": "LIVE_READ", "synthetic": False,
+           "checked_at": "2020-01-01T00:00:00+00:00"},
+    )
+    (row,) = model_media.capabilities(
+        {"models": [{"id": MODEL, "supportImage": True}]},
+        protocols=model_media.ProtocolRegistry([profile]))
+    assert row["synthetic"] is False
+    assert row["checked_at"].startswith("2020-01-01")
 
 
 def test_capability_rows_never_promote_a_catalog_flag(tmp_path):
@@ -248,6 +298,14 @@ def test_duplicate_and_malformed_selections_are_refused(tmp_path, assets):
     assert recorder.calls == []
 
 
+def test_bare_string_image_references_are_refused(tmp_path, assets):
+    media_id = reference_id(tmp_path, assets)
+    request_args = {"model": MODEL, "prompt": "x", "images": [media_id]}
+    with pytest.raises(CampusError, match="MODEL_IMAGE_SELECTION_INVALID"):
+        model_media.prepare(request_args, media=binding(assets, tmp_path),
+                            protocols=registry())
+
+
 def test_more_than_four_images_are_refused(tmp_path, assets):
     first = reference_id(tmp_path, assets)
     media_ids = [first] + [
@@ -271,6 +329,16 @@ def test_stricter_protocol_limits_win(tmp_path, assets):
     assert recorder.calls == []
 
 
+def test_protocol_pixel_limit_is_enforced(tmp_path, assets):
+    media_id = reference_id(tmp_path, assets)
+    recorder = Recorder()
+    with pytest.raises(CampusError, match="MODEL_IMAGE_LIMIT_EXCEEDED"):
+        models.chat(recorder, {"model": MODEL, "prompt": "x", **image_arg(media_id)},
+                    media=binding(assets, tmp_path),
+                    protocols=registry(max_pixels=1))
+    assert recorder.calls == []
+
+
 def test_protocol_media_types_are_enforced(tmp_path, assets):
     media_id = reference_id(tmp_path, assets, name="a.jpg", data=synthetic.jpeg())
     recorder = Recorder()
@@ -289,10 +357,11 @@ def test_empty_image_selection_is_refused(tmp_path, assets):
     assert recount.calls == []
 
 
-def test_protocol_checked_at_must_be_an_iso_instant():
-    with pytest.raises(ValueError):
-        model_media.ProtocolProfile(
-            protocol_id="madmodel.image.v1", model_id=MODEL, checked_at="yesterday")
+def test_protocol_checked_at_must_be_a_full_offset_instant():
+    for value in ("yesterday", "2026-11-17", "2026-11-17T12:00:00", ""):
+        with pytest.raises(ValueError):
+            model_media.ProtocolProfile(
+                model_id=MODEL, **{**PROFILE, "checked_at": value})
 
 
 def test_staging_refuses_bytes_that_do_not_match_the_released_hash(tmp_path):
@@ -310,11 +379,10 @@ def test_staging_refuses_bytes_that_do_not_match_the_released_hash(tmp_path):
 
 def test_protocol_cannot_widen_the_frozen_limits():
     with pytest.raises(ValueError):
-        model_media.ProtocolProfile(
-            protocol_id="madmodel.image.v1", model_id=MODEL, max_images=5)
+        model_media.ProtocolProfile(model_id=MODEL, **{**PROFILE, "max_images": 5})
     with pytest.raises(ValueError):
         model_media.ProtocolProfile(
-            protocol_id="madmodel.image.v1", model_id=MODEL, max_total_bytes=32 * 1024 * 1024)
+            model_id=MODEL, **{**PROFILE, "max_total_bytes": 32 * 1024 * 1024})
 
 
 def test_image_call_requires_an_explicit_model(tmp_path, assets):
@@ -406,6 +474,56 @@ def test_preview_lists_what_would_be_sent_without_bytes_or_paths(tmp_path, asset
     assert str(tmp_path) not in text
     assert "base64" not in text and "data:image" not in text
     request.cancel()
+
+
+def test_preview_reports_the_whole_text_scope_and_creates_no_bundle(tmp_path, assets):
+    media_id = reference_id(tmp_path, assets)
+    messages = [
+        {"role": "user", "content": "第一问"},
+        {"role": "assistant", "content": "第一答"},
+        {"role": "user", "content": "第二问"},
+    ]
+    for _ in range(3):
+        request = model_media.prepare(
+            {"model": MODEL, "messages": messages, **image_arg(media_id),
+             "source_refs": [{"source_id": "notice_1", "text": "课程通知原文"}]},
+            media=binding(assets, tmp_path), protocols=registry())
+        preview = request.preview()
+        assert assets.broker.bundle_count() == 0
+    scope = preview["text_scope"]
+    actual = sum(len(message["content"]) for message in request.prepared["messages"])
+    assert scope["messages"] == len(request.prepared["messages"]) == 4
+    assert scope["chars"] == actual
+    assert scope["by_role"] == {"system": 1, "user": 2, "assistant": 1}
+    assert scope["source_ids"] == ["notice_1"]
+    assert scope["per_message"][1] == {"role": "user", "chars": len("第一问")}
+    text = json.dumps(preview, ensure_ascii=False)
+    assert "第一问" not in text and "课程通知原文" not in text
+    assert str(tmp_path) not in text
+    request.cancel()
+
+
+def test_a_send_creates_and_consumes_exactly_one_bundle(tmp_path, assets):
+    media_id = reference_id(tmp_path, assets)
+    recorder = Recorder({"content": "ok"})
+    models.chat(recorder, {"model": MODEL, "prompt": "x", **image_arg(media_id)},
+                media=binding(assets, tmp_path), protocols=registry())
+    assert assets.broker.bundle_count() == 1
+    assert assets.broker.active() == []
+
+
+def test_stale_staging_files_are_swept_only_by_a_later_request(tmp_path):
+    root = tmp_path / "transport"
+    root.mkdir(mode=0o700)
+    old = root / ("a" * 32 + ".bin")
+    old.write_bytes(b"x")
+    stamp = time.time() - 1000
+    os.utime(old, (stamp, stamp))
+    # Nothing runs in the background: the file survives until a request opens
+    # the staging area again.
+    assert old.exists()
+    model_media.TransportStage(root)
+    assert not old.exists()
 
 
 def test_the_staging_root_must_be_private_and_absolute(tmp_path, assets):
@@ -515,6 +633,39 @@ def test_a_refused_answer_keeps_the_reported_usage_and_partial_text(tmp_path, as
     assert evidence["media_revoked"] is None
 
 
+def test_a_truncated_success_marks_the_image_input_incomplete(tmp_path, assets):
+    media_id = reference_id(tmp_path, assets)
+    result = models.chat(
+        Recorder({"content": "cut", "usage": None, "complete": False,
+                  "partial": True, "finish_reason": "length"}),
+        {"model": MODEL, "prompt": "x", **image_arg(media_id)},
+        media=binding(assets, tmp_path), protocols=registry())
+    assert result["complete"] is False
+    assert result["partial"] is True
+    assert result["finish_reason"] == "length"
+    assert result["image_input"]["complete"] is False
+    assert result["image_input"]["sends"] == 0
+
+
+def test_error_evidence_keeps_the_transport_send_count(tmp_path, assets):
+    media_id = reference_id(tmp_path, assets)
+    error = CampusError("MODEL_AUTH_REJECTED", model_evidence={
+        "content": "", "usage": None, "usage_state": "UNKNOWN",
+        "image_input": {
+            "count": 1, "total_bytes": 123, "media_ids": [media_id],
+            "sha256": ["0" * 64], "protocol_id": "madmodel.image.v1",
+            "evidence_level": "SYNTHETIC_TRANSPORT", "sends": 2},
+        "generation_started": True})
+    with pytest.raises(CampusError) as raised:
+        models.chat(Recorder(error=error),
+                    {"model": MODEL, "prompt": "x", **image_arg(media_id)},
+                    media=binding(assets, tmp_path), protocols=registry())
+    evidence = raised.value.model_evidence["image_input"]
+    assert evidence["sends"] == 2
+    assert evidence["complete"] is False
+    assert evidence["count"] == 1
+
+
 def test_cancel_revokes_the_media_and_never_generates_twice(tmp_path, assets):
     media_id = reference_id(tmp_path, assets)
     recorder = Recorder(error=CampusError("CANCELLED", model_evidence={
@@ -589,6 +740,62 @@ def test_image_error_codes_are_the_frozen_media_taxonomy(tmp_path, assets):
     assert raised.value.code.startswith("MEDIA_")
 
 
+def test_non_dict_arguments_keep_the_frozen_input_error():
+    for value in (None, "prompt", []):
+        with pytest.raises(CampusError, match="INVALID_MODEL_ARGUMENTS"):
+            models.chat(lambda *args, **kwargs: None, value)
+
+
+def test_mcp_model_chat_refuses_images_without_a_media_binding():
+    """The shipped MCP path has no MediaBinding yet; it must fail closed.
+
+    It reports MODEL_IMAGE_INPUT_UNAVAILABLE, not PROTOCOL_UNVERIFIED: the
+    facade has not injected the media pipeline. 6.1 wires it (see the record).
+    """
+    from thu_assistant.mcp_stdio import CampusAssistant, McpServer
+
+    recorder = Recorder()
+    server = McpServer(CampusAssistant(learning_factory=lambda: None, bridge=recorder))
+    response = server.handle({
+        "id": 1, "method": "tools/call",
+        "params": {"name": "model_chat", "arguments": {
+            "prompt": "x", "images": [{"media_id": "media_" + "a" * 12}]}},
+    })
+    assert response["result"]["isError"] is True
+    assert response["result"]["structuredContent"]["error"]["code"] == (
+        "MODEL_IMAGE_INPUT_UNAVAILABLE")
+    assert recorder.calls == []
+
+
+def test_engine_limits_come_from_the_shared_limits_object():
+    from thu_assistant.media_assets import DEFAULT_LIMITS
+
+    assert model_media.MAX_IMAGES == DEFAULT_LIMITS.max_images_per_request
+    assert model_media.MAX_IMAGE_BYTES == DEFAULT_LIMITS.max_image_bytes
+    assert model_media.MAX_TOTAL_BYTES == DEFAULT_LIMITS.max_total_image_bytes
+    assert model_media.MAX_PIXELS == DEFAULT_LIMITS.max_pixels_per_image
+
+
+def test_the_module_record_maps_every_test():
+    record = (ROOT / "plans/v0.2.0/交付/模块结果/4.5.md").read_text("utf-8")
+    source = (ROOT / "tests/test_model_media.py").read_text("utf-8")
+    defined = set(re.findall(r"^def (test_[a-z0-9_]+)", source, re.M))
+    mapped = set(re.findall(r"`(test_[a-z0-9_]+)`", record))
+    assert defined <= mapped
+
+
+def test_every_module_code_is_declared():
+    source = "".join(
+        (ROOT / path).read_text("utf-8")
+        for path in ("src/thu_assistant/model_media.py",
+                     "src/thu_assistant/models.py",
+                     "src/thu_assistant/models.js")
+    )
+    emitted = set(re.findall(
+        r"(MODEL_IMAGE_[A-Z_]+|MODEL_REQUIRED_FOR_IMAGE_INPUT)", source))
+    assert emitted == set(model_media.MODULE_CODES)
+
+
 # -- Node transport -----------------------------------------------------
 
 NODE_SCRIPT = r"""
@@ -602,6 +809,7 @@ const directory={models:rows,checked_at:new Date().toISOString(),freshness:'LIVE
 const run=async scenario=>{
  let requests=0,tokens=0;const payloads=[];
  const command={model:'model-a',prompt:'synthetic prompt',max_tokens:64};
+ if(scenario.assistantLast)command.messages=[{role:'user',content:'q'},{role:'assistant',content:'a'}];
  if(scenario.batch!==undefined)command.image_batch={...scenario.batch,staging_root:job.root};
  const controller=scenario.cancelAfterStart?new AbortController():null;
  const signal=scenario.cancelBefore
@@ -662,6 +870,7 @@ def run_node(tmp_path, scenarios, *, support_image=True):
     return json.loads(completed.stdout), root
 
 
+@node_only
 def test_node_transport_refuses_unverified_protocol_and_unsupported_model(tmp_path):
     root = tmp_path / "node-stage"
     root.mkdir(mode=0o700)
@@ -683,6 +892,7 @@ def test_node_transport_refuses_unverified_protocol_and_unsupported_model(tmp_pa
     assert (root / f"{item['token']}.bin").exists()
 
 
+@node_only
 def test_node_transport_refuses_a_model_without_image_support(tmp_path):
     root = tmp_path / "node-stage"
     root.mkdir(mode=0o700)
@@ -699,6 +909,7 @@ def test_node_transport_refuses_a_model_without_image_support(tmp_path):
     assert output["unsupported"]["requests"] == 0
 
 
+@node_only
 def test_node_transport_sends_text_first_then_images_in_order(tmp_path):
     root = tmp_path / "node-stage"
     root.mkdir(mode=0o700)
@@ -727,6 +938,7 @@ def test_node_transport_sends_text_first_then_images_in_order(tmp_path):
     assert not any(root.iterdir())
 
 
+@node_only
 def test_node_transport_refuses_a_changed_staging_file(tmp_path):
     root = tmp_path / "node-stage"
     root.mkdir(mode=0o700)
@@ -744,6 +956,7 @@ def test_node_transport_refuses_a_changed_staging_file(tmp_path):
     assert output["mismatch"]["evidence"]["generation_started"] is False
 
 
+@node_only
 def test_node_transport_cancel_before_dispatch_sends_nothing(tmp_path):
     root = tmp_path / "node-stage"
     root.mkdir(mode=0o700)
@@ -762,6 +975,7 @@ def test_node_transport_cancel_before_dispatch_sends_nothing(tmp_path):
     assert (root / f"{item['token']}.bin").exists()
 
 
+@node_only
 def test_node_transport_allows_one_unopened_auth_recovery_without_switching_models(
     tmp_path,
 ):
@@ -785,6 +999,43 @@ def test_node_transport_allows_one_unopened_auth_recovery_without_switching_mode
     assert result["payloads"][0]["messages"] == result["payloads"][1]["messages"]
 
 
+@node_only
+def test_node_transport_refuses_a_batch_above_the_frozen_ceiling(tmp_path):
+    root = tmp_path / "node-stage"
+    root.mkdir(mode=0o700)
+    output, root = run_node(tmp_path, [{
+        "name": "too_wide",
+        "batch": {"protocol_id": "madmodel.image.v1", "model_id": "model-a",
+                  "shape": "OPENAI_CONTENT_PARTS_IMAGE_URL",
+                  "evidence_level": "SYNTHETIC_TRANSPORT", "max_images": 4,
+                  "max_image_bytes": 16 * 1024 * 1024,
+                  "max_total_bytes": 32 * 1024 * 1024, "images": []},
+    }])
+    assert output["too_wide"]["code"] == "MODEL_IMAGE_PROTOCOL_UNVERIFIED"
+    assert output["too_wide"]["requests"] == 0
+
+
+@node_only
+def test_node_image_message_shape_error_carries_evidence(tmp_path):
+    root = tmp_path / "node-stage"
+    root.mkdir(mode=0o700)
+    item = stage_file(root, synthetic.png())
+    output, root = run_node(tmp_path, [{
+        "name": "bad_messages", "assistantLast": True,
+        "batch": {"protocol_id": "madmodel.image.v1", "model_id": "model-a",
+                  "shape": "OPENAI_CONTENT_PARTS_IMAGE_URL",
+                  "evidence_level": "SYNTHETIC_TRANSPORT", "max_images": 4,
+                  "max_image_bytes": 8 * 1024 * 1024,
+                  "max_total_bytes": 16 * 1024 * 1024, "images": [item]},
+    }])
+    result = output["bad_messages"]
+    assert result["code"] == "MODEL_IMAGE_MESSAGES_INVALID"
+    assert result["requests"] == 0
+    assert result["evidence"]["generation_started"] is False
+    assert result["evidence"]["image_input"]["count"] == 1
+
+
+@node_only
 def test_node_transport_cancel_after_start_never_replays(tmp_path):
     root = tmp_path / "node-stage"
     root.mkdir(mode=0o700)

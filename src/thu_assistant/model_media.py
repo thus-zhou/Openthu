@@ -37,6 +37,7 @@ from . import models
 from .bridge import CampusError
 from .media_assets import capability_report
 from .media_assets.errors import MediaError
+from .media_assets.limits import DEFAULT_LIMITS
 from .media_assets.registry import validate_scope, validate_task
 
 SHAPES = ("OPENAI_CONTENT_PARTS_IMAGE_URL",)
@@ -50,46 +51,82 @@ EVIDENCE_LEVELS = (
 )
 IMAGE_MIME_TYPES = ("image/jpeg", "image/png", "image/webp")
 
-# Frozen engineering ceilings from contracts/v0.2/README.md and 1.1. A protocol
-# profile may be stricter; it can never widen them.
-MAX_IMAGES = 4
-MAX_IMAGE_BYTES = 8 * 1024 * 1024
-MAX_TOTAL_BYTES = 16 * 1024 * 1024
-MAX_PIXELS = 16_000_000
+# Frozen engineering ceilings from contracts/v0.2/README.md and 1.1. They are
+# taken from the 3.3 limits object so the two modules cannot drift apart; a
+# protocol profile may be stricter and can never widen them.
+MAX_IMAGES = DEFAULT_LIMITS.max_images_per_request
+MAX_IMAGE_BYTES = DEFAULT_LIMITS.max_image_bytes
+MAX_TOTAL_BYTES = DEFAULT_LIMITS.max_total_image_bytes
+MAX_PIXELS = DEFAULT_LIMITS.max_pixels_per_image
+
+# Conservative defaults for a profile that does not state limits: one image,
+# one MiB, a four MiB request and four megapixels. A profile must opt in to the
+# full frozen ceiling; omission must never be the same as "the maximum".
+DEFAULT_MAX_IMAGES = 1
+DEFAULT_MAX_IMAGE_BYTES = 1024 * 1024
+DEFAULT_MAX_TOTAL_BYTES = 4 * 1024 * 1024
+DEFAULT_MAX_PIXELS = 4_000_000
 
 SOURCE_ID = "model.image_input"
+
+# Every module-local code 4.5 can emit. They stay unregistered in the frozen
+# classification until 6.1 adds them (see the module record); the tuple keeps
+# the implementation and the record from drifting apart.
+MODULE_CODES = (
+    "MODEL_REQUIRED_FOR_IMAGE_INPUT",
+    "MODEL_IMAGE_REQUIRES_MEDIA_PIPELINE",
+    "MODEL_IMAGE_SELECTION_INVALID",
+    "MODEL_IMAGE_LIMIT_EXCEEDED",
+    "MODEL_IMAGE_UNSUPPORTED",
+    "MODEL_IMAGE_PROTOCOL_UNVERIFIED",
+    "MODEL_IMAGE_INPUT_UNAVAILABLE",
+    "MODEL_IMAGE_TRANSPORT_UNAVAILABLE",
+    "MODEL_IMAGE_STAGING_FAILED",
+    "MODEL_IMAGE_STAGING_MISMATCH",
+    "MODEL_IMAGE_MESSAGES_INVALID",
+)
 
 _PROTOCOL_ID = re.compile(r"^[a-z][a-z0-9_.-]{2,120}$")
 _SOURCE_ID = re.compile(r"^[a-z][a-z0-9_.-]{2,120}$")
 _MEDIA_ID = re.compile(r"^media_[A-Za-z0-9_-]{8,64}$")
 _CITE = re.compile(r"\[\[([A-Za-z0-9_-]{1,64})\]\]")
+_IMAGE_INPUT_KEYS = (
+    "count",
+    "total_bytes",
+    "media_ids",
+    "sha256",
+    "protocol_id",
+    "evidence_level",
+    "sends",
+    "inline_base64",
+)
 
 
 # -- protocol evidence --------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ProtocolProfile:
     """Recorded proof that the authenticated proxy carries image parts.
 
     A profile is configuration, not user input: it is constructed from verified
-    upstream evidence, never from a catalogue flag. ``evidence_level`` must be a
-    sending level, because a profile whose evidence never demonstrated transport
-    would otherwise be indistinguishable from a guess.
+    upstream evidence, never from a catalogue flag. The evidence fields have no
+    defaults on purpose: omission must be a construction error, not an implicit
+    claim. Limits default to a conservative subset and must be raised explicitly.
     """
 
     protocol_id: str
     model_id: str
+    evidence_level: str
+    source_id: str
+    synthetic: bool
+    checked_at: str
     shape: str = "OPENAI_CONTENT_PARTS_IMAGE_URL"
     media_types: tuple[str, ...] = IMAGE_MIME_TYPES
-    max_images: int = MAX_IMAGES
-    max_image_bytes: int = MAX_IMAGE_BYTES
-    max_total_bytes: int = MAX_TOTAL_BYTES
-    max_pixels: int = MAX_PIXELS
-    evidence_level: str = "SYNTHETIC_TRANSPORT"
-    source_id: str = SOURCE_ID
-    synthetic: bool = True
-    checked_at: str | None = None
+    max_images: int = DEFAULT_MAX_IMAGES
+    max_image_bytes: int = DEFAULT_MAX_IMAGE_BYTES
+    max_total_bytes: int = DEFAULT_MAX_TOTAL_BYTES
+    max_pixels: int = DEFAULT_MAX_PIXELS
 
     def __post_init__(self) -> None:
         if not isinstance(self.protocol_id, str) or not _PROTOCOL_ID.fullmatch(
@@ -112,13 +149,16 @@ class ProtocolProfile:
             raise ValueError("source_id does not match the evidence pattern")
         if not isinstance(self.synthetic, bool):
             raise ValueError("synthetic must be a boolean")
-        if self.checked_at is not None:
-            if not isinstance(self.checked_at, str):
-                raise ValueError("checked_at must be an ISO string or None")
-            try:
-                datetime.fromisoformat(self.checked_at)
-            except ValueError:
-                raise ValueError("checked_at must be an ISO-8601 instant") from None
+        if not isinstance(self.checked_at, str) or not self.checked_at:
+            raise ValueError("checked_at must be an ISO-8601 instant")
+        if "T" not in self.checked_at:
+            raise ValueError("checked_at must carry a time, not only a date")
+        try:
+            moment = datetime.fromisoformat(self.checked_at)
+        except ValueError:
+            raise ValueError("checked_at must be an ISO-8601 instant") from None
+        if moment.tzinfo is None or moment.utcoffset() is None:
+            raise ValueError("checked_at must carry an explicit offset")
         media_types = tuple(self.media_types)
         if not media_types or any(item not in IMAGE_MIME_TYPES for item in media_types):
             raise ValueError("media_types must be a non-empty subset of JPEG/PNG/WebP")
@@ -201,6 +241,9 @@ def capabilities(
     report: list[dict[str, Any]] = []
     for row in rows:
         profile = registry.resolve(row["id"])
+        moment = checked_at
+        if moment is None and profile is not None:
+            moment = datetime.fromisoformat(profile.checked_at)
         report.append(
             capability_report(
                 model_id=row["id"],
@@ -209,7 +252,8 @@ def capabilities(
                 protocol_state="VERIFIED" if profile else "UNVERIFIED",
                 evidence_level=profile.evidence_level if profile else "OFFLINE_CONTRACT",
                 source_id=profile.source_id if profile else SOURCE_ID,
-                checked_at=checked_at,
+                checked_at=moment,
+                synthetic=profile.synthetic if profile else True,
             )
         )
     return report
@@ -415,13 +459,11 @@ def _media_ids(value: object) -> tuple[str, ...]:
         raise CampusError("MODEL_IMAGE_SELECTION_INVALID")
     ids: list[str] = []
     for item in value:
-        if isinstance(item, Mapping):
-            # A path, URL or byte field here is a caller error, never ignored.
-            if set(item) != {"media_id"}:
-                raise CampusError("MODEL_IMAGE_SELECTION_INVALID")
-            media_id = item.get("media_id")
-        else:
-            media_id = item
+        # The public schema names one object per image; a bare string, a path or
+        # a byte field is a caller error, never silently accepted.
+        if not isinstance(item, Mapping) or set(item) != {"media_id"}:
+            raise CampusError("MODEL_IMAGE_SELECTION_INVALID")
+        media_id = item.get("media_id")
         if not isinstance(media_id, str) or not _MEDIA_ID.fullmatch(media_id):
             raise CampusError("MODEL_IMAGE_SELECTION_INVALID")
         if media_id in ids:
@@ -465,7 +507,11 @@ def _check_selection(
 
 
 class ImageRequest:
-    """A prepared image request: inspect the preview, then send exactly once."""
+    """A prepared image request: inspect the preview, then send exactly once.
+
+    No broker bundle exists until ``send``: a preview the user never approves
+    therefore leaves nothing for the 3.3 broker to retain past its TTL.
+    """
 
     def __init__(
         self,
@@ -473,18 +519,19 @@ class ImageRequest:
         prepared: Mapping[str, Any],
         sources: Sequence[Mapping[str, Any]],
         manifest: Mapping[str, Any],
-        bundle: Any,
         protocol: ProtocolProfile,
         binding: MediaBinding,
         request_id: str,
+        prompt_text: str,
     ) -> None:
         self.prepared = dict(prepared)
         self.sources = list(sources)
         self.manifest = dict(manifest)
-        self.bundle = bundle
         self.protocol = protocol
         self.binding = binding
         self.request_id = request_id
+        self.prompt_text = prompt_text
+        self._bundle: Any = None
 
     def preview(self) -> dict[str, Any]:
         """Exactly what would be sent, with no bytes and no local path."""
@@ -495,8 +542,7 @@ class ImageRequest:
             "request_id": self.request_id,
             "account_scope": self.binding.account_scope,
             "task_id": self.binding.task_id,
-            "bundle_id": getattr(self.bundle, "bundle_id", None),
-            "text": dict(self.bundle.preview()["text"]),
+            "text_scope": _text_scope(self.prepared, self.sources),
             "image_count": len(entries),
             "total_image_bytes": sum(int(entry["byte_size"]) for entry in entries),
             "images": [
@@ -522,7 +568,18 @@ class ImageRequest:
         stage = TransportStage(self.binding.transport_root)
         revoked: bool | None = None
         try:
-            images = self._consume()
+            bundle = self._bundle
+            if bundle is None:
+                bundle = self.binding.assets.prepare_model_bundle(
+                    [entry["asset_id"] for entry in self.manifest["assets"]],
+                    account_scope=self.binding.account_scope,
+                    task_id=self.binding.task_id,
+                    request_id=self.request_id,
+                    model_id=self.protocol.model_id,
+                    prompt_text=self.prompt_text,
+                )
+                self._bundle = bundle
+            images = self._consume(bundle)
             staged = stage.write(images)
             command = dict(self.prepared)
             command["image_batch"] = {
@@ -544,6 +601,7 @@ class ImageRequest:
                 self.prepared,
                 self.protocol,
                 request_id=self.request_id,
+                complete=result.get("complete") if isinstance(result, Mapping) else None,
             )
         except CampusError as error:
             evidence = dict(getattr(error, "model_evidence", None) or {})
@@ -564,10 +622,10 @@ class ImageRequest:
         finally:
             stage.cleanup()
 
-    def _consume(self) -> tuple[Any, ...]:
+    def _consume(self, bundle: Any) -> tuple[Any, ...]:
         try:
             grant = self.binding.assets.authorize_model_send(
-                self.bundle.bundle_id, request_id=self.request_id
+                bundle.bundle_id, request_id=self.request_id
             )
             images = self.binding.assets.consume_model_bundle(
                 grant, request_id=self.request_id
@@ -627,23 +685,44 @@ def prepare(
         purpose="MODEL_INPUT",
     )
     _check_selection(manifest, protocol)
-    bundle = media.assets.prepare_model_bundle(
-        media_ids,
-        account_scope=media.account_scope,
-        task_id=media.task_id,
-        request_id=request_id,
-        model_id=model_id,
-        prompt_text=last_user,
-    )
     return ImageRequest(
         prepared=prepared,
         sources=sources,
         manifest=manifest,
-        bundle=bundle,
         protocol=protocol,
         binding=media,
         request_id=request_id,
+        prompt_text=last_user,
     )
+
+
+def _text_scope(
+    prepared: Mapping[str, Any], sources: Sequence[Mapping[str, Any]]
+) -> dict[str, Any]:
+    """The full text range of the request, not only its last prompt.
+
+    The 3.3 bundle preview describes one prompt string; the request actually
+    carries every message, including the system document built from
+    ``source_refs``. A confirmation step needs the whole range.
+    """
+    messages = prepared.get("messages") or []
+    chars = 0
+    by_role: dict[str, int] = {}
+    per_message: list[dict[str, Any]] = []
+    for message in messages:
+        content = message.get("content")
+        size = len(content) if isinstance(content, str) else 0
+        chars += size
+        role = str(message.get("role", ""))
+        by_role[role] = by_role.get(role, 0) + 1
+        per_message.append({"role": role, "chars": size})
+    return {
+        "messages": len(messages),
+        "chars": chars,
+        "by_role": by_role,
+        "source_ids": [str(source.get("source_id")) for source in sources],
+        "per_message": per_message,
+    }
 
 
 def chat(
@@ -733,9 +812,13 @@ def attach_images(
     protocol: ProtocolProfile,
     *,
     request_id: str,
-    complete: bool = True,
+    complete: bool | None = None,
 ) -> dict[str, Any]:
-    """Extend ``models.attach`` with image provenance and a merged source map."""
+    """Extend ``models.attach`` with image provenance and a merged source map.
+
+    ``complete`` follows the transport's own verdict unless the caller states
+    one: a successful but truncated answer must not present itself as complete.
+    """
     out = models.attach(dict(result), sources)
     media_sources = [_media_source(entry) for entry in entries]
     registered = {source["source_id"] for source in out.get("sources", [])}
@@ -771,7 +854,22 @@ def attach_images(
     ]
     out["input"] = _input_digest(prepared)
     out["output_kind"] = "TEXT_SUMMARY"
+    # Keep the transport's own image scope, but only through a fixed key list:
+    # a future Node field must never leak a token, a path or image bytes into
+    # Python evidence.
+    reported = out.get("image_input")
+    remote = {
+        key: reported[key]
+        for key in _IMAGE_INPUT_KEYS
+        if isinstance(reported, Mapping) and key in reported
+    }
+    if complete is None:
+        complete = bool(out.get("complete", True))
+    sends = remote.get("sends")
+    if not isinstance(sends, int) or isinstance(sends, bool) or sends < 0:
+        sends = 0
     out["image_input"] = {
+        **remote,
         "count": len(media_sources),
         "total_bytes": sum(int(entry["byte_size"]) for entry in entries),
         "media_ids": [entry["asset_id"] for entry in entries],
@@ -780,6 +878,7 @@ def attach_images(
         "evidence_level": protocol.evidence_level,
         "request_id": request_id,
         "complete": bool(complete),
+        "sends": sends,
     }
     out["citation_check"] = "SOURCE_IDS_ONLY_NOT_FACT_CHECKED"
     out["output_is_authorization"] = False
@@ -787,7 +886,12 @@ def attach_images(
 
 
 __all__ = [
+    "DEFAULT_MAX_IMAGE_BYTES",
+    "DEFAULT_MAX_IMAGES",
+    "DEFAULT_MAX_PIXELS",
+    "DEFAULT_MAX_TOTAL_BYTES",
     "EVIDENCE_LEVELS",
+    "MODULE_CODES",
     "ImageRequest",
     "IMAGE_MIME_TYPES",
     "MediaBinding",

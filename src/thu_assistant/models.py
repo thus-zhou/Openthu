@@ -96,6 +96,9 @@ def attach(result,sources):
     return out
 
 def chat(bridge,args,*,media=None,protocols=None):
+    # Image routing reads ``args`` before ``prepare`` can validate it; keep the
+    # frozen INVALID_MODEL_ARGUMENTS answer for None, a string or a list.
+    require(isinstance(args,dict),'INVALID_MODEL_ARGUMENTS')
     if os.environ.get('THU_MODEL_READ','1')=='0':
         require('prompt' in args and not set(args)-{'prompt','model','max_tokens'},'MODEL_EXTENSION_DISABLED')
         return bridge('model',**args)
