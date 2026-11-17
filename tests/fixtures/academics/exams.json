@@ -1,0 +1,102 @@
+{
+  "synthetic": true,
+  "note": "合成考试。日期精度、取消、改期、补考、缓考与未知状态均为示例。",
+  "coverage": {
+    "declared": true,
+    "complete": true,
+    "scope": "合成夹具声明的考试范围，不代表真实学校覆盖"
+  },
+  "exams": [
+    {
+      "exam_id": "EX-1",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A",
+      "title": "合成数据结构考试",
+      "date": "2027-01-05",
+      "state": "scheduled",
+      "release_state": "published",
+      "location": "合成考场 A101"
+    },
+    {
+      "exam_id": "EX-2",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A2",
+      "title": "合成数据结构考试",
+      "date": "2027-01-07",
+      "start_time": "09:00",
+      "end_time": "11:00",
+      "state": "scheduled",
+      "release_state": "published",
+      "location": "合成考场 A102",
+      "seat": "SYNTH-SEAT-1"
+    },
+    {
+      "exam_id": "EX-3",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-B",
+      "title": "合成操作系统考试",
+      "date": "2027-01-09",
+      "start_time": "14:00",
+      "end_time": "16:00",
+      "state": "cancelled",
+      "release_state": "published"
+    },
+    {
+      "exam_id": "EX-4",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-B",
+      "title": "合成操作系统考试",
+      "date": "2027-01-12",
+      "start_time": "09:00",
+      "end_time": "11:00",
+      "state": "rescheduled",
+      "release_state": "published"
+    },
+    {
+      "exam_id": "EX-5",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A",
+      "title": "合成数据结构补考",
+      "date": "2027-01-15",
+      "start_time": "09:00",
+      "end_time": "11:00",
+      "state": "makeup",
+      "release_state": "published"
+    },
+    {
+      "exam_id": "EX-6",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A2",
+      "title": "合成数据结构缓考",
+      "state": "deferred",
+      "release_state": "unpublished"
+    },
+    {
+      "exam_id": "EX-7",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-B",
+      "title": "合成状态未知考试",
+      "date": "2027-01-20",
+      "state": "奇怪状态",
+      "release_state": "published"
+    },
+    {
+      "exam_id": "",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A",
+      "title": "合成无编号考试",
+      "date": "2027-01-22",
+      "state": "scheduled",
+      "release_state": "published"
+    },
+    {
+      "exam_id": "EX-9",
+      "semester": "2026-2027-1",
+      "course_id": "SYNTH-COURSE-A",
+      "title": "合成未发布考试",
+      "date": "2027-01-25",
+      "state": "scheduled",
+      "release_state": "unpublished"
+    }
+  ]
+}

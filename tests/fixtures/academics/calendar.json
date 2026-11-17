@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "note": "合成校历。国庆假期与调课日均为示例；只有显式使用本文件时才展开日期。",
+  "calendar": {
+    "semester_id": "2026-2027-1",
+    "term_start": "2026-09-14",
+    "teaching_weeks": 16,
+    "holidays": ["2026-10-01", "2026-10-02"],
+    "makeup_days": [
+      {"date": "2026-10-10", "weekday": 4, "replaces": ["2026-10-08"]}
+    ]
+  }
+}
