@@ -42,7 +42,7 @@
 | `academics.exams` | 4.1 | `BLOCKED_SOURCE_EVIDENCE` | 没有考试安排来源；不能从教学日历推导 |
 | `academics.grades` | 4.1 | `BLOCKED_SOURCE_EVIDENCE` | 没有课程成绩来源；作业成绩不是课程成绩 |
 | `learn.submission` | 5.3 | `BLOCKED_SOURCE_EVIDENCE` | 上传、草稿、正式提交和结果查询均无已验证接口 |
-| `library.renewal` | 5.1 | `PARTIAL`；5.1 执行 `BLOCKED_SOURCE_EVIDENCE` | 只有续借资格提示，没有执行和回执语义 |
+| `library.renewal` | 5.1 | `PARTIAL`；5.1 执行 `BLOCKED_SOURCE_EVIDENCE` | 资格读取、单笔绑定、官方页面移交和新到期核对已实现；没有已验证的请求端点与回执 |
 | `model.image_input` | 4.5 | `BLOCKED_SOURCE_EVIDENCE` | 目录标记支持图片，但当前代理的图片协议未验证 |
 | `visitors.form` | 4.4 | `BLOCKED_SOURCE_EVIDENCE` | 只有公开入口，没有当前表单和权限契约 |
 

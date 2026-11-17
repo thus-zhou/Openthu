@@ -43,7 +43,7 @@
 
 1. 资格提示、执行受理、执行失败和新到期日分开记录。
 2. 执行失败或未知时，`due_date_after` 保持原值（或 `null`），不得提前改到期日。
-3. 当前 `library.loans` 只读 `renew` 和提示文本；没有续借执行端点、回执或新到期日来源，5.1 的续借执行保持 `BLOCKED_SOURCE_EVIDENCE`。
+3. 当前 `library.loans` 只读 `renew` 和提示文本；5.1 已实现单笔计划、官方页面移交和“同一借阅的新到期时间”核对，但没有续借请求端点与受理回执，续借执行保持 `BLOCKED_SOURCE_EVIDENCE`。
 4. 续借是不可自动重放的写操作；不确定时只读核对，不重复点击。
 
 合成夹具：[renewal-eligible-failed.json](../../tests/fixtures/sources/renewal-eligible-failed.json) 记录“资格为真、执行失败、到期日不变”。

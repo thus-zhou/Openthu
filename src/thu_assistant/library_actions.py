@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import re
 import time
 from urllib.parse import urlsplit
-from . import spaces as s, library_wire as wire, library_contracts as c
+from . import spaces as s, library_wire as wire, library_contracts as c, precheck
 from .actions import digest, NotDispatched
 from .bridge import CampusError
 
@@ -72,18 +72,40 @@ def seat_detail(reader, row):
     return value
 
 
+def plan_precheck(summary,item):
+    """The bound resource's axes plus the read's selection/rules verdict.
+
+    ``checked_at`` is excluded: a replay of the same read must not change the
+    digest, while a change of any decision axis must.
+    """
+    states=c.precheck_states(item)
+    states['selection_state']=summary['selection']['state']
+    if summary['rules']['state']!='NOT_APPLICABLE':
+        states['rules_state']=summary['rules']['state']
+    return states
+
+
 def seat_proposal(reader, args):
     start,end=enforce_future(args)
     avail=s.read_seat(reader,'seat_availability',{k:args[k] for k in ('area_id','date','start_time','end_time')})
     if avail.get('status') not in (None,'BROWSER_REQUIRED'):
         raise CampusError(avail.get('reason') or 'SEAT_NOT_AVAILABLE')
-    selected=[x for x in avail['items'] if x['seat_id']==args['seat_id']]
+    built=precheck.build('library','seat_availability',avail,avail.get('items') or [],
+                         {k:args[k] for k in ('area_id','date','start_time','end_time')},None)
+    selection=built['summary']
+    selected=[x for x in avail.get('items') or [] if x['seat_id']==args['seat_id']]
     flags=[]
+    block=None
     if avail.get('status')=='BROWSER_REQUIRED':
         flags.append('OFFICIAL_SEAT_SELECTION')
     else:
-        s.require(len(selected)==1,'SEAT_NOT_IN_SELECTED_AREA')
-        s.require(selected[0]['free'] is True,'SEAT_UNAVAILABLE')
+        block=next((x for x in built['items'] if x['resource']['resource_id']==args['seat_id']),None)
+        s.require(block is not None,'SEAT_NOT_IN_SELECTED_AREA')
+        # A free read row is not permission to book: TRUE stays exact, FALSE is
+        # unavailable, and an unmapped/unknown state needs the official map.
+        s.require(block['availability']['state']!='FULL','SEAT_UNAVAILABLE')
+        if block['availability']['state']!='FREE':
+            flags.append('OFFICIAL_SEAT_SELECTION')
     rows=wire.seat_history(reader)
     s.require(not any(x['status_label'] not in SEAT_TERMINAL and x['start_time']<end.isoformat() and
                       x['end_time']>start.isoformat() for x in rows),'SEAT_EXISTING_OVERLAP')
@@ -106,13 +128,14 @@ def seat_proposal(reader, args):
         elif hits[0]['status']!=1:raise CampusError('SEAT_UNAVAILABLE')
         s.require(view['authenticated'] and not view['restricted'],'SEAT_ACCOUNT_RESTRICTED')
     rules=avail.get('rules',[])
-    if not rules:flags.append('CONFIRM_SEAT_RULES')
+    if selection['rules']['state']=='MISSING':flags.append('CONFIRM_SEAT_RULES')
     path=avail['resource']['path']
     location='-'.join(path)+':'+label if label else ''
     url=avail.get('official_page_url') or s.SEAT+'/home/web/seat/area/'+args['area_id']
     business={**args,'system':'seat','target':' / '.join(path+[label or '官方座位图选择']),
               'location':location,'rules_summary':'；'.join(rules)[:1800],'cancel_rule':seat_cancellation_terms(rules),
               'official_url':url,'handoff':','.join(flags),'proof':digest([segment,rules,location]),
+              'precheck_summary':plan_precheck(selection,block) if block is not None else c.precheck_states(selection),
               'prior_ids':sorted(x['reservation_id'] for x in rows if x['start_time']==start.isoformat() and x['end_time']==end.isoformat())}
     return Proposal(business,'/api.php/spaces/'+args['seat_id']+'/book',{'segment':segment or '', 'type':1})
 
@@ -169,9 +192,11 @@ def find_room(reader, args, for_booking=True):
                 if for_booking:
                     s.require(out['account_restrictions']['active_records']==0,'ROOM_ACCOUNT_RESTRICTED')
                     s.require(room['party_state']=='IN_RANGE',room['party_state'])
-                    s.require(room['interval_state']=='FREE_TIME_ONLY','ROOM_'+room['interval_state'])
+                    # A missing duration rule is a rule-read gap, not “no limit”:
+                    # keep the room so the plan can hand off for a rule recheck.
+                    s.require(room['interval_state'] in ('FREE_TIME_ONLY','RULE_UNVERIFIED'),'ROOM_'+room['interval_state'])
                     s.require(not room['only_view'],'ROOM_VIEW_ONLY')
-                return room,out['resource']
+                return room,out['resource'],out
         if not out.get('next_page'):break
     raise CampusError('ROOM_NOT_IN_SELECTED_CATEGORY')
 
@@ -179,8 +204,15 @@ def find_room(reader, args, for_booking=True):
 def room_proposal(reader,args):
     start,end=enforce_future(args)
     s.require(args['purpose'].strip() and len(args['members'])==args['headcount'],'ROOM_MEMBERS_REQUIRED')
-    room,kind=find_room(reader,args)
+    room,kind,out=find_room(reader,args)
+    built=precheck.build('library','room_availability',out,[room],
+                         {k:args[k] for k in ('kind_id','date','start_time','end_time')},None)
+    item=built['items'][0]
+    prestates=plan_precheck(built['summary'],item)
     flags=[]
+    # find_room already enforces party/eligibility/only_view; the only reachable
+    # non-free state left is a missing duration rule.
+    if item['availability']['state']=='RULE_UNVERIFIED':flags.append('CONFIRM_ROOM_DURATION_RULE')
     if not room_window(start,end,room,datetime.now(s.TZ)):flags.append('CONFIRM_OPENING_RULE')
     if room['platform_open_state']!=0 or room['platform_device_status']!=0 or room['only_view'] is not False:
         flags.append('CONFIRM_ROOM_ELIGIBILITY')
@@ -204,6 +236,7 @@ def room_proposal(reader,args):
     business={**args,'system':'room','target':kind['name']+' / '+room['name'],
               'rules_summary':summary,'cancel_rule':cancel_terms(rule,user),
               'handoff':','.join(flags),'official_url':PERSONAL_ROOM,'resolved_members':ids,'applicant':ids[0],
+              'precheck_summary':prestates,
               'prior_ids':sorted(s.ident(row['resvId']) for row in rows if s.stamp(row.get('resvBeginTime'))==start.isoformat()
                                  and s.stamp(row.get('resvEndTime'))==end.isoformat()),
               'proof':digest([kind['class_kind'],room['rules'],room['min_people'],room['max_people'],room['reservation_notice'],
@@ -240,7 +273,7 @@ def current_room_rule(reader, raw, row, date):
     for kind in kinds:
         if kind['class_kind']!=1:continue
         args={'kind_id':kind['kind_id'],'room_id':target,'date':date}
-        try:room,_=find_room(reader,args,for_booking=False)
+        try:room,_,_=find_room(reader,args,for_booking=False)
         except CampusError as error:
             if error.code=='ROOM_NOT_IN_SELECTED_CATEGORY':continue
             raise

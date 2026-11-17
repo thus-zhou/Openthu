@@ -46,7 +46,8 @@
     "create_reservation",
     "cancel_reservation",
     "create_seat_reservation",
-    "create_room_reservation"
+    "create_room_reservation",
+    "renew_loan"
   ],
   "methods": {
     "query": {

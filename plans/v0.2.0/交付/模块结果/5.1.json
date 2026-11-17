@@ -1,0 +1,326 @@
+{
+  "module": "5.1",
+  "title": "图书馆预约、取消与续借适配",
+  "batch": 5,
+  "owner": "Hermes",
+  "status": "accepted",
+  "status_note": "Implementation, module tests and the audit remediation (P0=0, P1=7, P2=16) are complete and verified offline. Batch integration and the version PR review remain with the integrator.",
+  "baseline_commit": "37b1605",
+  "integration_parent_commit": "4e073578d964407c10b7c94ed8b3fa64c8332036",
+  "delivery_commit": "6788e1a",
+  "previous_delivery_commit": "12146a8",
+  "record_commit": "the commit containing this record file",
+  "branch": "hermes/5.1",
+  "worktree": ".local/worktrees/5.1",
+  "worktree_note": "Repo-relative by project privacy rule; the absolute path is kept outside Git and is not written into a committed record.",
+  "version_pr": null,
+  "batch_state": "batch 5 is open; this module does not create a PR, merge main or publish a release",
+  "audit_report": ".local/audits/5.1-audit.md",
+  "paths": [
+    "src/thu_assistant/library_actions.py",
+    "src/thu_assistant/library_wire.py",
+    "src/thu_assistant/library_contracts.py",
+    "src/thu_assistant/renewal/__init__.py",
+    "src/thu_assistant/renewal/contract.py",
+    "src/thu_assistant/renewal/adapter.py",
+    "src/thu_assistant/renewal/transport.py",
+    "src/thu_assistant/renewal/README.md",
+    "tests/test_library_actions.py",
+    "tests/test_library_renewal.py",
+    "contracts/v0.2/sources/source-registry.json",
+    "contracts/v0.2/error-classification.json",
+    "contracts/v0.2/business-facade.schema.json",
+    "src/thu_assistant/actions.py",
+    "src/thu_assistant/source_state.py",
+    "docs/CAPABILITIES.md",
+    "docs/HANDOVER.md",
+    "docs/contracts/source-matrix.md",
+    "docs/contracts/action-boundaries.md",
+    "docs/contracts/library-sports-read.md",
+    "pyproject.toml",
+    "MANIFEST.in",
+    "plans/v0.2.0/交付/模块负责表.json",
+    "plans/v0.2.0/交付/模块负责表.md",
+    "plans/v0.2.0/交付/验收映射.json"
+  ],
+  "owned_paths": [
+    "src/thu_assistant/library_actions.py",
+    "src/thu_assistant/library_wire.py",
+    "src/thu_assistant/library_contracts.py",
+    "src/thu_assistant/renewal/",
+    "tests/test_library_actions.py",
+    "tests/test_library_renewal.py"
+  ],
+  "contracts": [
+    "source-evidence-v1",
+    "error-classification-v1",
+    "business-facade-v1"
+  ],
+  "operations": {
+    "create_seat_reservation": {
+      "adapter_version": "library-space-action-v1",
+      "state": "IMPLEMENTED",
+      "dispatch": "ONE_BOUND_POST_OR_OFFICIAL_HANDOFF"
+    },
+    "create_room_reservation": {
+      "adapter_version": "library-space-action-v1",
+      "state": "IMPLEMENTED",
+      "dispatch": "ONE_BOUND_POST_OR_OFFICIAL_HANDOFF"
+    },
+    "cancel_reservation": {
+      "adapter_version": "library-space-action-v1",
+      "state": "VERIFIED_EXISTING_BEHAVIOUR",
+      "dispatch": "ONE_BOUND_POST_OR_OFFICIAL_HANDOFF",
+      "note": "Seat/room cancel verification and receipt handling already existed in batch 4; 5.1 adds tests and touches only the rule-read path."
+    },
+    "renew_loan": {
+      "adapter_version": "library-space-action-v1",
+      "state": "IMPLEMENTED_READ_PLAN_AND_RECONCILIATION",
+      "enabled": false,
+      "dispatch": "BLOCKED_SOURCE_EVIDENCE",
+      "reason": "No verified renewal request endpoint. The registered action stays disabled; SYNTHETIC contracts need an explicit constructor opt-in and the default plan is an official-page handoff."
+    }
+  },
+  "outputs": [
+    "seat and room plans persist the 4.3 read precheck as an eight-axis precheck_summary without checked_at, so a replay cannot change the digest and any decision-axis change invalidates the plan",
+    "seat plans read the per-seat availability state from the precheck item: FULL is rejected, FREE proceeds, while unknown/unmapped states, map-control changes, non-unique same-name seats and missing seat rules become official handoffs",
+    "a room with a missing duration rule stays RULE_UNVERIFIED and hands off CONFIRM_ROOM_DURATION_RULE instead of being treated as unlimited or closed",
+    "renew_loan binds one own loan id, its current due_at, renew flag/hints and the Primo reader account; preparation reads eligibility only and never sends a renewal request",
+    "renew_loan binds contract_id, contract_digest and contract_evidence in the business digest; executing the same plan with another contract fails closed before any request",
+    "a SYNTHETIC renewal contract is not executable unless the adapter is constructed with allow_synthetic=True; the production registry stays empty and the transport refuses the same contract",
+    "renewal success requires the same loan id to return from a complete own-loan read with a strictly later due instant; date-only or same-day precision changes and equal instants are not success",
+    "the bound due_at is never rewritten; the new value only appears as platform.new_due_at and platform.completed_by distinguishes an official handoff from a dispatched plan",
+    "a lost or failed renewal response stays UNKNOWN with automatic_resend=false; repeated execute only reconciles",
+    "a local prepare failure or a request aborted by the guard is NotDispatched (FAILED/REQUEST_NOT_SENT); a fetch the guard never observed stays UNKNOWN and is never retried",
+    "the renewal request is built only from an explicit SourceContract and bound to origin, main frame, transmitted-body hash, success field and one gate capability",
+    "the post-renewal todo_query spans the old and new due dates so the renewed loan is found by library.loans",
+    "tests added for the pre-existing cancel behaviour (foreign/cross-system records, empty list without a receipt, current room rules without a selected booking window); this verifies batch-4 code rather than claiming new cancel implementation"
+  ],
+  "checks": {
+    "module_tests": {
+      "passed": 127,
+      "failed": 0,
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_library_actions.py tests/test_library_contracts.py tests/test_library_renewal.py"
+    },
+    "related_read_and_action_regression": {
+      "passed": 341,
+      "skipped": 1,
+      "failed": 0,
+      "collected": 342,
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_library.py tests/test_library_actions.py tests/test_library_contracts.py tests/test_library_renewal.py tests/test_spaces.py tests/test_sports.py tests/test_queries.py tests/test_query_contracts.py tests/test_todos.py"
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "compatibility_baselines": 1,
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "fixtures": 7,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "privacy_check": {
+      "ok": true,
+      "files_checked": 468,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check"
+    },
+    "history_privacy": {
+      "ok": true,
+      "method": "the two unpublished record commits were squashed before integration; git log -p 37b1605..HEAD has no personal home-directory path",
+      "note": "the branch was force-pushed with --force-with-lease because it is a single-owner task branch and no integration branch contained it"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 1052,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test",
+      "evidence_tree": "this worktree with a read-only node_modules link; the link is not committed"
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0
+  },
+  "audit_fixes": {
+    "P0": [],
+    "P1": [
+      {
+        "id": "P1-1",
+        "fix": "business/proof carry contract_id, contract_digest and contract_evidence; preflight rebuilds with the current contract so a swap changes the digest and the engine invalidates, and dispatch also refuses a mismatched digest",
+        "verification": "test_plan_binds_the_request_contract_and_a_swap_is_rejected"
+      },
+      {
+        "id": "P1-2",
+        "fix": "SourceContract.usable() requires VERIFIED, or SYNTHETIC with the explicit constructor opt-in allow_synthetic=True; the adapter gate, preflight handoff and transport all enforce it",
+        "verification": "test_synthetic_evidence_is_refused_without_the_explicit_opt_in, test_unverified_source_produces_an_official_handoff_and_never_posts"
+      },
+      {
+        "id": "P1-3",
+        "fix": "actions.public extends the library todo window to platform.new_due_at, so a renewed loan is inside [old due, new due]",
+        "verification": "test_renewal_success_needs_the_same_record_and_a_later_due_time"
+      },
+      {
+        "id": "P1-4",
+        "fix": "record corrected: cancel verification/receipt handling is pre-existing batch-4 behaviour verified by 5.1 tests; the false find_room(for_booking=False) claim and the cancel-as-new-implementation wording were removed",
+        "verification": "operations.cancel_reservation and outputs in this record; git diff 37b1605 12146a8 shows cancel_proposal/reconcile unchanged"
+      },
+      {
+        "id": "P1-5",
+        "fix": "the two unpublished record commits were squashed so the absolute worktree path no longer exists in branch history; the record keeps the repo-relative form",
+        "verification": "git log -p 37b1605..HEAD has no personal home-directory path; history_privacy in checks"
+      },
+      {
+        "id": "P1-6",
+        "fix": "renewal and library wire distinguish a local prepare failure / guard abort (NotDispatched) from a resolved fetch the guard never observed (RuntimeError -> UNKNOWN); no definite-non-dispatch claim without observed evidence",
+        "verification": "test_unobserved_request_is_not_reported_as_not_dispatched, test_unobserved_library_request_is_not_a_definite_non_dispatch, test_exact_*_binds_*"
+      },
+      {
+        "id": "P1-7",
+        "fix": "15 new codes registered in error-classification-v1 and the source_state mirror with categories; a static test checks every raised renewal code is registered in both; the source registry lists them",
+        "verification": "test_every_raised_renewal_code_is_registered"
+      }
+    ],
+    "P2": [
+      {
+        "id": "P2-1",
+        "fix": "renewal declares prechecks eligibility+rules; the engine requires only the contract's declared prechecks and preflight reports only those",
+        "verification": "test_preflight_only_requires_the_declared_renewal_checks, test_separate_contracts_and_flags"
+      },
+      {
+        "id": "P2-2",
+        "fix": "local _PREPARE failure and guard aborts raise NotDispatched; the engine records FAILED/REQUEST_NOT_SENT and allows a new plan",
+        "verification": "test_exact_renewal_wire_binds_the_transmitted_body_and_frame[prepare], test_exact_wire_binds_actual_body_and_frame[*-prepare]"
+      },
+      {
+        "id": "P2-3",
+        "fix": "removed the unreachable CONFIRM_ROOM_AVAILABILITY and ROOM_INELIGIBLE branches; find_room's checks remain authoritative",
+        "verification": "room availability tests and the source diff"
+      },
+      {
+        "id": "P2-4",
+        "fix": "renew_loan declares disabled_reason=SOURCE_CONTRACT_UNVERIFIED and describe_actions shows it instead of ADAPTER_REQUIRED",
+        "verification": "test_separate_contracts_and_flags"
+      },
+      {
+        "id": "P2-5",
+        "fix": "the three legacy operations keep the exact batch-4 reconciliation string; the refined value is additive in reconciliation_scope, also exposed by describe_actions",
+        "verification": "test_separate_contracts_and_flags"
+      },
+      {
+        "id": "P2-6",
+        "fix": "record wording corrected: the preview keeps record_id for binding; record_reference stays masked and title/member fields stay out of the public shape",
+        "verification": "test_unverified_source_produces_an_official_handoff_and_never_posts; this record"
+      },
+      {
+        "id": "P2-7",
+        "fix": "evidence counts corrected to the measured 127 module / 341+1 related / 1052+7 full / 66 node / 468 privacy",
+        "verification": "the commands in checks at 6788e1a"
+      },
+      {
+        "id": "P2-8",
+        "fix": "CAPABILITIES, HANDOVER, source-matrix, action-boundaries and library-sports-read now state eligibility/plan/handoff/new-due implemented and execution blocked; business-facade registers renew_loan",
+        "verification": "grep for renewal in docs; contract validator"
+      },
+      {
+        "id": "P2-9",
+        "fix": "added tests for all eight precheck axes and digest stability, the map-change reason, real mapped-status values, contract substitution, synthetic gating, form encoding, Reader/auth failures, list limits, duplicates, write-switch execute and due precision",
+        "verification": "tests/test_library_actions.py, tests/test_library_renewal.py"
+      },
+      {
+        "id": "P2-10",
+        "fix": "renewal builds the loan precheck via precheck.build('library','loans',...); the persisted field is renamed precheck_summary and the schema requires all eight axes",
+        "verification": "test_plan_precheck_summary_has_all_eight_axes_without_a_timestamp, test_room_plan_precheck_summary_uses_the_room_item_axes"
+      },
+      {
+        "id": "P2-11",
+        "fix": "due values are parsed into local (date, time) with Z/offset normalization; a same-day precision change or equal instant is not a renewal",
+        "verification": "test_due_comparison_normalizes_offsets_and_ignores_precision_only_changes, test_same_day_precision_change_or_equal_instant_is_not_a_renewal"
+      },
+      {
+        "id": "P2-12",
+        "fix": "page agreement uses a title prefix and wraps locator failures; sharing the full loan reader with library.read_loans remains a 4.3/6.1 request because library.py is outside 5.1's paths",
+        "verification": "test_reader_maps_login_and_page_failures_to_stable_codes; limits list the residual duplication"
+      },
+      {
+        "id": "P2-13",
+        "fix": "page/locator failures map to LIBRARY_LOAN_PAGE_FAILED, disagreement to RENEWAL_PAGE_DISAGREES_WITH_API, and unexpected preview failures to RENEWAL_PREVIEW_FAILED",
+        "verification": "test_preview_wraps_an_unexpected_page_error, test_incomplete_or_disagreeing_loan_pages_never_prepare"
+      },
+      {
+        "id": "P2-14",
+        "fix": "renewal README added to package-data/MANIFEST, docstring fixed, SourceContract.accepted is used by the transport, the unused require default and Reader.base were removed, and source refs include Reader",
+        "verification": "test_form_encoded_contract_builds_a_form_specification; pyproject/MANIFEST diff; source validator"
+      },
+      {
+        "id": "P2-15",
+        "fix": "reconciled platform evidence carries completed_by=OFFICIAL_HANDOFF or ADAPTER_DISPATCH_OR_OFFICIAL_PAGE; verification_level stays REMOTE_RECORD_VERIFIED because the remote record is real, not because our write was accepted",
+        "verification": "test_official_handoff_reconciliation_is_attributed_to_the_official_page"
+      },
+      {
+        "id": "P2-16",
+        "fix": "the plan persists reader_account (Primo accountid) and preflight/dispatch/reconcile require the same account; a change fails closed",
+        "verification": "test_primo_account_change_invalidates_the_plan"
+      }
+    ]
+  },
+  "verified_cases": [
+    "a seat map control change after prepare rejects the old plan with FAILED/PRECONDITIONS_CHANGED_PREPARE_AGAIN and sends zero requests",
+    "an unknown/unmapped seat state becomes OFFICIAL_SEAT_SELECTION and ends in AWAITING_OFFICIAL with zero requests",
+    "a room with a missing duration rule hands off CONFIRM_ROOM_DURATION_RULE and never dispatches",
+    "a seat or room record outside the current account and a seat id used as a room cancel are rejected before dispatch",
+    "an empty seat cancel list without a platform receipt stays UNKNOWN on execute and on later result() calls",
+    "renewal eligibility is read only; NOT_ELIGIBLE/OVERDUE/not-found are rejected, unknown eligibility hands off",
+    "a plan prepared with contract A cannot dispatch with contract B, even when the loan fields are unchanged",
+    "a SYNTHETIC contract cannot dispatch without allow_synthetic=True; the transport refuses it independently",
+    "a failed or lost renewal response keeps the original due_at, stays UNKNOWN and repeats only reconciliation",
+    "only a strictly later due instant on the same loan is SUCCEEDED; date-only precision changes and equal instants are not",
+    "a repeated, short, page-disagreeing or over-limit loan read never prepares a renewal",
+    "the successful renewal todo_query covers the old and the new due dates",
+    "four concurrent executes of one renewal plan send at most one request",
+    "the exact renewal wire rejects a changed body, wrong method, wrong frame, a second gate use and an unobserved delivery",
+    "with THU_LIBRARY_RENEW=0 new renewal plans are blocked while an existing UNKNOWN plan reconciles; THU_LIBRARY_WRITE=0 blocks both new plans and execute of an existing plan"
+  ],
+  "limits": [
+    "Offline synthetic verification only: no real seat, room or renewal read or write was performed.",
+    "Renewal execution is BLOCKED_SOURCE_EVIDENCE: the source registry marks library.renewal PARTIAL and no verified request endpoint exists. The registered renew_loan contract is enabled=false; production can only produce an official-page handoff.",
+    "6.1 must register RenewalAction on ('library','renew_loan'); until then the operation reports SOURCE_CONTRACT_UNVERIFIED without an adapter.",
+    "The leaked path was removed from the branch refs by rewriting the two unpublished record commits; hosting-side unreferenced objects may persist until GitHub garbage-collects them.",
+    "The Service Worker fix is at the transport level (an unobserved fetch is UNKNOWN). Setting service_workers='block' on the library browser context and adding a history privacy scan remain requests to 4.4/2.1.",
+    "Renewal binds the Primo loan record id; the active-loan read does not expose a separate copy/item id.",
+    "Pending seat/room plans created before this module persist a business object without precheck_summary, so they re-prepare instead of executing; they fail closed and no write is replayed.",
+    "Seat/room cancellation verification and receipt handling are batch-4 behaviour; 5.1 only adds tests. Its one change in that area is the rule-read path accepting a read without a selected booking window.",
+    "THU_SPACE_READ still gates every library adapter through actions.py's adapter-version check; renewal inherits it although it uses no seat/space read.",
+    "Renewal cannot be undone on the platform; the module never invents a reverse operation or cancels other loans.",
+    "The loan reader is still a separate copy of library.read_loans because library.py belongs to 4.3; its page-agreement check now tolerates truncated titles.",
+    "Windows DPAPI execution was not re-run for this module; the Linux offline suite and the shared action framework's platform tests are the evidence here. The batch regression re-runs both platforms."
+  ],
+  "rollback": "Set THU_LIBRARY_RENEW=0 to stop new renewal plans (reconciliation keeps working), or THU_LIBRARY_WRITE=0 to stop all library writes while reads and pending results stay available. Reverting the code removes the renewal package and the precheck summary from new plans; keep action journals and platform evidence, never delete UNKNOWN/PENDING records, and do not treat local cleanup as a remote cancellation or renewal.",
+  "next": "Batch integration reconnects 5.1 with 5.2-5.4 on the batch-5 integration commit; 6.1 registers renew_loan; 7.3 rechecks the capability text; a verified renewal request contract is required before dispatch can be enabled.",
+  "cross_module_requests": [
+    "6.1: register RenewalAction on ('library','renew_loan') with no contract (official handoff) or a VERIFIED contract only; keep the 29 legacy tools and show official_handoff/next_actions.",
+    "2.3/1.1: replace the empty renewal contract registry only after a frozen, verified request contract exists; keep synthetic evidence distinguishable.",
+    "7.3: capability text now says eligibility + plan + official handoff are implemented and execution is blocked; recheck at release.",
+    "6.3: package-data/MANIFEST already include renewal/README.md in this module; recheck the wheel/sdist layout.",
+    "7.2: add tests/test_library_renewal.py to the cross-platform regression list.",
+    "4.4/2.1: consider service_workers='block' for the guarded library context and a Git-history home-path scan in the privacy check.",
+    "4.3/6.1: extract one complete own-loan reader from library.read_loans so renewal and the read adapter cannot drift.",
+    "integration: the shared edits to actions.py (todo window, precheck subset, describe reason/scope), source_state.py, error-classification.json, business-facade.schema.json, docs/ and pyproject/MANIFEST need the integrator's review; no contract shape was removed."
+  ]
+}

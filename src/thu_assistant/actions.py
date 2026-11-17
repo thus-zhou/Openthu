@@ -102,9 +102,10 @@ def next_actions(record):
 
 def describe_actions(service_id):
     return [{'operation':op,'parameters_schema':deepcopy(c.get('input_schema',c['schema'])),'required_business_fields':list(c['required']),
-        'adapter_version':c['version'],'enabled':c['enabled'] and action_enabled(service_id),'reason':('READY' if action_enabled(service_id) else 'WRITES_DISABLED') if c['enabled'] else 'ADAPTER_REQUIRED',
+        'adapter_version':c['version'],'enabled':c['enabled'] and action_enabled(service_id),'reason':(('READY' if action_enabled(service_id) else 'WRITES_DISABLED') if c['enabled'] else (c.get('disabled_reason') or 'ADAPTER_REQUIRED')),
         'request_sequence':c['request_sequence'],'prechecks':list(c['prechecks']),
-        'critical_fields':c['critical_fields'],'risk_conditions':c['risk_conditions'],'reconciliation':c['reconciliation']}
+        'critical_fields':c['critical_fields'],'risk_conditions':c['risk_conditions'],'reconciliation':c['reconciliation'],
+        'reconciliation_scope':c.get('reconciliation_scope')}
         for (service,op),c in REGISTRY.items() if service==service_id]
 
 def digest(value):return hashlib.sha256(json.dumps(value,sort_keys=True,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
@@ -156,8 +157,15 @@ def public(record):
     if record.get('adapter_version')==library_actions.VERSION:
         extra.update(official_url=record['business'].get('official_url'),platform=record.get('platform'),checked_at=record.get('checked_at'))
         if record.get('platform'):
+            # After a renewal the loan lives at the new due date; the original
+            # bound date must not make the todo refresh miss it.
+            start=record['business'].get('date') or ''
+            end=start
+            new_due=(record.get('platform') or {}).get('new_due_at')
+            if isinstance(new_due,str) and len(new_due)>=10 and new_due[:10]>end:
+                end=new_due[:10]
             extra['todo_query']={'services':['library.'+record['business']['system']],
-                                 'start_date':record['business']['date'],'end_date':record['business']['date'],'include_completed':True}
+                                 'start_date':start,'end_date':end,'include_completed':True}
     history=[{'state':event.get('state'),'reason':event.get('reason'),'at':event.get('at')} for event in record.get('events',[]) if isinstance(event,dict)]
     result={**extra,'operation_id':record['operation_id'],'plan_id':record['operation_id'],'status':record['state'],
         'service_id':record['service_id'],'operation':record['operation'],'preview':fields,'expires_at':record['expires_at'],
@@ -424,7 +432,10 @@ class ActionEngine:
             # content may not change.
             changed=(digest(fresh['business'])!=record['digest'] or fresh.get('context')!=record['context']
                      or normalized_attachments(fresh['business'])!=normalized_attachments(record['business']))
-            if changed or (not handoff and any(fresh.get('checks',{}).get(k) is not True for k in CHECKS)):
+            # Only the checks this operation actually declares are required; a
+            # renewal plan has no availability/fee axis to verify.
+            required_checks=REGISTRY.get((record['service_id'],record['operation']),{}).get('prechecks',CHECKS)
+            if changed or (not handoff and any(fresh.get('checks',{}).get(k) is not True for k in required_checks)):
                 return invalidate('PRECONDITIONS_CHANGED_PREPARE_AGAIN')
             gate=None if handoff else RequestGate(fresh['requests'])
         except CampusError:raise

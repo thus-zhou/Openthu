@@ -147,28 +147,46 @@ _SEND = """async system=>{
 def dispatch_exact(reader, system, path, body, gate):
     spec = specification(system,path,body)
     url = (reader.base if system=='seat' else s.ROOM)+path
-    checksum = reader.page.evaluate(_PREPARE,{'system':system,'url':url,'body':body})
+    try:
+        checksum = reader.page.evaluate(_PREPARE,{'system':system,'url':url,'body':body})
+    except Exception:
+        # The request was never handed to the transport.
+        raise NotDispatched() from None
     pattern = re.compile('^'+re.escape(url)+'$')
+    state={'observed':0,'aborted':0}
     def route_once(route):
+        state['observed']+=1
         req = route.request
         if req.frame!=reader.page.main_frame or req.url!=url or req.method!='POST':
+            state['aborted']+=1
             return route.abort()
         transmitted=req.post_data or ''
         if sha256(transmitted.encode()).hexdigest()!=checksum:
+            state['aborted']+=1
             return route.abort()
         if system=='seat':
             pairs=parse_qsl(transmitted,keep_blank_values=True)
             auth=[k for k,v in pairs if k in ('userid','access_token') and v]
-            if sorted(auth)!=['access_token','userid']:return route.abort()
+            if sorted(auth)!=['access_token','userid']:
+                state['aborted']+=1
+                return route.abort()
             transmitted=urlencode([(k,v) for k,v in pairs if k not in ('userid','access_token')])
         if gate.consume(spec.url,req.method,transmitted):
             return route.continue_()
+        state['aborted']+=1
         return route.abort()
     reader.page.route(pattern,route_once)
     try:
         accepted=reader.page.evaluate(_SEND,system)
+    except Exception:
+        if gate.sent==0 and state['observed'] and state['aborted']:
+            raise NotDispatched() from None
+        # A resolved/rejected fetch that the guard never fully observed may or
+        # may not have reached the platform; the engine must record UNKNOWN.
+        raise
     finally:
         reader.page.unroute(pattern,route_once)
-    if gate.sent!=1:raise NotDispatched()
+    if gate.sent!=1:
+        raise RuntimeError('DISPATCH_RESULT_UNOBSERVED')
     return accepted is True
 
