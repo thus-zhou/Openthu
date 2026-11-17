@@ -14,7 +14,8 @@
     "live_campus_calls": 0,
     "model_calls": 0,
     "business_submissions": 0,
-    "release_owner": "Codex"
+    "release_owner": "Codex",
+    "batch4_integration_test": "tests/test_batch4_integration.py"
   },
   "modules": [
     {
@@ -343,7 +344,12 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "个人课表、考试、成绩只读适配与来源阻塞记录",
-      "evidence": []
+      "evidence": [
+        "98 module tests at bbe620a; audit 4.1-audit P1-1..P1-4 and P2-1..P2-9 fixed; the 11 ACADEMICS_* codes registered in the batch-4 integration (X1)",
+        "timetable/exams/grades adapters stay BLOCKED_SOURCE_EVIDENCE with ADAPTER_REQUIRED and zero items; events validate against calendar-event-v1; grades validate against grade-v1",
+        "check 422 files/0 findings; Linux Python 746 passed/7 skipped/0 failed, Node 66 passed; 0 live campus/model/business calls",
+        "reconnected at the single batch-4 integration commit; windows-2025 CI is the Windows evidence"
+      ]
     },
     {
       "id": "4.2",
@@ -372,7 +378,12 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "课程资料中心、跨课程检索、下载清单和稳定资源标识",
-      "evidence": []
+      "evidence": [
+        "98 module tests at c66ee2e; audit 4.2-audit P0-1, P1-1..P1-11 and P2-1..P2-18 fixed; residual []",
+        "AES-GCM index through the 2.2 store, account and semester scoped; version monotonicity and index/archive ordering verified by audit probes",
+        "check 420 files/0 findings; Linux Python 746 passed/7 skipped/0 failed, Node 66 passed; 0 download or upload during indexing",
+        "reconnected at the single batch-4 integration commit; windows-2025 CI is the Windows evidence"
+      ]
     },
     {
       "id": "4.3",
@@ -409,7 +420,12 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "图书馆/体育查询一致性、规则读取和部分结果语义",
-      "evidence": []
+      "evidence": [
+        "52 module tests at e14c11c plus 277 related read regressions passed/1 skipped; audit 4.3-audit P1-1..P1-4 and P2-1..P2-16 fixed",
+        "precheck keeps selection/window/free-scope/eligibility/fees/rules separate; unknown or empty seat rows stay UNKNOWN; ROOM_RULE_UNVERIFIED registered",
+        "check 410 files/0 findings; Linux Python 700 passed/7 skipped/0 failed, Node 66 passed; no write path changed",
+        "reconnected at the single batch-4 integration commit; windows-2025 CI is the Windows evidence"
+      ]
     },
     {
       "id": "4.4",
@@ -442,7 +458,12 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "统一办理状态机、可信宿主授权、一次派发和未决恢复",
-      "evidence": []
+      "evidence": [
+        "47 module tests and 199 compatibility tests at cf255de; audit 4.4-audit P1-1..P1-3 and P2-1..P2-14 fixed",
+        "signed one-time host authorization, challenge binding, preflight before consumption, revision-bound transitions and bounded public history",
+        "check 412 files/0 findings; Linux 695 passed/7 skipped; Windows CI 44009070509: 690 passed/12 skipped/0 failed, Node 66 passed",
+        "real local confirmation CLI exercised with a 2.2 key; 0 live campus/payment/booking calls"
+      ]
     },
     {
       "id": "4.5",
@@ -473,7 +494,12 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "模型图片输入、资料引用增强和传输前媒体检查",
-      "evidence": []
+      "evidence": [
+        "58 module tests (51 Python + 7 Node) at 2df5772; audit 4.5-audit P1-1..P1-3 and P2-1..P2-12 fixed in scope; P2-3 closed by the batch-4 X1 registration",
+        "empty shipped ProtocolRegistry: image calls fail with MODEL_IMAGE_PROTOCOL_UNVERIFIED or MODEL_IMAGE_INPUT_UNAVAILABLE and send nothing",
+        "check 407 files/0 findings; Linux 706 passed/7 skipped/0 failed, Node 66 passed; one grant per send and no replay after cancel",
+        "reconnected at the single batch-4 integration commit; 0 model calls with images"
+      ]
     },
     {
       "id": "5.1",

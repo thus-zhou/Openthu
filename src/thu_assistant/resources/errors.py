@@ -7,9 +7,10 @@ path, a download directory, an account name or a course body must never appear
 in an exception message, a log line or an export report, because those strings
 are copied into terminal output and issue reports.
 
-Codes stay module-local until the business facade (6.1) registers them in
-``contracts/v0.2/error-classification.json``.  Authentication and permission
-codes reuse the frozen registry values so a caller can act on them immediately.
+The batch-4 integration registered these codes additively in
+``contracts/v0.2/error-classification.json`` and mirrored them in
+``source_state.ERROR_CODES``.  Authentication and permission codes reuse the
+frozen registry values so a caller can act on them immediately.
 """
 from __future__ import annotations
 

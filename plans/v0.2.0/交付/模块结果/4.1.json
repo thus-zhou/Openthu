@@ -11,7 +11,7 @@
   "branch": "hermes/4.1",
   "worktree": "~/projects/Openthu/.local/worktrees/4.1",
   "worktree_note": "The contract privacy validator rejects absolute home-directory paths, so the worktree is recorded relative to the user home.",
-  "batch_state": "4.1 accepted on its module branch; batch 4 has no integration commit yet",
+  "batch_state": "accepted at the batch-4 integration commit recorded in 交付/批次门禁.json",
   "paths": [
     "src/thu_assistant/academics/__init__.py",
     "src/thu_assistant/academics/errors.py",
@@ -180,9 +180,9 @@
       "python scripts/dev.py check; python scripts/dev.py test"
     ],
     "remaining": [
-      "P2-7a contract registration itself belongs to 2.3/1.1 (contracts/v0.2 is not a 4.1 path); the module bridge keeps categories correct until 6.1 registers the 11 codes.",
-      "P2-9 grades cannot receive a temporary identity because grade-v1 has additionalProperties=false and only STABLE/MISSING_STABLE_ID/CONFLICT; a missing grade id therefore stays MISSING_STABLE_ID instead of inventing a field."
+      "P2-9 grades cannot receive a temporary identity because grade-v1 has additionalProperties=false and only STABLE/MISSING_STABLE_ID/CONFLICT; a missing grade id therefore stays MISSING_STABLE_ID instead of inventing a field.",
+      "P2-7a is closed: the 11 ACADEMICS_* codes are registered in the batch-4 integration commit (X1)."
     ]
   },
-  "next": "Batch 4 integration: reconnect 4.1 with 4.2-4.5, run the joint offline suite and two-platform CI, and record the batch integration commit. This module creates no PR and does not merge main."
+  "next": "Batch 5 may start once the gate records batch 4 accepted; this module opens no PR, does not merge main and does not publish a release."
 }

@@ -1,11 +1,10 @@
 """Stable, leak-free errors for the read-only academics adapters.
 
-Codes are module-local until the business facade (6.1) registers them in
-``contracts/v0.2/error-classification.json``; that file belongs to the frozen
-contract owner (2.3), so this module ships an explicit category map that must be
-used before ``source_state.classify_error``.  ``classification_map`` keeps the
-mapping inspectable and stops a module error from being collapsed into
-``UNKNOWN``/``INTERNAL``.
+Codes are registered in ``contracts/v0.2/error-classification.json`` (batch-4
+integration, additive entries) and mirrored in ``source_state.ERROR_CODES``, so
+``source_state.classify_error`` preserves the category.  ``classification_map``
+stays as an inspectable module-local view for callers that must not depend on
+the registry.
 
 Detail strings are restricted to short enum-like tokens: a source URL, an
 exception text, a student identifier or a grade value must never appear in an

@@ -8,11 +8,14 @@
   "integration_parent_commit": "323a98b",
   "audit_baseline_commit": "15b66d2",
   "delivery_commit": "e14c11c",
-  "audit_fix_commits": ["dc66a64", "e14c11c"],
+  "audit_fix_commits": [
+    "dc66a64",
+    "e14c11c"
+  ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/4.3",
   "version_pr": null,
-  "batch_state": "module accepted; batch 4 integration remains with the integration owner",
+  "batch_state": "accepted at the batch-4 integration commit recorded in 交付/批次门禁.json",
   "evidence_tree": "clean checkout of e14c11c after `python scripts/dev.py setup-node` (or an equivalent src/thu_assistant/node_modules link); otherwise dev.py check stops on the missing tough-cookie runtime dependency",
   "audit_report": ".local/audits/4.3-audit.md",
   "paths": [
@@ -192,7 +195,7 @@
     "Batch 4 is not yet reconnected to the integration branch; this module acceptance does not make the whole batch accepted."
   ],
   "rollback": "Restore precheck.py, library.py, spaces.py, sports.py, queries.py and source_state.py to 15b66d2; delete tests/test_library_contracts.py, tests/test_spaces_contracts.py, tests/test_sports_contracts.py and docs/contracts/library-sports-read.md; revert the acceptance/ownership and source-registry metadata. The additive ROOM_RULE_UNVERIFIED registration may stay for compatibility. New fields are optional and old clients ignore them; existing cursors become invalid explicitly and are never replayed or spliced into a new snapshot.",
-  "next": "Modules 4.1, 4.2, 4.4 and 4.5 still need their own acceptance; the integration owner forms the single batch-4 integration commit, runs the joint offline suite and both-platform CI. This module does not open a PR, merge main or publish a release.",
+  "next": "Batch 5 may start once the gate records batch 4 accepted; this module opens no PR, does not merge main and does not publish a release.",
   "cross_module_requests": [
     "5.1/5.2: consume precheck selection/availability/eligibility/fees/rules/retrieval; preparation_state is not authorization and money must not be derived from display text.",
     "5.1/5.2: keep write paths on strict pagination checks; if partial results are used, record uncertainty explicitly and never replay.",

@@ -317,5 +317,7 @@
     "model_calls": 0,
     "business_submissions": 0,
     "real_download_evidence": false
-  }
+  },
+  "batch_state": "accepted at the batch-4 integration commit recorded in 交付/批次门禁.json",
+  "next": "Batch 5 may start once the gate records batch 4 accepted; this module opens no PR, does not merge main and does not publish a release."
 }

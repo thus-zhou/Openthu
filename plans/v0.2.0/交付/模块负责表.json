@@ -322,7 +322,7 @@
       ],
       "cross_module_handoffs": [
         "pyproject.toml (owned by 6.3) and requirements-dev.txt (owned by 1.1): added Pillow==13.0.0 per the frozen dependency proposal; 6.3 keeps the final lock, wheel resource manifest and packaging validation.",
-        "contracts/v0.2/error-classification.json (owned by 1.1/6.1): MEDIA_* codes are module-internal until 6.1 registers them before facade exposure.",
+        "contracts/v0.2/error-classification.json (owned by 1.1): the MEDIA_* codes were registered additively in the batch-4 integration commit (X1) because 4.5 re-raises them on its own channel; 6.1 only needs to reuse them.",
         "SecureStore.account_scope() (owned by 2.2, added in the batch-3 integration commit): the sanctioned derivation for the acct_ pseudonym that media references require.",
         "4.2/4.5/6.1: pass the configured 2.1 temp_dir as MediaAssets(temp_root), use purpose COURSE_RESOURCE/MODEL_INPUT, and send only through prepare/authorize/consume.",
         "7.2: include tests/test_media_assets.py and tests/test_batch3_integration.py in cross-platform fault-injection regression."
@@ -360,7 +360,23 @@
         "个人课表、考试、成绩只读适配与来源阻塞记录"
       ],
       "integration_order": 8,
-      "status": "pending"
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "bbe620a",
+      "audit_fix": "4.1-audit: 4 P1 + 9 P2 fixed at bbe620a; the P2-7 contract-registration item is closed by the batch-4 integration (X1); a missing grade record id stays MISSING_STABLE_ID because grade-v1 has no temporary slot.",
+      "evidence": [
+        "98 module tests at bbe620a; check 422 files/0 findings; Linux Python 746 passed/7 skipped/0 failed, Node 66 passed",
+        "three productions adapters stay BLOCKED_SOURCE_EVIDENCE with ADAPTER_REQUIRED and zero items; no live campus/grade read",
+        "events and grade rows validate against calendar-event-v1 and grade-v1; audit probes for the four P1 findings pass",
+        "reconnected in the batch-4 integration commit; Windows conclusions come from windows-2025 CI"
+      ],
+      "cross_module_handoffs": [
+        "contracts/v0.2/error-classification.json (owned by 1.1): the 11 ACADEMICS_* codes were registered additively in the batch-4 integration commit (X1); the module no longer needs classification_map() as a bridge before 6.1.",
+        "6.1: register timetable, exams and grades from operation_schemas(); keep the explicit-request gate for grades and enrich the MCP error boundary.",
+        "5.4: consume calendar_events(exams|timetable); grades are never events.",
+        "6.2/7.1: dashboard summaries must call sensitivity.dashboard_summary and never read grade values.",
+        "2.3/integration: only after sanitized source evidence arrives, update source-registry.json and adapter-readiness.json, then wire a production transport."
+      ]
     },
     {
       "id": "4.2",
@@ -393,7 +409,22 @@
         "课程资料中心、跨课程检索、下载清单和稳定资源标识"
       ],
       "integration_order": 9,
-      "status": "pending"
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "c66ee2e",
+      "audit_fix": "4.2-audit: P0-1 + 11 P1 + 18 P2 fixed through c66ee2e; the module record reports residual [] and re-ran the audit probes.",
+      "evidence": [
+        "98 module tests at c66ee2e; check 420 files/0 findings; Linux Python 746 passed/7 skipped/0 failed, Node 66 passed",
+        "real AES-GCM SecureStore index (file key on Linux, DPAPI on Windows), account and semester scoped; no test encoder",
+        "audit probes confirm version monotonicity, index/write ordering, completeness scope and UTF-8 archive names",
+        "P1-10 replaced the POSIX-only /tmp destination with tmp_path, so the module has no platform skip; windows-2025 CI is the Windows evidence"
+      ],
+      "cross_module_handoffs": [
+        "contracts/v0.2/error-classification.json (owned by 1.1): 26 RESOURCE_* codes registered additively in the batch-4 integration commit (X1).",
+        "src/thu_assistant/media_assets/ (owned by 3.3): downloads register with purpose COURSE_RESOURCE and service_domain LEARN; a resource reference is not a MODEL_INPUT reference (covered by tests/test_batch4_integration.py).",
+        "pyproject.toml (owned by 6.3): no new dependency; the module uses the 2.2 store and 3.3 media assets already pinned.",
+        "6.1: expose the resource centre through the facade without adding a 30th tool; keep confirm=True for one process-local plan."
+      ]
     },
     {
       "id": "4.3",
@@ -431,7 +462,23 @@
         "图书馆/体育查询一致性、规则读取和部分结果语义"
       ],
       "integration_order": 10,
-      "status": "accepted"
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "e14c11c",
+      "audit_fix": "4.3-audit: 4 P1 + 16 P2 fixed through e14c11c; ROOM_RULE_UNVERIFIED registered by the module itself.",
+      "evidence": [
+        "52 module tests at e14c11c; 277 related read regressions passed/1 skipped; Linux Python 700 passed/7 skipped/0 failed, Node 66 passed; check 410 files/0 findings",
+        "precheck separates selection, window, free scope, account eligibility, fees and rules; empty/unmapped seat rows are UNKNOWN, never FULL",
+        "cursor pages keep SNAPSHOT_ONLY_NOT_LIVE and the original checked_at; no write path changed",
+        "reconnected in the batch-4 integration commit; windows-2025 CI is the Windows evidence"
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/queries.py and source_state.py (owned by 3.2/6.1): additive precheck exposure and snapshot freshness on cursor pages; registered as a sequential handoff, 277 related read tests pass.",
+        "contracts/v0.2/error-classification.json (owned by 1.1): ROOM_RULE_UNVERIFIED added additively by 4.3; no other contract change.",
+        "contracts/v0.2/sources/source-registry.json (owned by 2.3): code_refs refreshed for library/sports after the 4.3 edits.",
+        "5.1/5.2: consume precheck selection/availability/eligibility/fees/rules; preparation_state is not authorization and money is never derived from display text.",
+        "6.1: precheck is additive; preserve the 29 legacy tools and the ROOM_RULE_UNVERIFIED classification."
+      ]
     },
     {
       "id": "4.4",
@@ -468,7 +515,23 @@
         "统一办理状态机、可信宿主授权、一次派发和未决恢复"
       ],
       "integration_order": 11,
-      "status": "pending"
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "cf255de",
+      "audit_fix": "4.4-audit: 3 P1 + 14 P2 fixed through cf255de; the in-process confirmation path is normalized to a signed challenge-bound grant.",
+      "evidence": [
+        "47 module tests and 199 compatibility tests at cf255de; Linux Python 695 passed/7 skipped/0 failed, Node 66 passed; check 412 files/0 findings",
+        "Windows CI run 44009070509: Python 690 passed/12 skipped/0 failed, Node 66 passed",
+        "one-time signed host authorization, single dispatch, revision-bound transitions and a bounded public state history",
+        "real local confirmation CLI exercised with a 2.2 key; no live campus, payment or booking call"
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/browser.py (owned by 3.1): preview now adds authorization_protocol and local_confirmation_command when an adapter is registered; additive keys only.",
+        "pyproject.toml and MANIFEST.in (owned by 6.3): consent/README.md added to package-data and the source manifest; no dependency change.",
+        "src/thu_assistant/action_store.py: the outer THU-ACTION-1 container is unchanged; the record-id and container migration stays with 5.4/6.1.",
+        "5.3: attachment identity comparison is an extension point; current contracts reject the field.",
+        "5.1/5.2: adapters declare accepts_ledger=True only when they can record NOT_SENT/SENT/UNKNOWN per step; never replay an uncertain write."
+      ]
     },
     {
       "id": "4.5",
@@ -503,7 +566,22 @@
         "模型图片输入、资料引用增强和传输前媒体检查"
       ],
       "integration_order": 12,
-      "status": "pending"
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "2df5772",
+      "audit_fix": "4.5-audit: 3 P1 + 11 P2 fixed in scope at 2df5772; the P2-3 error-registration item is closed by the batch-4 integration (X1); P2-13 source-registry/doc wording stays with 1.1/2.3.",
+      "evidence": [
+        "58 module tests (51 Python + 7 Node) at 2df5772; Linux Python 706 passed/7 skipped/0 failed, Node 66 passed; check 407 files/0 findings",
+        "shipped ProtocolRegistry is empty: an image call fails with MODEL_IMAGE_PROTOCOL_UNVERIFIED or MODEL_IMAGE_INPUT_UNAVAILABLE and sends nothing",
+        "staging is 0600 under a 0700 root, one grant per send, cancellation never replays",
+        "remediation verifier P1-1..P2-12 PASS; P2-3 and P2-13 recorded as cross-module items"
+      ],
+      "cross_module_handoffs": [
+        "contracts/v0.2/error-classification.json (owned by 1.1): 11 MODEL_IMAGE_*/MODEL_* codes registered additively in the batch-4 integration commit (X1).",
+        "src/thu_assistant/media_assets/ (owned by 3.3): outbound images use manifest -> prepare_model_bundle -> authorize_model_send -> consume_model_bundle with purpose MODEL_INPUT; MEDIA_* codes stay module-internal until 6.1 registers them.",
+        "src/thu_assistant/models.js and models.py (owned by 4.5/6.1): the Node transport enforces the same frozen ceiling and refuses unverified protocols; 6.1 must pass the MediaBinding from the authenticated host, never from tool arguments.",
+        "2.3: the model.image_input source row stays BLOCKED_SOURCE_EVIDENCE until sanitized protocol evidence exists; do not probe with personal images."
+      ]
     },
     {
       "id": "5.1",
@@ -934,5 +1012,6 @@
       "integration_order": 24,
       "status": "pending"
     }
-  ]
+  ],
+  "gate_note": "Batch 4 accepted: 4.1 bbe620a, 4.2 c66ee2e, 4.3 e14c11c, 4.4 cf255de, 4.5 2df5772; single batch integration commit recorded in 批次门禁.json."
 }

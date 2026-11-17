@@ -780,7 +780,7 @@
       "checked_at": "2026-11-16",
       "version_note": "Catalog supportImage is a listing flag. The actual image request protocol of the authenticated proxy is not verified.",
       "entry_ref": null,
-      "code_refs": ["src/thu_assistant/models.js:83-136"],
+      "code_refs": ["src/thu_assistant/models.js:88-250", "src/thu_assistant/model_media.py:657-760"],
       "pagination": {
         "kind": "UNKNOWN",
         "page_parameter": null,

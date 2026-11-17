@@ -69,9 +69,9 @@ DEFAULT_MAX_PIXELS = 4_000_000
 
 SOURCE_ID = "model.image_input"
 
-# Every module-local code 4.5 can emit. They stay unregistered in the frozen
-# classification until 6.1 adds them (see the module record); the tuple keeps
-# the implementation and the record from drifting apart.
+# Every module-local code 4.5 can emit. The batch-4 integration registered them
+# in the frozen classification and its source_state mirror; the tuple keeps the
+# implementation, the registry and the module record from drifting apart.
 MODULE_CODES = (
     "MODEL_REQUIRED_FOR_IMAGE_INPUT",
     "MODEL_IMAGE_REQUIRES_MEDIA_PIPELINE",

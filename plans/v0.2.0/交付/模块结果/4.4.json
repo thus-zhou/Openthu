@@ -4,7 +4,7 @@
   "batch": 4,
   "owner": "Hermes",
   "status": "accepted",
-  "status_note": "Implementation, module tests and the 4.4 audit remediation (P0=0, P1=3, P2=14) are complete and verified. The batch-4 integration commit and gate remain the integration owner's step.",
+  "status_note": "Implementation, module tests and the 4.4 audit remediation (P0=0, P1=3, P2=14) are complete and verified; reconnected in the single batch-4 integration commit.",
   "baseline_commit": "323a98b",
   "delivery_commit": "cf255de",
   "previous_delivery_commit": "8a36186",
@@ -91,15 +91,42 @@
     ]
   },
   "state_table": {
-    "PREPARED": {"authorization": "REQUIRED_NOT_CONSUMED", "remote_write": "NONE"},
-    "NEEDS_USER_ACTION": {"authorization": "NOT_APPLICABLE", "remote_write": "NONE"},
-    "AWAITING_OFFICIAL": {"authorization": "RECORDED_FOR_HANDOFF_ONLY", "remote_write": "NONE"},
-    "DISPATCHING": {"authorization": "CONSUMED", "remote_write": "MAY_HAVE_STARTED"},
-    "UNKNOWN": {"authorization": "CONSUMED", "remote_write": "UNKNOWN"},
-    "PENDING_APPROVAL": {"authorization": "CONSUMED", "remote_write": "ACCEPTED"},
-    "PENDING_PAYMENT": {"authorization": "CONSUMED", "remote_write": "ACCEPTED"},
-    "SUCCEEDED": {"authorization": "CONSUMED", "remote_write": "ACCEPTED"},
-    "FAILED": {"authorization": "NOT_CONSUMABLE", "remote_write": "NONE_OR_FAILED"}
+    "PREPARED": {
+      "authorization": "REQUIRED_NOT_CONSUMED",
+      "remote_write": "NONE"
+    },
+    "NEEDS_USER_ACTION": {
+      "authorization": "NOT_APPLICABLE",
+      "remote_write": "NONE"
+    },
+    "AWAITING_OFFICIAL": {
+      "authorization": "RECORDED_FOR_HANDOFF_ONLY",
+      "remote_write": "NONE"
+    },
+    "DISPATCHING": {
+      "authorization": "CONSUMED",
+      "remote_write": "MAY_HAVE_STARTED"
+    },
+    "UNKNOWN": {
+      "authorization": "CONSUMED",
+      "remote_write": "UNKNOWN"
+    },
+    "PENDING_APPROVAL": {
+      "authorization": "CONSUMED",
+      "remote_write": "ACCEPTED"
+    },
+    "PENDING_PAYMENT": {
+      "authorization": "CONSUMED",
+      "remote_write": "ACCEPTED"
+    },
+    "SUCCEEDED": {
+      "authorization": "CONSUMED",
+      "remote_write": "ACCEPTED"
+    },
+    "FAILED": {
+      "authorization": "NOT_CONSUMABLE",
+      "remote_write": "NONE_OR_FAILED"
+    }
   },
   "outputs": [
     "one-time plan challenge, signed host authorization and one-time consumption",
@@ -136,23 +163,71 @@
       "P2-14 unused imports and the unused fingerprint export are removed; the consent README ships in package-data and MANIFEST; the lost-response test now starts from UNKNOWN"
     ],
     "verification": {
-      "P1-1": ["test_local_consent_summary_shows_the_whole_business_object", "audit probe P1-1 now prints 区域/座位/房间 ids"],
-      "P1-2": ["test_explicit_decline_vetoes_a_pending_signed_grant", "audit probe P1-2 now raises TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED and sends 0"],
-      "P1-3": ["test_repeated_poll_does_not_rewrite_or_grow_history", "test_public_history_is_bounded_and_counted", "audit probe P1-3: events 4->4, 2000 polls 0.4s"],
-      "P2-1": ["test_result_does_not_raise_an_internal_revision_conflict"],
-      "P2-2": ["test_in_process_confirmation_cleans_up_a_pending_grant", "test_expired_plan_consumes_no_request_and_requires_reprepare", "test_put_reports_replacement"],
-      "P2-3": ["test_preflight_failure_keeps_the_human_grant"],
-      "P2-4": ["test_in_process_confirmation_is_normalized_to_a_signed_grant"],
-      "P2-5": ["test_ledger_is_bound_to_the_current_dispatch", "test_effect_ledger_never_regresses_a_sent_step"],
-      "P2-6": ["test_offline_inventory_survives_one_unreadable_journal", "test_offline_inventory_cli_shape"],
-      "P2-7": ["test_local_consent_adds_a_challenge_to_old_records"],
-      "P2-8": ["test_current_contracts_reject_attachments", "test_attachment_identity_is_exactly_compared"],
-      "P2-9": ["test_storage_failures_are_classified_not_raw", "audit probe P2-9: unchanged poll succeeds, changed write gives STATE_WRITE_FAILED"],
-      "P2-10": ["test_two_roots_never_share_a_host_authority"],
-      "P2-11": ["test_consent_cli_maps_storage_errors", "test_offline_inventory_cli_shape"],
-      "P2-12": ["test_grant_challenge_mismatch_and_expiry_are_distinct asserts PREPARED after grant expiry", "consent/README.md rejection table"],
-      "P2-13": ["test_adapterless_plan_does_not_advertise_confirmation", "test_generic_browser_text_never_opens_a_write_window"],
-      "P2-14": ["test_lost_response_starts_unknown_and_restart_only_reconciles", "grep: no secrets import, no fingerprint(), package-data contains consent/README.md, MANIFEST includes it"]
+      "P1-1": [
+        "test_local_consent_summary_shows_the_whole_business_object",
+        "audit probe P1-1 now prints 区域/座位/房间 ids"
+      ],
+      "P1-2": [
+        "test_explicit_decline_vetoes_a_pending_signed_grant",
+        "audit probe P1-2 now raises TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED and sends 0"
+      ],
+      "P1-3": [
+        "test_repeated_poll_does_not_rewrite_or_grow_history",
+        "test_public_history_is_bounded_and_counted",
+        "audit probe P1-3: events 4->4, 2000 polls 0.4s"
+      ],
+      "P2-1": [
+        "test_result_does_not_raise_an_internal_revision_conflict"
+      ],
+      "P2-2": [
+        "test_in_process_confirmation_cleans_up_a_pending_grant",
+        "test_expired_plan_consumes_no_request_and_requires_reprepare",
+        "test_put_reports_replacement"
+      ],
+      "P2-3": [
+        "test_preflight_failure_keeps_the_human_grant"
+      ],
+      "P2-4": [
+        "test_in_process_confirmation_is_normalized_to_a_signed_grant"
+      ],
+      "P2-5": [
+        "test_ledger_is_bound_to_the_current_dispatch",
+        "test_effect_ledger_never_regresses_a_sent_step"
+      ],
+      "P2-6": [
+        "test_offline_inventory_survives_one_unreadable_journal",
+        "test_offline_inventory_cli_shape"
+      ],
+      "P2-7": [
+        "test_local_consent_adds_a_challenge_to_old_records"
+      ],
+      "P2-8": [
+        "test_current_contracts_reject_attachments",
+        "test_attachment_identity_is_exactly_compared"
+      ],
+      "P2-9": [
+        "test_storage_failures_are_classified_not_raw",
+        "audit probe P2-9: unchanged poll succeeds, changed write gives STATE_WRITE_FAILED"
+      ],
+      "P2-10": [
+        "test_two_roots_never_share_a_host_authority"
+      ],
+      "P2-11": [
+        "test_consent_cli_maps_storage_errors",
+        "test_offline_inventory_cli_shape"
+      ],
+      "P2-12": [
+        "test_grant_challenge_mismatch_and_expiry_are_distinct asserts PREPARED after grant expiry",
+        "consent/README.md rejection table"
+      ],
+      "P2-13": [
+        "test_adapterless_plan_does_not_advertise_confirmation",
+        "test_generic_browser_text_never_opens_a_write_window"
+      ],
+      "P2-14": [
+        "test_lost_response_starts_unknown_and_restart_only_reconciles",
+        "grep: no secrets import, no fingerprint(), package-data contains consent/README.md, MANIFEST includes it"
+      ]
     }
   },
   "checks": {
@@ -211,37 +286,63 @@
   "acceptance": [
     {
       "case": "a grant used for another account, another plan or a different file hash is rejected",
-      "tests": ["test_grant_for_another_plan_digest_or_account_is_rejected", "test_attachment_identity_is_exactly_compared", "test_tampered_signature_and_unknown_protocol_never_authorize"],
+      "tests": [
+        "test_grant_for_another_plan_digest_or_account_is_rejected",
+        "test_attachment_identity_is_exactly_compared",
+        "test_tampered_signature_and_unknown_protocol_never_authorize"
+      ],
       "note": "The digest covers every business field, including any attachment hash. The attachment identity comparison is an engine-level extension for 5.3 because no current contract accepts the field."
     },
     {
       "case": "concurrent execution of one plan dispatches at most once",
-      "tests": ["test_concurrent_execute_dispatches_once", "test_concurrent_execute_sends_once", "test_two_real_processes_claim_once"]
+      "tests": [
+        "test_concurrent_execute_dispatches_once",
+        "test_concurrent_execute_sends_once",
+        "test_two_real_processes_claim_once"
+      ]
     },
     {
       "case": "a lost response and restart only reconcile, never resend",
-      "tests": ["test_lost_response_starts_unknown_and_restart_only_reconciles", "test_restarted_engine_only_reconciles_and_owner_probe_is_non_destructive"],
+      "tests": [
+        "test_lost_response_starts_unknown_and_restart_only_reconciles",
+        "test_restarted_engine_only_reconciles_and_owner_probe_is_non_destructive"
+      ],
       "note": "The 4.4 test now actually leaves a plan in UNKNOWN before the restarted engine reconciles it."
     },
     {
       "case": "a disk failure while saving the dispatch journal sends zero requests",
-      "tests": ["test_dispatch_intent_save_failure_sends_nothing"]
+      "tests": [
+        "test_dispatch_intent_save_failure_sends_nothing"
+      ]
     },
     {
       "case": "a fee, member, date or attachment change after preview invalidates the plan",
-      "tests": ["test_preview_change_invalidates_the_plan", "test_attachment_identity_is_exactly_compared"]
+      "tests": [
+        "test_preview_change_invalidates_the_plan",
+        "test_attachment_identity_is_exactly_compared"
+      ]
     },
     {
       "case": "disabling the write switch keeps result and recovery for existing transactions",
-      "tests": ["test_write_switch_off_blocks_new_writes_but_keeps_result_and_inventory", "test_unresolved_cancel_is_reconciled_after_switch_off"]
+      "tests": [
+        "test_write_switch_off_blocks_new_writes_but_keeps_result_and_inventory",
+        "test_unresolved_cancel_is_reconciled_after_switch_off"
+      ]
     },
     {
       "case": "ordinary browser controls and model text cannot forge host confirmation or open a general write window",
-      "tests": ["test_generic_browser_text_never_opens_a_write_window", "test_model_text_and_environment_never_become_a_grant", "test_real_browser_controls_iframe_and_csrf_exclusion"]
+      "tests": [
+        "test_generic_browser_text_never_opens_a_write_window",
+        "test_model_text_and_environment_never_become_a_grant",
+        "test_real_browser_controls_iframe_and_csrf_exclusion"
+      ]
     },
     {
       "case": "code rollback and local log cleanup never trigger a real business cancellation",
-      "tests": ["test_offline_inventory_reports_effects_without_dispatch_or_cancel", "test_offline_inventory_survives_one_unreadable_journal"]
+      "tests": [
+        "test_offline_inventory_reports_effects_without_dispatch_or_cancel",
+        "test_offline_inventory_survives_one_unreadable_journal"
+      ]
     }
   ],
   "security_summary": {
@@ -296,5 +397,7 @@
   "blockers": [],
   "rollback": "Stop issuing grants and executing new plans; keep actions-v1, consent-v1 and every pending journal, and revert only code and local pointers. The retained runtime must still read the new record format; deleting local journals is never a remote cancellation.",
   "next_step": "The batch integrator reconnects 4.1-4.5 on one batch commit, runs the batch-level check, full offline suite and contract linkage, and only then marks batch 4 accepted. This module does not create a PR, merge main, tag or publish.",
-  "worktree_note": "Linked worktree relative to the repository root; the absolute home path is intentionally not committed (privacy rule)."
+  "worktree_note": "Linked worktree relative to the repository root; the absolute home path is intentionally not committed (privacy rule).",
+  "batch_state": "accepted at the batch-4 integration commit recorded in 交付/批次门禁.json",
+  "next": "Batch 5 may start once the gate records batch 4 accepted; this module opens no PR, does not merge main and does not publish a release."
 }

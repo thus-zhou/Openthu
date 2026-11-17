@@ -107,8 +107,8 @@
       "p0_fixed": 0,
       "p1_fixed": 3,
       "p2_fixed_in_scope": 11,
-      "p2_open_cross_module": 2,
-      "verifier_result": "P1-1..P2-12 (14 checks) PASS; P2-3 and P2-13 OPEN (owned by 1.1/2.3/6.1)"
+      "p2_open_cross_module": 0,
+      "verifier_result": "P1-1..P2-12 (14 checks) PASS; P2-3 and P2-13 were closed by the batch-4 integration (X1 error registration, X3 docs/source-registry update)"
     },
     "environment_note": "a fresh worktree has no src/thu_assistant/node_modules; without linking the installed dependencies 19 gateway/session tests fail for a missing tough-cookie module on both the baseline and this tree, so the link is an environment prerequisite, not a module result. The Node transport cases skip themselves when node is absent"
   },
@@ -288,5 +288,7 @@
     "The preview exposes the text scope (counts, roles, source ids) but not message bodies; a confirmation UI that shows the text is built by 6.1 on the caller side."
   ],
   "rollback": "Stop injecting MediaBinding and ProtocolRegistry: image arguments then fail with MODEL_IMAGE_INPUT_UNAVAILABLE while text chat, the catalog and the 29 tool entries are unchanged. THU_MODEL_READ=0 still returns to the legacy single-prompt behaviour. Nothing is re-sent, and user files are never deleted.",
-  "next_step": "The batch integrator reconnects 4.1-4.5 on one commit, runs the batch-level check, the full offline suite and contract linkage, and routes the open P2-3/P2-13 registrations to 6.1/2.3; the protocol-evidence blocker stays open until verified evidence exists."
+  "next_step": "The batch integrator reconnects 4.1-4.5 on one commit, runs the batch-level check, the full offline suite and contract linkage, and routes the open P2-3/P2-13 registrations to 6.1/2.3; the protocol-evidence blocker stays open until verified evidence exists.",
+  "batch_state": "accepted at the batch-4 integration commit recorded in 交付/批次门禁.json",
+  "next": "Batch 5 may start once the gate records batch 4 accepted; this module opens no PR, does not merge main and does not publish a release."
 }
