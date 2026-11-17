@@ -20,7 +20,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import tempfile
 
 from . import paths
 
@@ -477,7 +476,3 @@ def decode_preview(text: str) -> dict:
     except (ValueError, TypeError):
         raise UpgradeError("MIGRATION_PREVIEW_INVALID", "base64") from None
 
-
-def temporary_root(prefix: str = "openthu-migration-") -> Path:
-    """A private scratch directory for a dry run (never inside the repo)."""
-    return Path(tempfile.mkdtemp(prefix=prefix))
