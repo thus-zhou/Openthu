@@ -120,7 +120,7 @@
     "total": 9,
     "current": 4,
     "current_status": "accepted",
-    "module_status_note": "1.1, 2.1-2.3, 3.1-3.3 and 4.1-4.5 accepted; batch 4 reconnected at 2cc1c05 with the joint check and full offline suite; seam fixes X1-X5 cover error-code registration, the media-purpose test, model-image docs/source refs, the consent export and the Windows test budget. Batch 5 is ready.",
+    "module_status_note": "1.1, 2.1-2.3, 3.1-3.3 and 4.1-4.5 accepted; batch 4 reconnected at 4e07357 (seam commit 2cc1c05) with the joint check and full offline suite; seam fixes X1-X5 cover error-code registration, the media-purpose test, model-image docs/source refs, the consent export and the Windows test budget. Batch 5 is ready.",
     "next": 5,
     "gate_file": "交付/批次门禁.json",
     "status_model": "accepted prefix -> one ready -> locked remainder; all accepted only at version completion",

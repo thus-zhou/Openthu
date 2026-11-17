@@ -179,12 +179,12 @@
         "4.5": "accepted"
       },
       "status": "accepted",
-      "integration_commit": "2cc1c05443d8846a92fb0dafbbc3da40cbe2b00c",
+      "integration_commit": "4e073578d964407c10b7c94ed8b3fa64c8332036",
       "accepted_at": "2026-11-17",
       "entry_condition": "all batch 3 modules accepted and integrated",
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
       "acceptance_record": "the commit containing this accepted record",
-      "gate_note": "4.1 accepted at bbe620a; 4.2 at c66ee2e; 4.3 at e14c11c; 4.4 at cf255de plus the follow-up ec21045 (consent authorize re-export); 4.5 at 2df5772. The single batch-4 integration commit 2cc1c05 records the joint check, the full offline suite and the seam fixes X1-X5; the CI head 4e07357 adds only the pytest budget fix. Push 44013830566 and PR 44013836023 are green on both platforms. Batch 5 is ready.",
+      "gate_note": "4.1 accepted at bbe620a; 4.2 at c66ee2e; 4.3 at e14c11c; 4.4 at cf255de plus the follow-up ec21045 (consent authorize re-export); 4.5 at 2df5772. The seam commit 2cc1c05 carries X1-X4; Windows then hit the old 600-second pytest budget on the healthy joint suite, so X5 raised it to 1200 seconds. The designated integration commit 4e07357 is the first fully green integrated tree: push 44013830566 and PR 44013836023 are green on ubuntu-24.04 and windows-2025. Batch 5 is ready.",
       "module_acceptance": {
         "4.1": {
           "accepted_at": "2026-11-17",
@@ -226,7 +226,8 @@
       ],
       "ci_heads": [
         "4e073578d964407c10b7c94ed8b3fa64c8332036"
-      ]
+      ],
+      "seam_commit": "2cc1c05443d8846a92fb0dafbbc3da40cbe2b00c"
     },
     {
       "batch": 5,
@@ -318,5 +319,5 @@
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     }
   ],
-  "gate_note": "Batches 1-4 accepted and reconnected. Batch 4 integration commit 2cc1c05: 460 files/0 findings, 29 MCP tools, Linux Python 1005/7, Windows 1000/12, Node 66/0, seam fixes X1-X5, zero live calls. Push and PR CI at 4e07357 are green on both platforms. Batch 5 is ready."
+  "gate_note": "Batches 1-4 accepted and reconnected. Batch 4 integration commit 4e07357 (seam commit 2cc1c05, X5 CI budget): 460 files/0 findings, 29 MCP tools, Linux Python 1005/7, Windows 1000/12, Node 66/0, zero live calls. Push 44013830566 and PR 44013836023 are green on both platforms. Batch 5 is ready."
 }
