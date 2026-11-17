@@ -20,6 +20,22 @@ Codex 担任集成与发布维护者：整理需求和 Issue、审查和合并 P
 4. 创建 `vX.Y.Z` 标签与 GitHub Release，上传归档、构建包和 SHA256SUMS。预览版本用 prerelease 标记。
 5. 从公开下载地址读取校验文件并核对上传资产，记录对应提交和测试结果。更新维护资料和交接状态。
 
+## 版本回归门禁与验证报告
+
+7.2 的回归门禁由 `scripts/regression_report.py` 生成机器可读结果，CI 在每个平台运行后上传安全摘要，发布门禁再汇总两个平台并检查候选包：
+
+```text
+python scripts/regression_report.py gate --junit artifacts/junit.xml \
+  --dev-results .local/test-results.json --platform linux \
+  --output artifacts/regression-report.json
+python scripts/regression_report.py aggregate --reports artifacts/reports \
+  --output artifacts/release-report.json
+python scripts/regression_report.py release-gate --reports artifacts/reports \
+  --dist dist --require-dist --output artifacts/release-gate.json
+```
+
+报告包含源码提交、契约版本、平台、用例范围、通过/失败/跳过、跳过原因、副作用计数，以及按模块归属的失败与最小复现命令。平台专属跳过必须写明原因；环境缺口记为 `INCOMPLETE`，不能当作该平台全部可用。报告不包含原始异常、Cookie、令牌、账号或本机路径。发布门禁同时扫描源码与候选归档、核对固定依赖和保守默认值，并验证候选包；任一隐私标记、未解释跳过、依赖漂移或候选校验失败都会阻断通过。原始失败材料留在受控环境，公开摘要只保留错误类别和合成复现。
+
 ## 故障与回退
 
 先保留错误证据及未决事务，不自动重复发送模型生成或校园写入。按问题建立修复分支；需要回退时切换已验证标签，保留状态格式兼容性和新用户修改。公开报告不附私有日志。错误的发布资产用修订版替换并说明原因，不删除事故证据后声称未发生。
