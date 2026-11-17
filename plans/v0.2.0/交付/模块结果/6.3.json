@@ -113,16 +113,17 @@
       "evidence_tree": "clean tracked checkout of 27afeaa after setup-node"
     },
     "full_offline_suite_windows": {
-      "python_passed": 1305,
+      "python_passed": 1306,
       "python_skipped": 13,
       "python_failed": 0,
       "node_passed": 66,
       "node_failed": 0,
-      "source": "GitHub Actions windows-2025 job of run 44053512576"
+      "source": "GitHub Actions windows-2025 job of run 44059743559"
     },
     "github_actions": {
-      "commit": "27afeaa033eea116ee32a380b313c2dae593bc86",
-      "run": 44053512576,
+      "commit": "b9d337e",
+      "delivery_commit": "f003a8b",
+      "run": 44059743559,
       "ubuntu-24.04": "success",
       "windows-2025": "success"
     },
@@ -160,7 +161,7 @@
       "install_check_mcp_tools": 29,
       "install_check_source_root": null
     },
-    "windows": "GitHub Actions windows-2025 passed for 27afeaa (run 44053512576): check 504 files/0 findings, Python 1305 passed/13 skipped/0 failed, Node 66 passed; not reproduced on a local Windows host",
+    "windows": "GitHub Actions windows-2025 passed for b9d337e/f003a8b (run 44059743559): check 504 files/0 findings, Python 1306 passed/13 skipped/0 failed, Node 66 passed; not reproduced on a local Windows host",
     "live_campus_calls": 0,
     "model_calls": 0,
     "business_submissions": 0,
@@ -185,7 +186,7 @@
     "a bundled layout path escape is refused and a malformed layout degrades to 'not bundled'"
   ],
   "limits": [
-    "Linux was executed locally; the Windows result comes from GitHub Actions run 44053512576 on the same commit (Python 1305 passed / 13 skipped / 0 failed) and was not reproduced on a local Windows host. Real Windows DPAPI authentication is outside this module.",
+    "Linux was executed locally; the Windows result comes from GitHub Actions run 44059743559 on the same delivery commit (Python 1306 passed / 13 skipped / 0 failed) and was not reproduced on a local Windows host. Real Windows DPAPI authentication is outside this module.",
     "The wheel does not contain node_modules or the offline tests: after installing, run python scripts/dev.py setup-node (or npm ci --ignore-scripts).",
     "Dependencies are pinned to exact direct versions with a license table; no transitive hash lock was generated because resolving every platform wheel needs network access, so artifact integrity comes from SHA256SUMS and the Node lock file.",
     "Source archives are generated from Git objects, so uncommitted work never enters them and a dirty tracked tree must be committed or stashed before a build.",
