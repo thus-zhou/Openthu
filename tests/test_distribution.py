@@ -376,7 +376,13 @@ def candidate(tmp_path_factory):
         created.append(path)
     dist = tmp_path_factory.mktemp("candidate-dist")
     try:
-        release = module.build_candidate(dist)
+        try:
+            release = module.build_candidate(dist)
+        except module.ReleaseError as error:
+            pytest.fail(
+                "the candidate build only runs on a clean tracked tree; "
+                f"commit or stash the pending change first ({error.code})"
+            )
         report = module.verify(dist)
     finally:
         for path in created:

@@ -452,6 +452,9 @@ def verify(dist: Path = DIST) -> dict:
     release = json.loads(manifest_path.read_text(encoding="utf-8"))
     if release.get("version") != declared_version():
         raise ReleaseError("RELEASE_VERSION_MISMATCH", release.get("version", ""))
+    notes = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    if release["version"] not in notes[:600]:
+        raise ReleaseError("RELEASE_NOTES_MISSING", "CHANGELOG.md")
     expected = {row["name"]: row for row in release.get("artifact_files", [])}
     present = {path.name for path in dist.iterdir() if path.is_file()}
     missing = sorted(set(expected) - present)
