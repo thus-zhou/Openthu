@@ -16,7 +16,8 @@
     "business_submissions": 0,
     "release_owner": "Codex",
     "batch4_integration_test": "tests/test_batch4_integration.py",
-    "batch5_integration_test": "tests/test_batch5_integration.py"
+    "batch5_integration_test": "tests/test_batch5_integration.py",
+    "batch6_integration_test": "tests/test_batch6_integration.py"
   },
   "modules": [
     {
@@ -660,7 +661,6 @@
       "code_paths": [
         "src/thu_assistant/mcp_stdio.py",
         "src/thu_assistant/queries.py",
-        "src/thu_assistant/gateway.js",
         "src/thu_assistant/__main__.py",
         "src/thu_assistant/facade/",
         "src/thu_assistant/local_ops.py"
@@ -700,7 +700,7 @@
         "68 module tests and 370 related regression tests; real file-keyed ResourceCenter covered; local results validate against result-envelope-v1",
         "health returns PARTIAL/BLOCKED per row, unregistered reads are refused, unverified sources and switches stay visible in the capability table",
         "check 504 files/0 findings; Linux full offline suite 1336 passed/7 skipped; Node 66 passed; plan/contract/source validators ok; 0 live campus/model/business calls",
-        "batch-6 reconnection and two-platform CI remain with the integration owner; no delivery PR, main merge or release"
+        "batch-6 integration 69d6e6f2821c7866633fd088759106ebfb585237: the facade implements the 6.2 consumer protocol (services/todos/calendar/resources), the 4.2 provider attribute moved to resource_provider, and the dashboard prints its URL before serving (X1-X4)"
       ]
     },
     {
@@ -735,7 +735,7 @@
         "162 module tests and 57 related regression tests; 18 audit probes re-run with fixed behaviour; every response validates against result-envelope-v1",
         "two executor pools keep health/services alive with eight stuck adapters; single-use bootstrap, strict envelope validation, list-shaped link filtering and the 8 MiB response ceiling are covered",
         "check 505 files/0 findings; Linux full offline suite 1430 passed/7 skipped; Node 66 passed; plan/contract/source validators ok; 0 live campus/model/business calls",
-        "batch-6 reconnection, the real 6.1 facade adapter and two-platform CI remain with the integration owner; no delivery PR, main merge or release"
+        "batch-6 integration 69d6e6f2821c7866633fd088759106ebfb585237: /resources forwards the 4.2 semester, /todos and /calendar report agenda/todos and agenda/calendar from one snapshot, the cancel token reaches the 5.4 read and a busy port is refused on Windows via SO_EXCLUSIVEADDRUSE (X1-X3, X6)"
       ]
     },
     {
@@ -744,33 +744,61 @@
       "batch": 6,
       "code_paths": [
         "pyproject.toml",
-        "scripts/package.py",
-        "scripts/generate_config.py",
-        "tests/test_distribution.py"
+        "MANIFEST.in",
+        "requirements.txt",
+        "requirements-dev.txt",
+        "setup.py",
+        "build_support/",
+        "scripts/package_release.py",
+        "scripts/migrate_state.py",
+        "scripts/configure_mcp.py",
+        "scripts/dev_diagnostics.py",
+        "src/thu_assistant/version.py",
+        "src/thu_assistant/upgrade.py",
+        "src/thu_assistant/doctor.py",
+        "src/thu_assistant/paths.py",
+        "src/thu_assistant/gateway_client.py",
+        "src/thu_assistant/gateway.js",
+        "src/learn_assistant/mcp_stdio.py",
+        ".github/workflows/ci.yml"
       ],
       "contracts": [
         "compatibility-baseline-v1",
         "secure-storage-header-v1"
       ],
       "tests": [
-        "tests/test_distribution.py"
+        "tests/test_distribution.py",
+        "tests/test_upgrade.py"
       ],
       "docs": [
         "README.md",
         "docs/INSTALL.md",
-        "CHANGELOG.md"
+        "docs/UPGRADE.md",
+        "CHANGELOG.md",
+        "THIRD_PARTY.md"
       ],
       "install_assets": [
         "pyproject.toml",
         "MANIFEST.in",
-        "requirements-dev.txt"
+        "requirements.txt",
+        "requirements-dev.txt",
+        "setup.py",
+        "build_support/",
+        "scripts/package_release.py",
+        "scripts/migrate_state.py",
+        "src/thu_assistant/doctor.py"
       ],
       "acceptance_commands": [
         "python scripts/dev.py check",
         "python scripts/dev.py test"
       ],
       "completion_standard": "完整发行布局、依赖锁、配置生成、安装升级迁移和候选包",
-      "evidence": []
+      "evidence": [
+        "accepted at 6f5df60 after the 6.3-audit (P0=0, P1=7, P2=14 fixed)",
+        "49 module tests; two candidate builds are byte-identical; verify binds the artifact to HEAD and checks Requires-Python, Requires-Dist, seven entry points, exact licence paths and per-file bundled hashes",
+        "batch-6 integration 69d6e6f2821c7866633fd088759106ebfb585237: wheel 208 members including facade/ and local_api/, 54 bundled files, sdist 463 members; install-check outside the repository resolves only bundled resources, starts 29 MCP tools, runs openthu-doctor and leaves the synthetic user state unchanged",
+        "migration refuses DPAPI ciphertext on another platform, path traversal, duplicate items, program-directory targets and a symlinked same-root target; complete=false while a decision is pending"
+      ]
     },
     {
       "id": "7.1",

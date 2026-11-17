@@ -283,8 +283,10 @@ def test_batch6_records_ownership_and_gate_agree():
         assert all(state == "accepted" for state in batch["module_status"].values())
         assert re.fullmatch(r"[0-9a-f]{40}", batch["integration_commit"] or "")
         assert batch["accepted_at"]
-        assert by_batch[7]["status"] == "ready"
-        assert by_batch[8]["status"] == "locked"
+        # Same monotonic rule: batch 7 is ready now and may be accepted later.
+        assert by_batch[7]["status"] in ("ready", "accepted")
+        if by_batch[7]["status"] == "ready":
+            assert by_batch[8]["status"] == "locked"
 
 
 def _board_environment(tmp_path) -> dict[str, str]:

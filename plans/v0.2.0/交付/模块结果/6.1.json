@@ -321,5 +321,11 @@
       "P2-14 service_ids is recomputed so a catalog refresh is visible without a restart; verified by test_p2_14_service_ids_follow_a_catalog_refresh",
       "P2-15 the local read contract now documents semester for /resources and the facade requires it; verified by test_p2_15_resources_semester_is_a_documented_provider_parameter"
     ]
+  },
+  "batch_reconnection": {
+    "batch": 6,
+    "integration_commit": "69d6e6f2821c7866633fd088759106ebfb585237",
+    "accepted_at": "2026-11-17",
+    "seam_notes": "X1 the facade implements the 6.2 consumer protocol (services/todos/calendar/resources) and the 4.2 provider attribute moved to resource_provider; X4 the dashboard prints its URL before serving; the 29 tool names, schemas and 68 module tests are unchanged."
   }
 }

@@ -188,8 +188,11 @@ def test_batch5_records_ownership_and_gate_agree() -> None:
         assert batch["integration_commit"]
         assert len(batch["integration_commit"]) == 40
         assert batch["accepted_at"]
-        assert by_batch[6]["status"] == "ready"
-        assert by_batch[7]["status"] == "locked"
+        # The gate is a monotonic accepted prefix plus at most one ready batch;
+        # a later batch may already be accepted by the time this suite runs.
+        assert by_batch[6]["status"] in ("ready", "accepted")
+        if by_batch[6]["status"] == "ready":
+            assert by_batch[7]["status"] == "locked"
 
 
 def test_new_learn_service_never_inherits_the_sports_write_switch(monkeypatch) -> None:
