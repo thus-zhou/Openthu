@@ -1,7 +1,5 @@
-pytest==8.3.4
-requests==2.33.0
+-r requirements.txt
 playwright==1.57.0
+pytest==8.3.4
 build==1.2.2.post1
 jsonschema==4.26.0
-cryptography==50.0.2
-Pillow==13.0.0

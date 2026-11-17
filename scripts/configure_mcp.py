@@ -8,15 +8,30 @@ import shutil
 import sys
 
 ROOT=Path(__file__).resolve().parents[1]
+_SRC=ROOT/'src'
+if str(_SRC) not in sys.path:sys.path.insert(0,str(_SRC))
+
+from thu_assistant import paths as path_resolver
 
 
 def configuration():
+    """Describe this machine's install in the frozen resource vocabulary.
+
+    The helper and the pinned upstream proxy are resolved through the same
+    logical ids the runtime uses, so a source checkout and a complete wheel
+    both produce a configuration that points at files which actually exist.
+    """
+    helper=path_resolver.resolve_resource('source.windows_auth')
+    vendor=path_resolver.resolve_resource('source.madmodel_proxy')
+    missing=[row.id for row in (helper,vendor) if not row.available]
+    if missing:
+        raise SystemExit('缺少运行资源：'+'、'.join(missing)+'；请使用完整源码包或完整安装包')
     return {'mcpServers':{'tsinghua-assistant':{
         'command':sys.executable,'args':['-m','thu_assistant.mcp_stdio'],
         'env':{'PYTHONUTF8':'1','PYTHONPATH':str(ROOT/'src'),
                'THU_PYTHON':sys.executable,'THU_NODE':shutil.which('node') or 'node',
-               'THU_MADMODEL_DIR':os.environ.get('THU_MADMODEL_DIR') or str(ROOT/'vendor/madmodel-proxy'),
-               'THU_ACCESS_HELPER':str(ROOT/'runtime/windows/access.js'),
+               'THU_MADMODEL_DIR':os.environ.get('THU_MADMODEL_DIR') or str(vendor.path.parent),
+               'THU_ACCESS_HELPER':os.environ.get('THU_ACCESS_HELPER') or str(helper.path),
                'THU_LEARN_PROVIDER':str(ROOT/'src')}}}}
 
 
@@ -39,6 +54,5 @@ def main():
         output.parent.mkdir(parents=True,exist_ok=True)
     output.write_text(json.dumps(configuration(),ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     print(json.dumps({'ok':True,'machine_local_configuration_created':True,'credentials_read':False}))
-
 
 if __name__=='__main__':main()

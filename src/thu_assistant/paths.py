@@ -11,6 +11,7 @@ directory or host name.
 """
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from dataclasses import dataclass
@@ -19,6 +20,8 @@ from pathlib import Path
 APP_NAME = "TsinghuaAssistant"
 PACKAGE_ROOT = Path(__file__).resolve().parent
 _PROJECT_CANDIDATE = PACKAGE_ROOT.parents[1]
+BUNDLED_DIRNAME = "_bundled"
+BUNDLED_LAYOUT_NAME = "layout.json"
 
 _AUTO = object()
 
@@ -59,6 +62,7 @@ class ResolvedResource:
     capability: str
     required: bool
     path: Path | None
+    location: str | None = None
 
     @property
     def available(self) -> bool:
@@ -85,6 +89,52 @@ RESOURCE_SPECS = (
 def package_root() -> Path:
     """The installed/resource package directory (never a guessed path)."""
     return PACKAGE_ROOT
+
+
+def bundled_root(*, package_root_value: Path | str | None = None) -> Path:
+    """The read-only directory holding the declared runtime resources."""
+    root = Path(package_root_value).resolve() if package_root_value else PACKAGE_ROOT
+    return root / BUNDLED_DIRNAME
+
+
+def bundled_layout(*, package_root_value: Path | str | None = None) -> dict | None:
+    """Read the installed layout descriptor, or ``None`` when there is none.
+
+    The descriptor is written by the build from
+    ``build_support/distribution.json``; it is not a second hand-maintained
+    list.  An unreadable descriptor means "no bundled install", never an
+    exception on an unrelated code path.
+    """
+    path = bundled_root(package_root_value=package_root_value) / BUNDLED_LAYOUT_NAME
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("resources"), dict):
+        return None
+    return data
+
+
+def _bundled_candidate(
+    resource_id: str, package_root_value: Path | str | None
+) -> tuple[Path, str] | None:
+    """Map one logical id to its bundled file, refusing path escapes."""
+    layout = bundled_layout(package_root_value=package_root_value)
+    if layout is None:
+        return None
+    relative = layout["resources"].get(resource_id)
+    if not isinstance(relative, str) or not relative:
+        return None
+    text = relative.replace("\\", "/")
+    if text.startswith("/") or any(part in ("..", "") for part in text.split("/")):
+        return None
+    base = bundled_root(package_root_value=package_root_value).resolve()
+    candidate = (base / text).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError:
+        return None
+    return candidate, text
 
 
 def source_root() -> Path | None:
@@ -317,32 +367,50 @@ def resolve_resource(
     ``source_root_value=None`` explicitly means "no source checkout"; omitting
     it asks the package layout to detect one.  No directory outside the
     documented root is inspected.
+
+    A source-scope resource is looked up in a live checkout first and then in
+    the installed ``_bundled`` layout.  A wheel has no checkout at all, so the
+    lookup cannot fall back to a developer tree by accident.
     """
     spec = next((row for row in RESOURCE_SPECS if row.id == resource_id), None)
     if spec is None:
         raise PathError("RESOURCE_UNKNOWN", resource_id)
     if spec.scope == "package":
         root = Path(package_root_value).resolve() if package_root_value else PACKAGE_ROOT
+        path: Path | None = root / spec.relative_path
+        location: str | None = "package"
+        if not _resource_exists(path, spec.kind):
+            path = None
     else:
         if source_root_value is _AUTO:
-            root = source_root()
+            detected = source_root()
         else:
-            root = Path(source_root_value).resolve() if source_root_value else None
-    path = root / spec.relative_path if root is not None else None
-    if path is None:
-        available = False
-    elif spec.kind == "dir":
-        available = path.is_dir()
-    else:
-        available = path.is_file()
+            detected = Path(source_root_value).resolve() if source_root_value else None
+        path = None
+        location = None
+        candidates: list[tuple[str, Path]] = []
+        if detected is not None:
+            candidates.append(("source", detected / spec.relative_path))
+        bundled = _bundled_candidate(resource_id, package_root_value)
+        if bundled is not None:
+            candidates.append(("bundled", bundled[0]))
+        for candidate_location, candidate_path in candidates:
+            if _resource_exists(candidate_path, spec.kind):
+                path, location = candidate_path, candidate_location
+                break
     return ResolvedResource(
         id=spec.id,
         scope=spec.scope,
         relative_path=spec.relative_path,
         capability=spec.capability,
         required=spec.required,
-        path=path if available else None,
+        path=path,
+        location=location if path is not None else None,
     )
+
+
+def _resource_exists(path: Path, kind: str) -> bool:
+    return path.is_dir() if kind == "dir" else path.is_file()
 
 
 def resource_manifest(
@@ -371,6 +439,7 @@ def resource_manifest(
                 "capability": spec.capability,
                 "kind": spec.kind,
                 "available": resolved.available,
+                "location": resolved.location,
             }
         )
     return rows

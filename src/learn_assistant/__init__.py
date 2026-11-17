@@ -5,4 +5,5 @@ from .errors import LearnAssistantError
 
 __all__ = ["LearnAssistant", "LearnAssistantError"]
 
-__version__ = "0.1.0"
+# One product version for the whole distribution; see thu_assistant.version.
+from thu_assistant.version import __version__  # noqa: E402  (after the API exports)
