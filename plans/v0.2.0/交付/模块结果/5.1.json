@@ -236,6 +236,7 @@
       {
         "id": "P2-8",
         "fix": "CAPABILITIES, HANDOVER, source-matrix, action-boundaries and library-sports-read now state eligibility/plan/handoff/new-due implemented and execution blocked; business-facade registers renew_loan",
+        "deferred": "the renewal-v1 execution_state/due_date_after vocabulary alignment stays with 2.3; this module exposes platform.new_due_at and completed_by",
         "verification": "grep for renewal in docs; contract validator"
       },
       {
@@ -255,7 +256,8 @@
       },
       {
         "id": "P2-12",
-        "fix": "page agreement uses a title prefix and wraps locator failures; sharing the full loan reader with library.read_loans remains a 4.3/6.1 request because library.py is outside 5.1's paths",
+        "fix": "page agreement uses a title prefix and wraps locator failures so a rendered truncation no longer blocks preparation",
+        "deferred": "sharing the complete own-loan reader with library.read_loans stays with 4.3/6.1 because library.py is outside 5.1's paths; the duplication and its risk are recorded",
         "verification": "test_reader_maps_login_and_page_failures_to_stable_codes; limits list the residual duplication"
       },
       {
@@ -321,6 +323,7 @@
     "7.2: add tests/test_library_renewal.py to the cross-platform regression list.",
     "4.4/2.1: consider service_workers='block' for the guarded library context and a Git-history home-path scan in the privacy check.",
     "4.3/6.1: extract one complete own-loan reader from library.read_loans so renewal and the read adapter cannot drift.",
+    "2.3: align renewal-v1 execution_state/due_date_after with the action evidence (platform.new_due_at/completed_by) when that data model is next revised.",
     "integration: the shared edits to actions.py (todo window, precheck subset, describe reason/scope), source_state.py, error-classification.json, business-facade.schema.json, docs/ and pyproject/MANIFEST need the integrator's review; no contract shape was removed."
   ]
 }
