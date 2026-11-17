@@ -67,10 +67,10 @@ def _classify(relative: str, *, platform_name: str) -> dict:
     elif base.endswith(".secure"):
         kind, category = "SESSION_CIPHERTEXT", "SESSION"
         fmt = "SECURE-V3"
-    elif base in {"session.json", "cookies.json", "token.json"}:
+    elif base in {"session.json", "cookies.json", "token.json"} and len(parts) == 1:
         kind, category = "SESSION_PLAINTEXT", "SESSION"
         fmt = "PLAINTEXT"
-    elif base == "config.json":
+    elif base == "config.json" and len(parts) == 1:
         kind, category = "CONFIG", "CONFIG"
         fmt = "JSON"
     else:
@@ -136,6 +136,12 @@ def _compatibility(item: dict, *, platform_name: str, key_file: Path | None) -> 
             "requires_reauth": False,
             "reason": "可重建缓存；迁移失败只影响缓存",
         }
+    if kind in {"DOWNLOADS", "LOGS"}:
+        return {
+            "compatibility": "EXCLUDED_USER_FILES",
+            "requires_reauth": False,
+            "reason": "使用者下载与日志保持原位；迁移不改写也不复制",
+        }
     if kind == "LEARN_SESSION":
         return {
             "compatibility": "REVIEW_REQUIRED",
@@ -199,6 +205,8 @@ def preview(
                 item["reason"] = item["reason"] + "；目标已存在，需明确选择 replace/keep"
             elif item["compatibility"].startswith("UNSUPPORTED"):
                 item["status"] = "UNSUPPORTED"
+            elif item["compatibility"] == "EXCLUDED_USER_FILES":
+                item["status"] = "EXCLUDED"
             else:
                 item["status"] = "READY"
             items.append(item)
@@ -228,6 +236,7 @@ def _summary(items: list[dict]) -> dict:
         "ready": counts.get("READY", 0),
         "conflicts": counts.get("CONFLICT", 0),
         "unsupported": counts.get("UNSUPPORTED", 0),
+        "excluded": counts.get("EXCLUDED", 0),
         "requires_reauth": sum(1 for item in items if item["requires_reauth"]),
         "requires_review": sum(
             1 for item in items if item["compatibility"] == "REVIEW_REQUIRED"
@@ -249,6 +258,7 @@ def describe(plan: dict) -> str:
             "READY": "可迁移",
             "CONFLICT": "冲突",
             "UNSUPPORTED": "不迁移",
+            "EXCLUDED": "保持原位",
         }.get(item["status"], item["status"])
         lines.append(
             f"[{flag}] {item['relative_path']}（{item['kind']}／{item['format']}，"
@@ -368,8 +378,15 @@ def apply(
                 "kind": item["kind"],
                 "compatibility": item["compatibility"],
             }
-            if item["status"] == "UNSUPPORTED" or item["compatibility"] == "UNSUPPORTED_FORMAT":
-                record["status"] = "SKIPPED_UNSUPPORTED"
+            if item["status"] == "UNSUPPORTED" or item["compatibility"] in {
+                "UNSUPPORTED_FORMAT",
+                "EXCLUDED_USER_FILES",
+            }:
+                record["status"] = (
+                    "SKIPPED_EXCLUDED"
+                    if item["compatibility"] == "EXCLUDED_USER_FILES"
+                    else "SKIPPED_UNSUPPORTED"
+                )
                 results.append(record)
                 continue
             source = Path(item["source"])
