@@ -527,12 +527,22 @@ class TodoEngine:
         academic_statuses, academic_events = self._academic_statuses(
             selected_academic, now, semester, academic_expansions)
         statuses.extend(academic_statuses)
-        academic_events = [
-            entry for entry in academic_events
-            if agenda_events.in_window(entry['event'], start.isoformat(), end.isoformat(),
-                                       include_completed=include_completed,
-                                       include_overdue=include_overdue)
-        ]
+
+        def _academic_selected(entry):
+            try:
+                item = agenda_events.from_calendar_event(
+                    entry['event'], source_id=entry['source_id'])
+            except CampusError:
+                # Keep malformed records for build_agenda's explicit excluded
+                # report instead of silently dropping them here.
+                return True
+            return agenda_events.in_window(
+                item, start.isoformat(), end.isoformat(),
+                include_completed=include_completed,
+                include_overdue=include_overdue)
+
+        academic_events = [entry for entry in academic_events
+                           if _academic_selected(entry)]
         # Never publish or retain data if account selection changed mid-query.
         if self.owner.bridge('action_identity')['account_id'] != account:
             raise CampusError('STATE_ACCOUNT_MISMATCH')
