@@ -6,7 +6,7 @@
   "status": "accepted",
   "status_note": "Implementation, module tests and the 4.4 audit remediation (P0=0, P1=3, P2=14) are complete and verified. The batch-4 integration commit and gate remain the integration owner's step.",
   "baseline_commit": "323a98b",
-  "delivery_commit": "cf255de",
+  "delivery_commit": "ec21045",
   "previous_delivery_commit": "8a36186",
   "branch": "hermes/4.4",
   "worktree": ".local/worktrees/4.4",
@@ -182,7 +182,7 @@
       "python_failed": 0,
       "node_passed": 66,
       "node_failed": 0,
-      "command": "python scripts/dev.py test (windows-2025 job of run 44009070509)",
+      "command": "python scripts/dev.py test (windows-2025 job of run 44010738281)",
       "note": "Platform-specific POSIX permission/descriptor cases skip; no module failure."
     },
     "privacy_check": {
@@ -198,8 +198,8 @@
       "sources": "ok, 29 sources / 10 models / 8 tasks / 14 readiness rows / 7 fixtures"
     },
     "github_actions": {
-      "run": 44009070509,
-      "head_sha": "cf255de",
+      "run": 44010738281,
+      "head_sha": "ec21045",
       "ubuntu_24_04": "success: Python 695 passed / 7 skipped / 0 failed; Node 66; check 412 files / 0 findings; 29 MCP tools",
       "windows_2025": "success: Python 690 passed / 12 skipped / 0 failed; Node 66; check 412 files / 0 findings; 29 MCP tools",
       "note": "Both jobs of the frozen offline-checks workflow succeeded on the audit-fixed delivery commit."
