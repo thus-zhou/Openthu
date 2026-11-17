@@ -48,18 +48,18 @@
 
 说明：`library.renewal` 的资格提示是 `PARTIAL/LIMITED`，上表的阻塞结论只针对 5.1 的续借执行，不是整个来源不可用；计数时应把“部分可用”和“完全阻塞”分开。
 
-## 待纠正的说明/实现差异
+## 已澄清与仍保留的说明/实现差异
 
-以下差异不修改运行时，只登记给后续模块处理；不能把旧说明当成当前能力结论。
+以下条目记录旧说明与当前代码的差异；已处理项写明确认结果，未处理项保留为候选边界。不能把旧说明当成当前能力结论。
 
-| 位置 | 旧说明或表面行为 | 当前代码事实 | 后续处理 |
+| 位置 | 旧说明或表面行为 | 当前代码事实 | 状态 |
 |---|---|---|---|
-| `src/thu_assistant/actions.py` 顶部 | 早期 docstring 写“No campus write adapter is enabled in block 5” | `src/thu_assistant/mcp_stdio.py` 已注册体育创建/取消和图书馆座位/研讨间办理适配；`actions.py` 也有 `VERIFIED_ADAPTERS` | 4.4 统一更正说明，保留“真实事项仍需具体授权”的边界 |
-| `src/learn_assistant/core.py` 的 `prepare_submission` | 2.3 的 `prepare` 边界写“只写本地加密计划” | 当前实现把摘要写到 `system_data_root/submission-previews/*.json`，是未加密 JSON，并含本地 path；不上传、不提交 | 5.3 接入前改为加密计划或明确这条只适用于 4.4 的 facade；不要把现状写成已满足 |
-| `learn.calendar` 的 `fl` | 旧事件字典把 `fl` 放进 `status` | `fl` 是来源分类字段，不是 `calendar-event-v1` 的 `CONFIRMED/TENTATIVE/...` 状态 | 5.4 只保留来源字段，不映射为日历状态 |
-| `library.catalog_detail` 的 `borrowable` | 表面是布尔值 | 代码为“不可借时 False，否则 None”；None 表示未核验 | 4.3 保留三态，不把 None 写成可借 |
-| `sports.availability` 的 `available`/费用 | 表面是“可预约/价格” | 只是余量与报价，不是预约或付款回执 | 4.3/5.2 保持来源证据，不折叠成成功 |
-| `docs/CAPABILITIES.md` 的图书馆/体育办理 | 写“已实现专用适配与模拟验证” | 与 `actions.py` 旧 docstring 冲突；代码注册和合成测试是事实，真实交易未验收 | 4.4/7.3 统一措辞，分别记录代码、运行环境和真实证据 |
+| `src/thu_assistant/actions.py` 顶部 | 早期 docstring 写“No campus write adapter is enabled in block 5” | docstring 已改为已注册的图书馆座位/研讨间与体育创建、取消，并保留“真实事项需当次授权”的边界 | 8.1 已更正 |
+| `src/learn_assistant/core.py` 的 `prepare_submission` | 2.3 的 `prepare` 边界写“只写本地加密计划” | 5.3 的门面路径使用受控的提交计划；旧 v0.1 兼容方法仍把摘要写到 `system_data_root/submission-previews/*.json`（未加密、含本地路径、不上传不提交） | 保留：只在本机状态目录，候选记录登记，不改变旧兼容行为 |
+| `learn.calendar` 的 `fl` | 旧事件字典把 `fl` 放进 `status` | 统一事件按 `BUSINESS_STATUS` 映射，`fl` 不作为日历状态 | 5.4 已按来源字段处理 |
+| `library.catalog_detail` 的 `borrowable` | 表面是布尔值 | 不可借时为 `False`，否则为 `None`，并带 `borrowable_state=UNVERIFIED` | 4.3 保留三态，未写成可借 |
+| `sports.availability` 的 `available`/费用 | 表面是“可预约/价格” | 只是余量与报价，不是预约或付款回执 | 4.3/5.2 保留来源证据 |
+| `docs/CAPABILITIES.md` 的图书馆/体育办理 | 早期写“已实现专用适配与模拟验证” | 矩阵与工具表按代码实现、运行环境、真实证据分列，真实交易仍未验收 | 7.3 已统一措辞，8.1 复核 |
 
 ## 使用规则
 

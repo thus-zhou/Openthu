@@ -246,17 +246,14 @@ def test_route_table_matches_the_frozen_local_read_api_contract() -> None:
     assert {method for method, _path in implemented} == {'GET', 'HEAD'}
 
 
-def test_query_parameters_are_the_frozen_list_plus_the_documented_cursor_gap() -> None:
+def test_query_parameters_equal_the_frozen_list() -> None:
     by_path = {API_CONTRACT['base_path'] + endpoint['path']: set(endpoint['query'])
                for endpoint in API_CONTRACT['endpoints']}
     for route in contract.route_table():
-        expected = by_path[route['path']]
-        actual = set(route['query'])
-        if route['path'] in ('/api/v1/todos', '/api/v1/calendar', '/api/v1/resources'):
-            assert actual - expected == {'cursor'}, route['path']
-        else:
-            assert actual == expected, route['path']
-    assert contract.QUERY_EXTENSION['status'] == 'PENDING_CONTRACT_OWNER_REVISION'
+        assert set(route['query']) == by_path[route['path']], route['path']
+    # Revision 8.1 declared the request-side cursor, so no route needs an
+    # out-of-contract extension any more.
+    assert not hasattr(contract, 'QUERY_EXTENSION')
 
 
 def test_limits_bind_and_security_flags_match_the_frozen_contract() -> None:
@@ -296,7 +293,7 @@ def test_describe_api_is_json_serialisable_and_lists_every_sample() -> None:
     assert set(description['display_states']) >= {'READY', 'EMPTY', 'PARTIAL',
                                                   'LOGIN_REQUIRED', 'LIMITED', 'UNKNOWN'}
     assert description['samples']
-    assert description['query_extension']['status'] == 'PENDING_CONTRACT_OWNER_REVISION'
+    assert 'query_extension' not in description
 
 
 @pytest.mark.parametrize('name', sorted(contract.ERROR_CATEGORIES))

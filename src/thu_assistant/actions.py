@@ -1,4 +1,10 @@
-"""Fail-closed transaction framework. No campus write adapter is enabled in block 5."""
+"""Fail-closed transaction framework for authorized campus writes.
+
+The legacy ``create``/``cancel`` aliases stay disabled.  Registered operations
+cover library seat and room reservations plus their cancellation, and sports
+reservations plus their cancellation; each one still needs the user's explicit
+authorization for that specific item before it is sent.
+"""
 from copy import deepcopy
 from dataclasses import dataclass
 import hashlib,json,os,re,time,uuid

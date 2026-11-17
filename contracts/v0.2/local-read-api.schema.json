@@ -75,7 +75,8 @@
       "query": {
         "start_date": "YYYY-MM-DD",
         "end_date": "YYYY-MM-DD",
-        "page_size": "integer 1..200"
+        "page_size": "integer 1..200",
+        "cursor": "opaque string returned as next_cursor; bound to account, service, operation, parameters and snapshot (8.1 revision)"
       },
       "response": "result-envelope-v1"
     },
@@ -85,7 +86,8 @@
       "query": {
         "start_date": "YYYY-MM-DD",
         "end_date": "YYYY-MM-DD",
-        "page_size": "integer 1..200"
+        "page_size": "integer 1..200",
+        "cursor": "opaque string returned as next_cursor; same binding as /todos (8.1 revision)"
       },
       "response": "result-envelope-v1 with calendar-event-v1 items"
     },
@@ -96,7 +98,8 @@
         "semester": "string, 4.2 index semester; the dashboard supplies the user selection or configured current semester (6.1 revision)",
         "query": "string, max 200 characters",
         "course_id": "string, max 128 characters",
-        "page_size": "integer 1..200"
+        "page_size": "integer 1..200",
+        "cursor": "opaque string returned as next_cursor; same binding as /todos (8.1 revision)"
       },
       "response": "result-envelope-v1 with media/resource references"
     }
@@ -105,6 +108,11 @@
     {
       "module": "6.1",
       "change": "/resources accepts the provider semester; the 4.2 index is per semester and cannot resolve a default.",
+      "compatible": true
+    },
+    {
+      "module": "8.1",
+      "change": "/todos, /calendar and /resources declare the request-side cursor that pairs with next_cursor; the 6.2 server extension is folded into the frozen list and no route accepts an undeclared parameter.",
       "compatible": true
     }
   ],
