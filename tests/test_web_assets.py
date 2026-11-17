@@ -846,7 +846,7 @@ def test_overview_renders_seven_cards_and_readonly_notice(scene_factory) -> None
     body = scene.page.inner_text('body')
     assert '只读看板' in body
     assert '成绩、密钥、写入和模型生成不在看板中提供' in body
-    assert '取消全部读取' in body
+    assert scene.page.locator('[data-action="cancel-all"]').count() == 1
 
 
 def test_overview_card_shows_source_time_freshness_completeness_and_next_step(scene_factory) -> None:

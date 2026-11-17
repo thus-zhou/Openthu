@@ -289,6 +289,7 @@
       if (!alive || state.route !== next) return;
     }
     renderPage(next);
+    syncBusy();
     if (changed) dom.title.focus();
     root.dataset.app = 'ready';
     root.dataset.route = next;
@@ -352,6 +353,9 @@
     const busy = state.pending.size > 0;
     Array.from(document.querySelectorAll('[data-action^="refresh-"]')).forEach(function (button) {
       button.disabled = busy;
+    });
+    Array.from(document.querySelectorAll('[data-busy-only]')).forEach(function (node) {
+      node.hidden = !busy;
     });
   }
 
@@ -493,7 +497,7 @@
     const note = h('div', {class: 'limitations'},
       h('p', {}, '成绩、密钥、写入和模型生成不在看板中提供；需要时请使用原有受控工具。'),
       h('p', {}, '刷新由你主动触发；每次读取的实时性和完整性标在卡片上。'));
-    const cancels = h('div', {class: 'button-row'},
+    const cancels = h('div', {class: 'button-row', dataset: {busyOnly: 'true'}, hidden: true},
       actionButton('取消全部读取', 'cancel-all', '', 'ghost'));
     replace(dom.view, [summary, grid, cancels, note]);
     OVERVIEW_CARDS.forEach(function (spec) {
