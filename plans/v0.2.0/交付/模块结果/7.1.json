@@ -189,21 +189,22 @@
       "background_processes": 0
     },
     "github_actions": {
-      "run_id": 44122811569,
-      "commit": "4f0f59f",
+      "run_id": 44137435823,
+      "commit": "22fbc1235c9c757905883edcd79c0ede2baedda4",
+      "code_commit": "2f8d87cf517c7827ed37032f85ae81bab19a9ec7",
       "status": "success",
       "jobs": [
         "test (ubuntu-24.04)",
         "test (ubuntu-24.04, 3.13)",
         "test (windows-2025)"
       ],
-      "note": "All three jobs succeeded on code 181216c; the final UI tweak 1c5eb77 only hides the cancel-all row when nothing is pending and is covered by the module suite. The Windows job ran the 63 browser cases as well.",
-      "code_commit": "181216c"
+      "note": "All three jobs succeeded on the tested tree 22fbc12, which contains the audit repair 2f8d87c and the audit record. The Windows job ran the 77 browser cases. This supersedes run 44122811569; the metadata-only record update that points at this run follows the tested tree."
     }
   },
   "boundaries": [
-    "CLI wiring is still a batch integration step: `openthu dashboard` constructs LocalApiServer without static_dir, so `/` returns LOCAL_API_UI_NOT_INSTALLED until 6.1/8.1 passes `static_dir=thu_assistant.web_assets.static_dir()` at both construction sites. The JSON API keeps working. This module did not edit 6.1s public CLI file; the audit P1-1 reproduction was rerun on 2f8d87c.",
-    "Wheel/sdist package data is still 6.3s scope: pyproject package-data currently collects only top-level `*.js`, and MANIFEST.in does not recurse `.html`/`.css`; a source checkout works, but an installed wheel misses index.html and app.css until `web_assets/*.html`, `web_assets/assets/*.css` and `web_assets/assets/*.js` are declared. The audit P1-2 wheel probe was rerun on 2f8d87c.",
+    "CLI wiring is still a batch integration step: `openthu dashboard` constructs LocalApiServer without static_dir, so `/` returns LOCAL_API_UI_NOT_INSTALLED until 6.1/8.1 passes `static_dir=thu_assistant.web_assets.static_dir()` at both construction sites. The JSON API keeps working. This module did not edit 6.1's public CLI file; the audit P1-1 reproduction was rerun on 2f8d87c.",
+    "Wheel/sdist package data is still 6.3's scope: pyproject package-data currently collects only top-level `*.js`, and MANIFEST.in does not recurse `.html`/`.css`; a source checkout works, but an installed wheel misses index.html and app.css until `web_assets/*.html`, `web_assets/assets/*.css` and `web_assets/assets/*.js` are declared. The audit P1-2 wheel probe was rerun on 2f8d87c.",
+    "Type filtering is client-side over the loaded pages: the frozen /resources query has no kind parameter, so a type with no match on page 1 says \"current loaded range\" and keeps load more visible instead of claiming the source has none. Server-side kind filtering remains 4.2/8.1 contract work.",
     "The 6.2 server allows Sec-Fetch-Mode navigate/cors/same-origin and rejects no-cors; Chromium sends cors for <script crossorigin>/<link crossorigin>, which makes the shell work. Firefox/Safari must be checked by 7.2; if they still send no-cors for same-origin static assets, 6.2 must allow same-origin no-cors on the static route without weakening the cross-site refusal.",
     "/resources requires a semester and the 4.2 index has no default; the dashboard asks the user (or offers manual entry when the semester list is unavailable) and never returns an empty success for a missing semester.",
     "Calendar buckets are computed from the loaded items; `conflicts` comes from the API. The API's `views` lists are not used to replace the current page, and a next_cursor adds a 'more pages' limitation instead of pretending the first page is the whole agenda.",
