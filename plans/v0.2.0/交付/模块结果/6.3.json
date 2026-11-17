@@ -6,7 +6,7 @@
   "status": "accepted",
   "baseline_commit": "bb1f963",
   "integration_parent_commit": "bb1f963",
-  "delivery_commit": "6f5df60",
+  "delivery_commit": "36238e0",
   "implementation_commits": [
     "c8412d8",
     "47ce3d0",
@@ -20,11 +20,13 @@
     "27afeaa",
     "f003a8b",
     "edd5fa5",
-    "6f5df60"
+    "6f5df60",
+    "36238e0"
   ],
   "audit_fix_commits": [
     "edd5fa5: P1-1..P1-7 and P2-1..P2-14 fixes across upgrade.py, package_release.py, materialize.py, dev_diagnostics.py, doctor.py, learn_assistant/mcp_stdio.py and the CI matrix",
-    "6f5df60: openthu-doctor writes UTF-8 on a cp1252 console (found by run 44072763128)"
+    "6f5df60: openthu-doctor writes UTF-8 on a cp1252 console (found by run 44072763128)",
+    "36238e0: README states the published 0.1.0 and the unreleased 0.2.0 candidate separately instead of one contradictory version line"
   ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/6.3",
@@ -102,7 +104,8 @@
     "a --key-file outside the runtime default (config dir keys/master.key) no longer claims the session survives, so requires_reauth stays true with an explicit reason",
     "downloads and logs are EXCLUDED_USER_FILES and stay exactly where they are; nothing is moved, deleted or replayed",
     "doctor reports one state per capability and names the affected capabilities when Node or Chromium is missing",
-    "doctor release-layout blocks start-up when the program version and the bundled layout version disagree"
+    "doctor release-layout blocks start-up when the program version and the bundled layout version disagree",
+    "README states separately that 0.1.0 is the published preview and that the repository currently packages an unreleased 0.2.0 candidate"
   ],
   "checks": {
     "module_tests": {
@@ -137,25 +140,26 @@
       "node_passed": 66,
       "node_failed": 0,
       "files_checked": 505,
-      "source": "GitHub Actions windows-2025 job of run 44076049516"
+      "source": "GitHub Actions windows-2025 job of run 44079565773"
     },
     "github_actions": {
-      "commit": "6f5df60",
-      "run": 44076049516,
+      "commit": "36238e0",
+      "run": 44079565773,
       "jobs": {
         "ubuntu-24.04 (3.12)": "success",
         "ubuntu-24.04 (3.13)": "success",
         "windows-2025 (3.12)": "success"
       },
       "earlier_runs": {
-        "44072763128": "failure on windows-2025: openthu-doctor aborted with UnicodeEncodeError on a cp1252 console; fixed in 6f5df60",
+        "44076049516": "head 6f5df60, success (first green run after the audit fixes)",
+        "44072763128": "head edd5fa5, failure on windows-2025: openthu-doctor aborted with UnicodeEncodeError on a cp1252 console; fixed in 6f5df60",
         "44063076693": "head bb2a7fa, success (implementation record)",
         "44059743559": "head b9d337e (contains f003a8b), success"
       }
     },
     "candidate_build": {
       "artifacts": 4,
-      "commit": "6f5df60",
+      "commit": "36238e0",
       "dirty": false,
       "wheel_members": 193,
       "sdist_members": 441,
@@ -204,7 +208,7 @@
       "command": "python contracts/v0.2/sources/validate.py"
     },
     "audit_probes": "all 19 probes of .local/audits/6.3-probes.py were re-run on the fixed tree; each P1/P2 item shows its observed result in the module record",
-    "windows": "GitHub Actions windows-2025 passed for 6f5df60 (run 44076049516): check 505 files/0 findings, Python 1327 passed/14 skipped/0 failed, Node 66 passed; not reproduced on a local Windows host",
+    "windows": "GitHub Actions windows-2025 passed for 36238e0 (run 44079565773): check 505 files/0 findings, Python 1327 passed/14 skipped/0 failed, Node 66 passed; not reproduced on a local Windows host",
     "live_campus_calls": 0,
     "model_calls": 0,
     "business_submissions": 0,
@@ -241,7 +245,7 @@
     "downloads and logs are reported EXCLUDED_USER_FILES and are neither copied nor removed"
   ],
   "limits": [
-    "Linux was executed locally; the Windows result comes from GitHub Actions run 44076049516 on the same delivery commit (Python 1327 passed / 14 skipped / 0 failed) and was not reproduced on a local Windows host. Real Windows DPAPI authentication and a real Windows migration are outside this module.",
+    "Linux was executed locally; the Windows result comes from GitHub Actions run 44079565773 on the same delivery commit (Python 1327 passed / 14 skipped / 0 failed) and was not reproduced on a local Windows host. Real Windows DPAPI authentication and a real Windows migration are outside this module.",
     "The audit probe that simulates Windows drive-letter paths on Linux now stops at MIGRATION_PATH_NOT_ABSOLUTE; that is a limitation of simulating Windows path semantics on POSIX, not of the Windows behaviour, which the Windows CI test covers.",
     "The audit probes that reuse the pre-fix dist/ snapshot (27afeaa) now stop at the new commit binding or still print that old artifact's numbers; per-item verification uses the rebuilt candidate and the unit tests instead.",
     "The wheel does not contain node_modules or the offline tests: after installing, run npm ci --ignore-scripts in the package directory when Node features are needed; scripts/dev.py exists only in the source package.",
