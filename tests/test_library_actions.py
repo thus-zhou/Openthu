@@ -24,7 +24,12 @@ END=DAY+'T11:00:00+08:00'
 AUTH='对本次合成测试的精确业务授权'
 RULES={'timeInterval':5,'earliestResvTime':5760,'latestResvTime':0,'cancelTime':20,'minResvTime':30,
        'maxResvTime':240,'limit':0}
-SEAT_AV={'items':[{'seat_id':'301','name':'N001','free':True}],'resource':{'path':['合成馆','A区']},
+SEAT_AV={'items':[{'seat_id':'301','name':'N001','area_id':'45','free':True,'state':'FREE',
+                   'state_mapping':'MAPPED','source_status_digest':'synthetic-digest','platform_status':1}],
+         'free_count':1,'slot_free_count':1,'unknown_seat_count':0,'area_capacity':300,
+         'capacity_scope':'AREA_TOTAL_SEATS_NOT_SLOT','date':DAY,'start_time':'09:00','end_time':'11:00',
+         'complete':True,'resource':{'area_id':'45','path':['合成馆','A区'],'capacity':300},
+         'url':s.SEAT+'/web/area','warnings':[],
          'segment_id':'123','official_page_url':s.SEAT+'/web/area?area=45','rules':['一次预约一个座位']}
 MAP={'seat':[{'id':'301','control':'301','area':'45','name':'N001','status':1}],
      'sameName':1,'date':DAY,'start':'09:00','end':'11:00','segment':'123','area':'45','authenticated':True,'restricted':False}
@@ -97,11 +102,14 @@ def world(monkeypatch,tmp_path):
 
 def test_separate_contracts_and_flags(world,monkeypatch):
     ops={x['operation']:x for x in describe('library')['actions']}
-    assert set(ops)==set(c.INPUTS) and all(x['enabled'] for x in ops.values())
+    assert set(ops)==set(c.INPUTS)|set(c.RENEWAL_INPUTS)
     assert 'members' not in ops[c.CREATE_SEAT]['parameters_schema']['properties']
     assert ops[c.CREATE_ROOM]['parameters_schema']['properties']['members']['type']=='array'
+    assert ops[c.RENEW_LOAN]['enabled'] is False
+    assert ops[c.RENEW_LOAN]['reason']=='ADAPTER_REQUIRED'
+    assert ops[c.RENEW_LOAN]['reconciliation']=='OWN_LOAN_SAME_RECORD_AND_NEW_DUE_AT'
     monkeypatch.setenv('THU_SPORTS_WRITE','0')
-    assert all(x['enabled'] for x in describe('library')['actions'])
+    assert all(x['enabled'] for x in describe('library')['actions'] if x['operation']!=c.RENEW_LOAN)
     monkeypatch.setenv('THU_LIBRARY_WRITE','0')
     assert not any(x['enabled'] for x in describe('library')['actions'])
     assert any(x['operation']=='reservations' for x in describe('library')['operations'])
@@ -342,3 +350,70 @@ def test_nested_directory_entry_preserves_full_location_for_record_readback():
     assert len(s.area_rows({'seatinfo':rows},{'1','2'}))==2
     all_rows=s.area_rows({'seatinfo':rows},{'1','2'},True)
     assert all_rows[-1]['path']==['馆','层','区'] and not all_rows[-1]['currently_enabled']
+
+
+def test_seat_map_control_change_rejects_the_old_plan_without_dispatching(world):
+    p=world.engine.prepare('library',c.CREATE_SEAT,SEAT)
+    assert p['preview']['precheck']['availability_state']=='FREE'
+    # The platform renumbers the map control while keeping the numeric id.
+    world.map['seat'][0]['control']='999'
+    assert world.engine.execute(p['plan_id'],AUTH)['status']=='FAILED' and world.sent==0
+
+
+def test_seat_unknown_state_needs_the_official_map_and_never_dispatches(world):
+    world.seat['items'][0].update(free=None,state='UNKNOWN',state_mapping='UNMAPPED')
+    world.seat['unknown_seat_count']=1
+    p=world.engine.prepare('library',c.CREATE_SEAT,SEAT)
+    assert 'OFFICIAL_SEAT_SELECTION' in p['preview']['handoff']
+    assert p['preview']['precheck']['availability_state']=='UNKNOWN'
+    assert world.engine.execute(p['plan_id'],AUTH)['status']=='AWAITING_OFFICIAL' and world.sent==0
+
+
+def test_room_rule_gap_hands_off_a_duration_recheck(world):
+    world.room['interval_state']='RULE_UNVERIFIED'
+    p=world.engine.prepare('library',c.CREATE_ROOM,ROOM)
+    assert 'CONFIRM_ROOM_DURATION_RULE' in p['preview']['handoff']
+    assert p['preview']['precheck']['availability_state']=='RULE_UNVERIFIED'
+    assert world.engine.execute(p['plan_id'],AUTH)['status']=='AWAITING_OFFICIAL' and world.sent==0
+
+
+def test_room_cancel_reads_current_rules_without_a_selected_booking_window(world):
+    world.room_rows=[deepcopy(ROOM_ROW)]
+    world.room['interval_state']='NOT_SELECTED'
+    plan=world.engine.prepare('library',c.CANCEL,{'system':'room','date':DAY,'record_id':'77'})
+    assert plan['status']=='PREPARED' and world.sent==0
+    assert '20' in plan['preview']['cancel_rule']
+
+
+@pytest.mark.parametrize('case,code',[('seat_missing','SEAT_OWN_RECORD_NOT_FOUND'),
+    ('room_missing','ROOM_OWN_RECORD_NOT_FOUND'),('applicant','ROOM_APPLICANT_MISMATCH')])
+def test_cancel_rejects_records_outside_the_current_account(world,case,code):
+    if case=='seat_missing':
+        world.room_rows=[deepcopy(ROOM_ROW)]
+        args={'system':'seat','date':DAY,'record_id':'11'}
+    elif case=='room_missing':
+        world.seat_rows=[deepcopy(SEAT_ROW)]
+        args={'system':'room','date':DAY,'record_id':'77'}
+    else:
+        world.room_rows=[{**deepcopy(ROOM_ROW),'appAccNo':99}]
+        args={'system':'room','date':DAY,'record_id':'77'}
+    with pytest.raises(CampusError,match=code):
+        world.engine.prepare('library',c.CANCEL,args)
+    assert world.sent==0
+
+
+def test_cancel_system_mismatch_does_not_fall_through_to_the_other_system(world):
+    world.seat_rows=[deepcopy(SEAT_ROW)]
+    world.room_rows=[]
+    with pytest.raises(CampusError,match='ROOM_OWN_RECORD_NOT_FOUND'):
+        world.engine.prepare('library',c.CANCEL,{'system':'room','date':DAY,'record_id':'11'})
+    assert world.sent==0
+
+
+def test_empty_cancel_list_without_receipt_stays_unknown(world):
+    world.seat_rows=[deepcopy(SEAT_ROW)]
+    plan=world.engine.prepare('library',c.CANCEL,{'system':'seat','date':DAY,'record_id':'11'})
+    world.lost=True
+    world.after=lambda:world.seat_rows.clear()
+    assert world.engine.execute(plan['plan_id'],AUTH)['status']=='UNKNOWN' and world.sent==1
+    assert world.make().result(plan['plan_id'])['status']=='UNKNOWN' and world.sent==1
