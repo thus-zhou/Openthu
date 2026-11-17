@@ -9,7 +9,8 @@
   "delivery_commit": "aa06b2e",
   "record_commit": "the commit containing this record file",
   "branch": "hermes/4.3",
-  "worktree": "/home/ubuntu/projects/Openthu/.local/worktrees/4.3",
+  "worktree": "~/projects/Openthu/.local/worktrees/4.3",
+  "worktree_note": "Home-relative path; the host absolute path is intentionally not committed under the repository privacy rule.",
   "version_pr": null,
   "batch_state": "module implemented and module-tested; batch 4 pending integration and acceptance",
   "paths": [
