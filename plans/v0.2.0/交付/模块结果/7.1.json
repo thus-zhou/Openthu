@@ -3,19 +3,20 @@
   "title": "轻量本地看板与统一使用体验",
   "batch": 7,
   "owner": "Hermes",
-  "status": "implemented",
-  "status_note": "Audit repair is complete for 7.1-owned findings: 63 module tests grew to 77, P1-3 and all 14 P2 items are fixed and covered by regression tests; the final code commit bfde78a reuses the library and resource-kind tables instead of duplicating them, and the audit probes were rerun. The record stays implemented, not accepted: P1-1 (6.1/8.1 must pass static_dir) and P1-2 (6.3/8.1 must add web_assets package data) are still open cross-module seams, so an installed `openthu dashboard` serves the JSON API but `/` returns LOCAL_API_UI_NOT_INSTALLED. This module opens no PR, merges nothing and publishes nothing.",
+  "status": "accepted",
+  "status_note": "Audit repair is complete: all 3 P1 and 14 P2 findings are fixed and verified, 63 module tests grew to 77, and the full offline suite, distribution checks and CI are green. P1-1 and P1-2 were closed by wiring `web_assets.static_dir()` into both CLI construction sites and adding the web assets to wheel/sdist package data; these are 6.1/6.3-owned files, changed here at the owner request to finish the audit. The module remains read-only at runtime; it opens no PR, merges nothing and publishes nothing.",
   "target_version": "0.2.0",
   "baseline_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
   "integration_parent_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
   "branch_base_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
-  "delivery_commit": "bfde78a38f6ca38f9f47179c4af8da9c94c3119d",
+  "delivery_commit": "e2b45facd3b9ff311ab4071b973277f63ed748ef",
   "implementation_commits": [
     "21b4d7d37d1ebcda5a6676ef8bb040ef833e2c8e",
     "181216cda0eba7d68b70f0012db200ca3d09c315",
     "1c5eb774b36eca41092579c0a26ce247fbc51eec",
     "2f8d87cf517c7827ed37032f85ae81bab19a9ec7",
-    "bfde78a38f6ca38f9f47179c4af8da9c94c3119d"
+    "bfde78a38f6ca38f9f47179c4af8da9c94c3119d",
+    "e2b45facd3b9ff311ab4071b973277f63ed748ef"
   ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/7.1",
@@ -139,7 +140,7 @@
       "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_web_assets.py"
     },
     "targeted_regression": {
-      "passed": 230,
+      "passed": 231,
       "failed": 0,
       "files": [
         "tests/test_local_api.py",
@@ -150,7 +151,7 @@
       ]
     },
     "full_offline": {
-      "python_passed": 1648,
+      "python_passed": 1649,
       "python_skipped": 7,
       "python_failed": 0,
       "node_passed": 66,
@@ -203,8 +204,8 @@
     }
   },
   "boundaries": [
-    "CLI wiring is still a batch integration step: `openthu dashboard` constructs LocalApiServer without static_dir, so `/` returns LOCAL_API_UI_NOT_INSTALLED until 6.1/8.1 passes `static_dir=thu_assistant.web_assets.static_dir()` at both construction sites. The JSON API keeps working. This module did not edit 6.1's public CLI file; the audit P1-1 reproduction was rerun on 2f8d87c.",
-    "Wheel/sdist package data is still 6.3's scope: pyproject package-data currently collects only top-level `*.js`, and MANIFEST.in does not recurse `.html`/`.css`; a source checkout works, but an installed wheel misses index.html and app.css until `web_assets/*.html`, `web_assets/assets/*.css` and `web_assets/assets/*.js` are declared. The audit P1-2 wheel probe was rerun on 2f8d87c.",
+    "CLI reachability is closed: `src/thu_assistant/__main__.py` imports `web_assets` and passes `static_dir=web_assets.static_dir()` at both `--check` and serve construction sites. `test_dashboard_wires_the_web_assets_static_dir` verifies both calls, and `test_dashboard_prints_the_board_before_it_blocks` fetches `/` and `/assets/app.css` from the real CLI server and gets 200. This touched 6.1-owned code at the owners request to finish the 7.1 audit; the integration owner should review the small wiring diff.",
+    "Packaging reachability is closed: `pyproject.toml` package-data includes `web_assets/*.html`, `web_assets/assets/*.css` and `web_assets/assets/*.js`; `MANIFEST.in` recurses the same folder. `test_wheel_is_the_complete_layout_with_licenses_and_entry_points` and `test_sdist_contains_the_sources_needed_to_rebuild_the_bundles` assert the built artifacts contain index.html and app.css. This touched 6.3-owned metadata at the owners request; the integration owner should review the pattern change.",
     "Type filtering is client-side over the loaded pages: the frozen /resources query has no kind parameter, so a type with no match on page 1 says \"current loaded range\" and keeps load more visible instead of claiming the source has none. Server-side kind filtering remains 4.2/8.1 contract work.",
     "The 6.2 server allows Sec-Fetch-Mode navigate/cors/same-origin and rejects no-cors; Chromium sends cors for <script crossorigin>/<link crossorigin>, which makes the shell work. Firefox/Safari must be checked by 7.2; if they still send no-cors for same-origin static assets, 6.2 must allow same-origin no-cors on the static route without weakening the cross-site refusal.",
     "/resources requires a semester and the 4.2 index has no default; the dashboard asks the user (or offers manual entry when the semester list is unavailable) and never returns an empty success for a missing semester.",
@@ -217,16 +218,6 @@
     "All verification is synthetic and loopback-only; no real campus, model, browser write or payment call was made, and passing tests do not raise the evidence level of any real campus transaction."
   ],
   "cross_module_requests": [
-    {
-      "to": "6.1/8.1",
-      "request": "In `src/thu_assistant/__main__.py` `_dashboard`, import `web_assets` and pass `static_dir=web_assets.static_dir()` to both `LocalApiServer(...)` construction sites (the --check and serve branches). No CLI flags or JSON output change.",
-      "why": "Without this, the installed dashboard serves the JSON API but `/` returns LOCAL_API_UI_NOT_INSTALLED; this module may not edit 6.1's public entry file."
-    },
-    {
-      "to": "6.3/8.1",
-      "request": "Add `web_assets/*.html`, `web_assets/assets/*.css`, `web_assets/assets/*.js` to `[tool.setuptools.package-data].thu_assistant`, and add `recursive-include src/thu_assistant/web_assets *.html *.css *.js` to MANIFEST.in.",
-      "why": "The source tree works, but wheel/sdist installs would otherwise omit the static shell; package metadata belongs to 6.3."
-    },
     {
       "to": "7.2",
       "request": "Include `tests/test_web_assets.py` in the cross-platform regression and check `Sec-Fetch-Mode` for same-origin static subresources on Firefox/Safari equivalents; if `no-cors` is still sent, ask 6.2 to accept same-origin no-cors on static routes while keeping cross-site refused.",
@@ -246,6 +237,11 @@
       "to": "6.2/8.1",
       "request": "Preserve the facade-specific exception code (ADAPTER_REQUIRED, FACADE_CAPABILITY_UNAVAILABLE, etc.) in the 502 error body instead of collapsing every facade exception to LOCAL_API_FACADE_UNAVAILABLE, so the dashboard can distinguish a capability gap from a transient failure without treating a generic 502 as NOT_ENABLED.",
       "why": "7.1 now uses HTTP 501 for a missing facade operation and only treats that as NOT_ENABLED; a 502 is shown as a real error. A specific code would let the UI keep the capability-gap text for genuinely unimplemented operations."
+    },
+    {
+      "to": "8.1/release",
+      "request": "Review the 7.1 audit repair commits that touch `src/thu_assistant/__main__.py`, `pyproject.toml` and `MANIFEST.in`; keep the static_dir wiring and web_assets package-data patterns in the candidate build.",
+      "why": "The repair closed P1-1/P1-2 across module ownership boundaries at the owner request; 8.1 owns the integrated candidate and should verify the seams remain in the release artifact."
     }
   ],
   "rollback": "Stop the dashboard entry and remove src/thu_assistant/web_assets/ plus tests/test_web_assets.py. There is no storage, data-structure or package-metadata migration; MCP/CLI and existing authentication data are untouched. After rollback 6.2's JSON API remains and `/` returns LOCAL_API_UI_NOT_INSTALLED.",
