@@ -585,6 +585,22 @@ def installed_wheel(candidate):
     return candidate["module"].install_check(wheel)
 
 
+def test_release_manifest_lists_each_runtime_resource_with_its_hash(candidate):
+    release = candidate["release"]
+    ids = {row["id"] for row in release["resources"]}
+    assert ids == set(manifest()["resource_map"])
+    assert release["bundled_files"] > len(ids)
+    import zipfile
+
+    wheel = next(candidate["dist"].glob("*.whl"))
+    with zipfile.ZipFile(wheel) as archive:
+        for row in release["resources"]:
+            import hashlib
+
+            assert hashlib.sha256(archive.read(row["install"])).hexdigest() == row["sha256"]
+            assert row["bytes"] > 0
+
+
 def test_wheel_installs_outside_the_repository_without_source_fallback(installed_wheel):
     report = installed_wheel
     assert report["version"] == declared_version()

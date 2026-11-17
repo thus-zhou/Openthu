@@ -275,6 +275,32 @@ def normalize_sdist(path: Path, *, epoch: int) -> None:
     path.write_bytes(buffer.getvalue())
 
 
+def wheel_resource_records(path: Path) -> tuple[list[dict], int]:
+    """Logical resource name, install location and hash, read from the wheel."""
+    with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
+        layout_name = "thu_assistant/_bundled/layout.json"
+        if layout_name not in names:
+            raise ReleaseError("RELEASE_WHEEL_LAYOUT_MISSING", layout_name)
+        layout = json.loads(archive.read(layout_name))
+        rows = []
+        for resource_id, relative in sorted(layout.get("resources", {}).items()):
+            member = "thu_assistant/_bundled/" + relative
+            if member not in names:
+                raise ReleaseError("RELEASE_WHEEL_RESOURCE_MISSING", f"{resource_id}: {relative}")
+            data = archive.read(member)
+            rows.append(
+                {
+                    "id": resource_id,
+                    "install": member,
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "bytes": len(data),
+                }
+            )
+        bundled = sum(1 for name in names if name.startswith("thu_assistant/_bundled/"))
+    return rows, bundled
+
+
 def artifact_record(path: Path) -> dict:
     data = path.read_bytes()
     return {
@@ -323,11 +349,16 @@ def build_candidate(dist: Path = DIST) -> dict:
     artifacts = sorted(path for path in dist.iterdir() if path.is_file())
     artifacts = [path for path in artifacts if path.name not in {RELEASE_MANIFEST, "SHA256SUMS"}]
     records = [artifact_record(path) for path in artifacts]
-    previous = next((row for row in records if row["name"].startswith("Openthu-") and row["name"].endswith("-source.zip")), None)
+    wheel = next((path for path in artifacts if path.suffix == ".whl"), None)
+    resources, bundled_files = wheel_resource_records(wheel) if wheel else ([], 0)
+    source_archive = next(
+        (row for row in records if row["name"].startswith("Openthu-") and row["name"].endswith("-source.zip")),
+        None,
+    )
     source_summary = {
         "files": sum(1 for name in files if not name.startswith(".git")),
         "bytes": sum(len(data) for data in files.values()),
-        "archive_sha256": previous["sha256"] if previous else None,
+        "archive_sha256": source_archive["sha256"] if source_archive else None,
     }
     release = {
         "schema_version": "openthu-release-manifest-v1",
@@ -339,6 +370,8 @@ def build_candidate(dist: Path = DIST) -> dict:
         "node_requires": manifest["product"]["node_requires"],
         "artifact_files": records,
         "source": source_summary,
+        "resources": resources,
+        "bundled_files": bundled_files,
         "dependencies": manifest["dependencies"],
         "licenses": manifest["licenses"],
         "release_status": "candidate-not-released",
@@ -397,6 +430,12 @@ def verify_wheel(path: Path, release: dict, manifest: dict) -> dict:
             member = "thu_assistant/_bundled/" + relative
             if member not in names:
                 raise ReleaseError("RELEASE_WHEEL_RESOURCE_MISSING", f"{resource}: {relative}")
+        for record in release.get("resources", []):
+            member = record.get("install", "")
+            if member not in names:
+                raise ReleaseError("RELEASE_WHEEL_RESOURCE_MISSING", record.get("id", ""))
+            if hashlib.sha256(archive.read(member)).hexdigest() != record.get("sha256"):
+                raise ReleaseError("RELEASE_RESOURCE_HASH_MISMATCH", record.get("id", ""))
         for license_file in manifest["license_files"]:
             if not any(
                 name.endswith("/" + PurePosixPath(license_file).name) for name in names
