@@ -301,7 +301,9 @@ def test_a_wheel_install_resolves_bundled_resources_without_a_checkout(tmp_path)
             "source.madmodel_proxy": "vendor/madmodel-proxy/package.json",
         },
     )
-    helper = paths.resolve_resource("source.windows_auth", package_root_value=package)
+    helper = paths.resolve_resource(
+        "source.windows_auth", package_root_value=package, source_root_value=None
+    )
     assert helper.available
     assert helper.location == "bundled"
     assert helper.path.parent.name == "windows"
@@ -312,7 +314,10 @@ def test_a_wheel_install_resolves_bundled_resources_without_a_checkout(tmp_path)
     assert vendor.path.parent.name == "madmodel-proxy"
     rows = paths.resource_manifest(package_root_value=package, source_root_value=None)
     assert all("path" not in row for row in rows)
-    assert {row["location"] for row in rows if row["scope"] == "source"} == {"bundled"}
+    locations = {row["id"]: row["location"] for row in rows if row["scope"] == "source"}
+    assert locations["source.windows_auth"] == "bundled"
+    assert locations["source.madmodel_proxy"] == "bundled"
+    assert locations["source.tests"] is None
 
 
 def test_a_live_checkout_wins_over_a_stale_bundled_copy(tmp_path):
@@ -352,7 +357,7 @@ def test_a_layout_path_escape_is_refused(tmp_path):
 # --- candidate build -------------------------------------------------------
 
 DECOYS = {
-    ".local/synthetic-master.key": b"-----BEGIN PRIVATE KEY-----\nsynthetic\n",
+    ".local/synthetic-master.key": b"SYNTHETIC-NOT-A-KEY\n",
     "cache/session.json": b'{"token": "synthetic"}',
     "logs/synthetic.log": b"synthetic log line\n",
     "downloads/synthetic.pdf": b"%PDF-1.4 synthetic\n",
@@ -600,13 +605,15 @@ def diagnostics_case(tmp_path, **overrides):
 
 
 def test_missing_node_names_the_capabilities_it_blocks(tmp_path):
-    module, root, kwargs = diagnostics_case(tmp_path)
+    module, root, kwargs = diagnostics_case(tmp_path, platform_name="nt")
     kwargs["which"] = lambda name: None if name in ("node", "npm", "npm.cmd") else "/synthetic/" + name
     report = module.collect(**kwargs)
     rows = {row["id"]: row for row in report["checks"]}
     assert rows["node"]["status"] == "fail"
     assert "校园网关" in rows["node"]["reason"]
-    assert report["capabilities"]["browser"] == "unavailable"
+    assert rows["windows-auth"]["status"] == "fail"
+    assert "Node.js 不可用" in rows["windows-auth"]["reason"]
+    assert report["capabilities"]["development"] == "unavailable"
     assert report["capabilities"]["production-auth"] == "unavailable"
     assert report["capabilities"]["readonly"] == "available"
     text = module.format_report(report)
@@ -651,26 +658,45 @@ def test_release_layout_mismatch_blocks_start(tmp_path):
 
 
 def test_a_consistent_installed_layout_is_reported_as_complete(tmp_path):
-    module, root, kwargs = diagnostics_case(tmp_path)
-    package = root / "src" / "thu_assistant"
-    (package / "_bundled" / "runtime").mkdir(parents=True)
-    (package / "_bundled" / "runtime" / "access.js").write_text("", encoding="utf-8")
-    (package / "_bundled" / "layout.json").write_text(
+    import test_dev_diagnostics as helpers
+
+    module = diagnostics_module()
+    package = tmp_path / "site-packages" / "thu_assistant"
+    package.mkdir(parents=True)
+    for name in ("gateway.js", "services.json", "security.js", "cookies.js"):
+        (package / name).write_text("", encoding="utf-8")
+    (package / "package-lock.json").write_text(
+        json.dumps({"packages": {"node_modules/tough-cookie": {"version": "6.0.0"}}}),
+        encoding="utf-8",
+    )
+    installed = package / "node_modules" / "tough-cookie"
+    installed.mkdir(parents=True)
+    (installed / "package.json").write_text('{"version": "6.0.0"}', encoding="utf-8")
+    bundled = package / "_bundled"
+    (bundled / "runtime" / "windows").mkdir(parents=True)
+    (bundled / "runtime" / "windows" / "access.js").write_text("", encoding="utf-8")
+    (bundled / "vendor" / "madmodel-proxy").mkdir(parents=True)
+    (bundled / "vendor" / "madmodel-proxy" / "package.json").write_text("{}\n", encoding="utf-8")
+    (bundled / "layout.json").write_text(
         json.dumps(
             {
                 "product_version": declared_version(),
                 "resources": {
-                    "source.windows_auth": "runtime/access.js",
-                    "source.madmodel_proxy": "runtime/access.js",
+                    "source.windows_auth": "runtime/windows/access.js",
+                    "source.madmodel_proxy": "vendor/madmodel-proxy/package.json",
                 },
             }
         ),
         encoding="utf-8",
     )
+    kwargs = helpers.healthy_kwargs(package)
+    kwargs["root"] = package
+    kwargs["config"] = helpers.synthetic_config(package)
     report = module.collect(**kwargs)
     rows = {row["id"]: row for row in report["checks"]}
     assert rows["release-layout"]["status"] == "pass"
     assert rows["source-package"]["status"] == "pass"
     assert "不依赖源码目录" in rows["source-package"]["reason"]
+    assert rows["windows-auth"]["status"] == "not_applicable"
 
 

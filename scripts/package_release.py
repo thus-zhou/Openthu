@@ -509,9 +509,20 @@ print(json.dumps({{
 """
 
 
+def _install_environment() -> dict[str, str]:
+    """Child environment without the ambient import path of the checkout."""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "VIRTUAL_ENV"}
+    }
+    return env
+
+
 def install_check(wheel: Path, *, python: str | None = None) -> dict:
     python = python or sys.executable
     required = ["source.windows_auth", "source.madmodel_proxy"]
+    env = _install_environment()
     with tempfile.TemporaryDirectory(prefix="openthu-install-") as tmp:
         root = Path(tmp)
         environment = root / "venv"
@@ -520,6 +531,7 @@ def install_check(wheel: Path, *, python: str | None = None) -> dict:
             capture_output=True,
             text=True,
             check=False,
+            env=env,
         )
         if created.returncode:
             raise ReleaseError("INSTALL_VENV_FAILED", created.stderr.strip()[:200])
@@ -532,12 +544,14 @@ def install_check(wheel: Path, *, python: str | None = None) -> dict:
                 "install",
                 "--no-index",
                 "--no-deps",
+                "--force-reinstall",
                 "--disable-pip-version-check",
                 str(wheel),
             ],
             capture_output=True,
             text=True,
             check=False,
+            env=env,
         )
         if installed.returncode:
             raise ReleaseError("INSTALL_PIP_FAILED", installed.stderr.strip()[:300])
@@ -549,6 +563,7 @@ def install_check(wheel: Path, *, python: str | None = None) -> dict:
             capture_output=True,
             text=True,
             check=False,
+            env=env,
         )
         if probe.returncode:
             raise ReleaseError("INSTALL_PROBE_FAILED", probe.stderr.strip()[:300])
@@ -579,6 +594,7 @@ def install_check(wheel: Path, *, python: str | None = None) -> dict:
             capture_output=True,
             text=True,
             check=False,
+            env=env,
         )
         if smoke.returncode:
             raise ReleaseError("INSTALL_MCP_FAILED", smoke.stderr.strip()[:300])
