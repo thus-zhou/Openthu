@@ -48,7 +48,9 @@ class BusinessFacade(Protocol):
       ``source.operation`` equal the requested ones (``todos`` uses
       ``agenda``/``todos``, ``calendar`` uses ``agenda``/``calendar`` and
       ``resources`` uses ``resources``/``resources``), so a mis-routed adapter
-      is rejected instead of being shown on the wrong card.
+      is rejected instead of being shown on the wrong card.  ``resources`` also
+      receives the 4.2 index ``semester``: that index is per semester and cannot
+      derive a default, so the dashboard passes the user's choice through.
     """
 
     def health(self, *, service_id: str | None = None,
@@ -79,7 +81,8 @@ class BusinessFacade(Protocol):
         ...
 
     def resources(self, *, query: str | None = None, course_id: str | None = None,
-                  cursor: str | None = None, page_size: int = 50,
+                  semester: str | None = None, cursor: str | None = None,
+                  page_size: int = 50,
                   cancel: CancelToken | None = None) -> Mapping[str, Any]:
         ...
 
@@ -172,7 +175,8 @@ class UnavailableFacade:
         return self._gap('agenda', 'calendar')
 
     def resources(self, *, query: str | None = None, course_id: str | None = None,
-                 cursor: str | None = None, page_size: int = 50,
+                  semester: str | None = None, cursor: str | None = None,
+                  page_size: int = 50,
                   cancel: CancelToken | None = None) -> Mapping[str, Any]:
         return self._gap('resources', 'resources')
 

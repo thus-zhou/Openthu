@@ -99,16 +99,41 @@ def test_query_rejects_malformed_and_non_object_parameters(tmp_path):
     assert payload(nothing)['error']['code'] == 'INVALID_ARGUMENT_VALUE'
 
 
-def test_dashboard_refuses_a_public_bind_and_reports_the_missing_provider(tmp_path):
+def test_dashboard_refuses_a_public_bind_and_checks_the_local_api(tmp_path):
     public = cli(tmp_path, 'dashboard', '--host', '0.0.0.0')
     assert public.returncode == 1
     assert payload(public)['error']['code'] == 'INVALID_ARGUMENT_VALUE'
 
-    missing = cli(tmp_path, 'dashboard')
-    assert missing.returncode == 1
-    error = payload(missing)['error']
-    assert error['code'] == 'LOCAL_DASHBOARD_UNAVAILABLE'
-    assert error['category'] == 'NOT_IMPLEMENTED'
+    # 6.2 owns the provider, so ``--check`` starts one loopback instance,
+    # reports it and stops; the blocking form is exercised by the batch seam
+    # test with a real client and a terminated process.
+    checked = cli(tmp_path, 'dashboard', '--check')
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    value = payload(checked)
+    assert value['ok'] is True and value['command'] == 'dashboard'
+    result = value['result']
+    assert result['status'] == 'LISTENING' and result['mode'] == 'CHECK'
+    assert result['url'] == 'http://127.0.0.1:%d' % result['port']
+    assert result['port'] > 0 and len(result['instance_id']) == 32
+    assert str(tmp_path) not in checked.stdout
+
+
+def test_dashboard_reports_a_missing_provider(monkeypatch):
+    """The 6.1 gap code still covers a checkout without the 6.2 module."""
+    from thu_assistant import __main__ as cli_main
+
+    def missing(name, *args, **kwargs):
+        raise ImportError(name)
+
+    monkeypatch.setattr(cli_main.importlib, 'import_module', missing)
+    args = cli_main._parser().parse_args(['dashboard', '--check'])
+
+    class Owner:
+        facade = object()
+
+    with pytest.raises(cli_main.CampusError) as info:
+        cli_main._dashboard(args, Owner())
+    assert info.value.code == 'LOCAL_DASHBOARD_UNAVAILABLE'
 
 
 def test_cli_output_never_carries_tracebacks_paths_or_secrets(tmp_path):

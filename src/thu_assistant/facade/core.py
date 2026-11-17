@@ -19,9 +19,10 @@ school operation.
 from __future__ import annotations
 
 import os
+import re
 import time
 from .. import source_state
-from ..bridge import CampusError
+from ..bridge import CampusError, request_control
 from . import registry as reg
 from .errors import FacadeError, gap
 from .requests import RequestRegistry, current_id
@@ -56,7 +57,9 @@ class BusinessFacade:
         self.env = dict(os.environ if env is None else env)
         self.clock = clock or time.time
         self.requests = RequestRegistry(clock=self.clock)
-        self.resources = resources
+        # The 4.2 provider is kept apart from the ``resources`` read method
+        # below: the 6.2 dashboard protocol calls ``facade.resources(...)``.
+        self.resource_provider = resources
         self.media = media
         self.academics = academics
         self._submissions = submissions
@@ -130,7 +133,7 @@ class BusinessFacade:
             queries=getattr(self.owner, 'queries', None),
             todos=getattr(self.owner, 'todos', None),
             submissions=self.submissions(),
-            resources=self.resources,
+            resources=self.resource_provider,
             media=self.media,
             academics=self.academics,
         )
@@ -316,6 +319,159 @@ class BusinessFacade:
                 'note': '健康状态来自本地能力登记；不代表已登录、来源可读或业务可用。',
                 'facade': {'version': VERSION, 'request_id': current_id(), 'kind': 'READ'}}
 
+    # -- local dashboard consumer protocol (batch-6 seam) ------------------
+    def services(self, *, query=None, category=None, cancel=None) -> dict:
+        """The static/cached service directory as a local result envelope.
+
+        6.2's ``/services`` route consumes this shape; the directory listing is
+        a local read (no campus request, no authentication probe).
+        """
+        from .. import catalog
+        try:
+            listing = catalog.list_services(query=query, category=category)
+        except Exception as error:
+            return self._local_failure('local', 'services', error)
+        rows = []
+        for row in listing.get('services') or ():
+            if not isinstance(row, dict):
+                continue
+            kept = {key: row[key] for key in ('id', 'name', 'category', 'description')
+                    if isinstance(row.get(key), str)}
+            if kept.get('id'):
+                rows.append(kept)
+        complete = bool(listing.get('complete'))
+        status = 'OK' if rows else ('EMPTY' if complete else 'PARTIAL')
+        level = listing.get('verification_level')
+        return self._local_read(
+            'local', 'services', rows, status=status,
+            checked_at=listing.get('checked_at'),
+            verification_level=level if level in source_state.VERIFICATION_LEVELS else 'NONE',
+            source_complete=bool(listing.get('source_complete')), complete=complete,
+            warnings=listing.get('warnings') or ())
+
+    def todos(self, *, start_date=None, end_date=None, cursor=None, page_size=50,
+              cancel=None) -> dict:
+        """Unified todo items for 6.2's ``/todos`` card (source ``agenda/todos``)."""
+        return self._agenda_rows('todos', start_date=start_date, end_date=end_date,
+                                 cancel=cancel)
+
+    def calendar(self, *, start_date=None, end_date=None, cursor=None, page_size=50,
+                 cancel=None) -> dict:
+        """Calendar events for 6.2's ``/calendar`` card (source ``agenda/calendar``)."""
+        return self._agenda_rows('calendar', start_date=start_date, end_date=end_date,
+                                 cancel=cancel)
+
+    def resources(self, *, query=None, course_id=None, semester=None, cursor=None,
+                  page_size=50, cancel=None) -> dict:
+        """One page of the local 4.2 resource index for 6.2's ``/resources`` card.
+
+        The 4.2 index is per semester and cannot derive a default, so a missing
+        ``semester`` is a refused input (never an empty success).  The envelope
+        names ``resources/resources`` so 6.2 can prove the card got its own
+        data instead of another route's.
+        """
+        if not isinstance(semester, str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,80}', semester):
+            refused = self._local_read('resources', 'resources', [], status='ERROR',
+                                       verification_level='NONE',
+                                       warnings=['SEMESTER_REQUIRED'])
+            refused['error'] = source_state.public_error('INVALID_ARGUMENT_VALUE')
+            return refused
+        parameters = {'semester': semester}
+        if isinstance(query, str) and query:
+            parameters['query'] = query
+        if isinstance(course_id, str) and course_id:
+            parameters['course_id'] = course_id
+        try:
+            envelope = self.query('local', 'resources', parameters,
+                                  cursor=cursor, page_size=page_size)
+        except Exception as error:
+            return self._local_failure('resources', 'resources', error)
+        envelope = dict(envelope)
+        envelope['source'] = {**(envelope.get('source') or {}),
+                              'service_id': 'resources', 'operation': 'resources'}
+        block = dict(envelope.get('facade') or {})
+        block.update(service_id='resources', operation='resources')
+        envelope['facade'] = block
+        return envelope
+
+    def _agenda_rows(self, operation: str, *, start_date=None, end_date=None,
+                     cancel=None) -> dict:
+        entry = self.capability(_LOCAL, 'agenda')
+        if entry is None or not entry.executable:
+            return self._local_failure('agenda', operation,
+                                       gap('FACADE_CAPABILITY_UNAVAILABLE', entry or {
+                                           'service_id': _LOCAL, 'operation': 'agenda',
+                                           'state': 'MISSING'}))
+        todos = getattr(self.owner, 'todos', None)
+        if todos is None:
+            return self._local_failure('agenda', operation,
+                                       CampusError('AGENDA_PROVIDER_UNAVAILABLE'))
+        try:
+            # 5.4 polls the gateway control context between sources; binding the
+            # 6.2 cancel token there lets a stopped dashboard end the read
+            # instead of finishing it for a client that is gone.
+            with request_control(_cancel_probe(cancel)):
+                built = todos.agenda(start_date=start_date, end_date=end_date)
+        except Exception as error:
+            return self._local_failure('agenda', operation, error)
+        rows = built.get('items' if operation == 'todos' else 'calendar_events') or []
+        keys = ('window', 'as_of', 'sources_status', 'scope_notes', 'selection', 'timezone',
+                'pagination', 'background_polling', 'message_delivery', 'delivery_state')
+        if operation == 'calendar':
+            keys += ('views', 'conflicts', 'undated', 'excluded')
+        extra = {key: built[key] for key in keys if key in built}
+        status = built.get('status')
+        envelope = self._local_read(
+            'agenda', operation, rows,
+            status=status if status in source_state.ENVELOPE_STATUSES else 'UNKNOWN',
+            checked_at=built.get('checked_at'), verification_level='LOCAL_EXECUTION_STATE',
+            source_complete=bool(built.get('source_complete')),
+            complete=bool(built.get('complete')), warnings=built.get('warnings') or (),
+            extra=extra)
+        version = built.get('adapter_version')
+        if isinstance(version, str) and 0 < len(version) <= 80:
+            envelope['source']['adapter_version'] = version
+        return envelope
+
+    def _local_read(self, service_id: str, operation: str, items, *, status: str,
+                    checked_at=None, verification_level: str = 'LOCAL_EXECUTION_STATE',
+                    source_complete: bool = False, snapshot_complete: bool = True,
+                    complete: bool = False, warnings=(), extra: dict | None = None) -> dict:
+        envelope = {
+            'status': status,
+            'source': {'service_id': service_id, 'operation': operation,
+                       'adapter_version': VERSION, 'url': None},
+            'checked_at': source_state.normalize_timestamp(checked_at, source_state.now_iso()),
+            'verification_level': verification_level,
+            'source_complete': bool(source_complete),
+            'snapshot_complete': bool(snapshot_complete),
+            'complete': bool(complete),
+            'next_cursor': None,
+            'missing_pages': [],
+            'warnings': sorted({warning for warning in warnings
+                                if isinstance(warning, str) and 0 < len(warning) <= 200}),
+            'items': list(items),
+            'facade': {'version': VERSION, 'request_id': current_id(),
+                       'service_id': service_id, 'operation': operation, 'kind': 'READ',
+                       'service_domain': source_state.service_domain(service_id),
+                       'capability_state': 'AVAILABLE', 'probe': 'SOURCE_READ'},
+        }
+        if extra:
+            envelope.update(extra)
+        return envelope
+
+    @staticmethod
+    def _local_failure(service_id: str, operation: str, error) -> dict:
+        """A classified failure envelope; never a fake empty success."""
+        public = source_state.classify_error(error)
+        code = public.get('code')
+        status = code if code in source_state.ENVELOPE_STATUSES else 'ERROR'
+        envelope = BusinessFacade._local_read(
+            service_id, operation, [], status=status, verification_level='NONE',
+            warnings=[code if isinstance(code, str) else 'UNKNOWN'])
+        envelope['error'] = public
+        return envelope
+
     def prepare(self, service_id: str, operation: str, parameters: dict) -> dict:
         _reject_proxy_fields(parameters)
         entry = reg.require(self.capability(service_id, operation), write=True)
@@ -489,6 +645,23 @@ class BusinessFacade:
 
 
 _LOCAL = 'local'
+
+
+class _CancelProbe:
+    """Expose a 6.2 ``CancelToken`` through the ``is_set()`` shape 5.4 polls."""
+
+    __slots__ = ('_token',)
+
+    def __init__(self, token) -> None:
+        self._token = token
+
+    def is_set(self) -> bool:
+        return bool(getattr(self._token, 'cancelled', False))
+
+
+def _cancel_probe(cancel):
+    return _CancelProbe(cancel) if cancel is not None else None
+
 
 _METHOD_DOC = {
     'query': {'side_effect': 'NONE', 'authorization': 'NONE',

@@ -452,6 +452,10 @@ class LocalApiServer:
         for key in ('query', 'category'):
             if key in values:
                 values[key] = self._text_argument(values[key], 200)
+        if 'semester' in values:
+            semester = values['semester']
+            if not isinstance(semester, str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,80}', semester):
+                raise contract.LocalApiError('INVALID_ARGUMENT_VALUE', http_status=400)
         if 'course_id' in values:
             course_id = values['course_id']
             if not isinstance(course_id, str) or len(course_id) > 128 \
@@ -647,6 +651,8 @@ class LocalApiServer:
             else:
                 arguments['query'] = query.get('query')
                 arguments['course_id'] = query.get('course_id')
+                if route.name == 'resources':
+                    arguments['semester'] = query.get('semester')
             envelope = self._call(route.facade or route.name,
                                   request_id=request.request_id, **arguments)
             envelope = self._validate(envelope, service_id=service_id,

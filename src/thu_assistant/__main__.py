@@ -11,10 +11,10 @@ working.  New subcommands route through the business facade:
 ``agenda``     local agenda read, or an explicit local calendar export
 ``dashboard``  start the local read-only board when its provider is present
 
-``dashboard`` is a deliberate capability gap at this module's delivery: 6.2 owns
-``thu_assistant.local_api``.  The CLI looks for ``serve`` (or ``main``/``run``)
-and calls it with the frozen public parameters ``host``, ``port`` and
-``facade``; until that module is reconnected the command fails closed with
+6.2 owns ``thu_assistant.local_api``.  ``dashboard`` starts one instance, prints
+the single JSON object the CLI contract promises (status, URL, port, instance)
+and then serves until interrupted, so the user can actually open the board.
+``--check`` starts and stops one instance and exits.  A missing provider stays
 ``LOCAL_DASHBOARD_UNAVAILABLE`` instead of pretending the board started.
 """
 from __future__ import annotations
@@ -73,6 +73,8 @@ def _parser() -> argparse.ArgumentParser:
     dashboard = commands.add_parser('dashboard', help='启动本地只读看板（6.2 提供）')
     dashboard.add_argument('--host', default='127.0.0.1')
     dashboard.add_argument('--port', type=int, default=0)
+    dashboard.add_argument('--check', action='store_true',
+                           help='启动一次、打印监听信息后立即停止，不常驻')
     return parser
 
 
@@ -150,23 +152,54 @@ def _run(operation: str, args, assistant: CampusAssistant):
     raise CampusError('UNKNOWN_COMMAND')
 
 
+class _Emitted:
+    """Marker: the command already wrote its one JSON object."""
+
+    __slots__ = ()
+
+
+_EMITTED = _Emitted()
+
+
 def _dashboard(args, assistant: CampusAssistant):
     """Start the local board through its provider, or fail with the gap code."""
     if args.host not in ('127.0.0.1', '::1', 'localhost'):
         raise CampusError('INVALID_ARGUMENT_VALUE')
+    if type(args.port) is not int or not 0 <= args.port <= 65535:
+        raise CampusError('INVALID_ARGUMENT_RANGE')
     try:
         module = importlib.import_module('thu_assistant.local_api')
     except ImportError:
         raise CampusError('LOCAL_DASHBOARD_UNAVAILABLE') from None
-    for name in ('serve', 'run', 'main'):
-        serve = getattr(module, name, None)
-        if callable(serve):
-            return serve(host=args.host, port=args.port, facade=assistant.facade)
-    raise CampusError('LOCAL_DASHBOARD_UNAVAILABLE')
+    serve = getattr(module, 'serve', None)
+    server_type = getattr(module, 'LocalApiServer', None)
+    if not callable(serve) or not callable(server_type):
+        raise CampusError('LOCAL_DASHBOARD_UNAVAILABLE')
+    bind = '127.0.0.1' if args.host == 'localhost' else args.host
+    if args.check:
+        server = server_type(assistant.facade, bind=bind, port=args.port).start()
+        try:
+            return {'status': 'LISTENING', 'mode': 'CHECK', 'url': server.base_url,
+                    'port': server.port, 'instance_id': server.instance_id}
+        finally:
+            server.stop()
+    server = server_type(assistant.facade, bind=bind, port=args.port).start()
+    # The one JSON line goes out before the long-running loop: a user who starts
+    # the board needs the URL, and the CLI contract allows exactly one object.
+    _emit({'ok': True, 'command': args.command,
+           'result': {'status': 'LISTENING', 'mode': 'SERVE', 'url': server.base_url,
+                      'port': server.port, 'instance_id': server.instance_id}})
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.stop()
+    return _EMITTED
 
 
 def _emit(value: dict) -> None:
-    print(json.dumps(value, ensure_ascii=False, indent=2))
+    print(json.dumps(value, ensure_ascii=False, indent=2), flush=True)
 
 
 def main(argv=None):
@@ -178,6 +211,8 @@ def main(argv=None):
     try:
         assistant = CampusAssistant()
         result = _run(args.command, args, assistant)
+        if result is _EMITTED:
+            return 0
         _emit({'ok': True, 'command': args.command, 'result': result})
         return 0
     except SystemExit:

@@ -147,7 +147,8 @@ class FixtureFacade:
         value = sample_module.calendar_sample()
         return self._resolve('calendar', value, cancel)
 
-    def resources(self, *, query=None, course_id=None, cursor=None, page_size=50, cancel=None):
+    def resources(self, *, query=None, course_id=None, semester=None, cursor=None,
+                  page_size=50, cancel=None):
         value = sample_module.resources_sample()
         value['items'][0]['official_url'] = 'https://learn.tsinghua.edu.cn/course/1'
         value['items'][0]['review_url'] = 'https://evil.example/phish'

@@ -125,7 +125,7 @@ ROUTES: tuple[Route, ...] = (
     Route('calendar', '/calendar', re.compile(r'^/api/v1/calendar$'),
           ('start_date', 'end_date', 'page_size', 'cursor'), 'read', 'calendar'),
     Route('resources', '/resources', re.compile(r'^/api/v1/resources$'),
-          ('query', 'course_id', 'page_size', 'cursor'), 'read', 'resources'),
+          ('semester', 'query', 'course_id', 'page_size', 'cursor'), 'read', 'resources'),
 )
 
 # The only query-parameter extension over the frozen list.  Reported in
