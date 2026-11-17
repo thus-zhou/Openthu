@@ -244,11 +244,54 @@
         "5.3": "accepted",
         "5.4": "accepted"
       },
-      "status": "ready",
-      "integration_commit": null,
-      "accepted_at": null,
+      "status": "accepted",
+      "integration_commit": "ac99326d56b74bfbbd016738356261b5ee5dfc12",
+      "accepted_at": "2026-11-17",
       "entry_condition": "all batch 4 modules accepted and integrated",
-      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
+      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
+      "seam_commit": "ac99326d56b74bfbbd016738356261b5ee5dfc12",
+      "acceptance_record": "the commit containing this accepted record",
+      "ci_heads": [
+        "ac99326d56b74bfbbd016738356261b5ee5dfc12"
+      ],
+      "module_acceptance": {
+        "5.1": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "6788e1a",
+          "implementation_commit": "12146a8",
+          "evidence": "127 module tests and 341 related regression tests at 6788e1a; audit 5.1-audit P0=0/P1=7/P2=16 closed; renewal binds contract, Primo account and due instant and stays disabled until a verified contract exists; joint tree Linux 1267/7, Windows 1261/13, Node 66."
+        },
+        "5.2": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "53d5957",
+          "audit_fix_commit": "f0b2444",
+          "evidence": "55 module tests at f0b2444; audit 5.2-audit P1-1/P1-2 and P2-1..P2-6, P2-8..P2-18 fixed in scope; P2-7 (NOT_CREATED), authorization consumption and the browser service-worker hardening are recorded 4.4 handoffs; nine SPORTS_* codes registered."
+        },
+        "5.3": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "b49f86d",
+          "implementation_commit": "6eca3de",
+          "evidence": "98 module tests and 159 related regression tests at b49f86d; audit 5.3-audit P0=0/P1=4/P2=16 closed; production transport stays blocked with zero writes; 23 SUBMISSION_* codes registered and the write switch is off by default."
+        },
+        "5.4": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "90dcdb5",
+          "implementation_commit": "4172bce",
+          "evidence": "57 module tests and 203 related regression tests at 90dcdb5; audit 5.4-audit P0=0/P1=4/P2=12 closed; pure export, academic window filtering, full snapshot paging and monotonic SEQUENCE; 29 codes registered."
+        }
+      },
+      "checks": [
+        "plan validator ok: 24 modules, 9 batches",
+        "contract validator ok: 8 contracts + 1 compatibility baseline; 9/35/8 samples; 314 registered error codes",
+        "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures, 9/24 samples",
+        "scripts/dev.py check: 493 files, 0 findings, 29 MCP tools",
+        "Linux: Python 1267 passed/7 skipped/0 failed; Node 66 passed/0 failed",
+        "Windows: Python 1261 passed/13 skipped/0 failed; Node 66 passed/0 failed",
+        "tests/test_batch5_integration.py: 5 seam tests (code registry/classification, records/ownership/gate, learn switch isolation, renewal prechecks)",
+        "live campus/model/business calls: 0/0/0",
+        "GitHub Actions at ac99326: push run 44033470110 and pull_request run 44033475654; ubuntu-24.04 and windows-2025 both success"
+      ],
+      "gate_note": "5.1 accepted at 6788e1a; 5.2 at 53d5957 with audit fix f0b2444; 5.3 at b49f86d; 5.4 at 90dcdb5. The single batch-5 integration commit ac99326 carries X1-X4 (learn switch isolation, renewal reconciliation shape, batch-5 seam tests, ledger correction) and is the first fully green joint tree: push 44033470110 and PR 44033475654 are green on ubuntu-24.04 and windows-2025 with 493 files/0 findings and 1267/7 Linux, 1261/13 Windows, Node 66. Batch 6 is ready."
     },
     {
       "batch": 6,
@@ -263,7 +306,7 @@
         "6.2": "pending",
         "6.3": "pending"
       },
-      "status": "locked",
+      "status": "ready",
       "integration_commit": null,
       "accepted_at": null,
       "entry_condition": "all batch 5 modules accepted and integrated",
@@ -319,5 +362,5 @@
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     }
   ],
-  "gate_note": "Batches 1-4 accepted and reconnected. Batch 4 integration commit 4e07357 (seam commit 2cc1c05, X5 CI budget): 460 files/0 findings, 29 MCP tools, Linux Python 1005/7, Windows 1000/12, Node 66/0, zero live calls. Push 44013830566 and PR 44013836023 are green on both platforms. Batch 5 is ready."
+  "gate_note": "Batches 1-5 accepted and reconnected. Batch 5 integration commit ac99326 (X1-X4): 493 files/0 findings, 29 MCP tools, Linux Python 1267/7, Windows 1261/13, Node 66/0, zero live calls. Push 44033470110 and PR 44033475654 are green on both platforms. Batch 6 is ready."
 }
