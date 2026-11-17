@@ -112,6 +112,8 @@ def collect(
     }
     detail_reads = 0
     full_semester = course_id is None
+    truncated = False
+    details_incomplete = False
 
     try:
         courses = list(provider.list_courses(semester=semester))
@@ -125,6 +127,7 @@ def collect(
         courses = courses[: limits.max_courses_per_read]
         warnings.add("COURSE_LIMIT_REACHED")
         full_semester = False
+        truncated = True
     counts["courses"] = len(courses)
 
     for course in courses:
@@ -187,6 +190,7 @@ def collect(
             if include_notice_details and notice.get("attachment_hint"):
                 if detail_reads >= limits.max_detail_reads:
                     warnings.add("DETAIL_READ_LIMIT_REACHED")
+                    details_incomplete = True
                 else:
                     detail_reads += 1
                     try:
@@ -243,6 +247,7 @@ def collect(
                 continue
             if detail_reads >= limits.max_detail_reads:
                 warnings.add("DETAIL_READ_LIMIT_REACHED")
+                details_incomplete = True
                 break
             detail_reads += 1
             try:
@@ -307,7 +312,7 @@ def collect(
         "semester": semester,
         "course_id": course_id,
         "full_semester": full_semester,
-        "complete": not errors,
+        "complete": not errors and not truncated and not details_incomplete,
         "source_errors": sorted(set(errors)),
         "warnings": sorted(warnings),
         "counts": counts,

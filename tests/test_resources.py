@@ -209,6 +209,30 @@ def test_adapter_reads_assignment_attachments_only_when_requested(centre):
     assert "body_excerpt" in result["items"][0]["matched_fields"]
 
 
+def test_adapter_reports_course_and_detail_limits_as_incomplete(secure, clock):
+    _, _, store, _ = secure
+    limits = ResourceLimits(max_courses_per_read=1, max_detail_reads=1)
+    centre = ResourceCenter(store, "synthetic-student", limits=limits, clock=clock)
+    provider = synthetic.FixtureProvider(
+        courses=[
+            synthetic.FixtureCourse("course-a", "甲"),
+            synthetic.FixtureCourse("course-b", "乙"),
+        ],
+        notices={
+            "course-a": [
+                synthetic.FixtureNotice("n1", "公告一", "正文", ("a1",)),
+                synthetic.FixtureNotice("n2", "公告二", "正文", ("a2",)),
+            ]
+        },
+    )
+    result = centre.collect(provider, semester=SEMESTER, include_notice_details=True)
+    assert result["complete"] is False
+    assert "COURSE_LIMIT_REACHED" in result["warnings"]
+    assert "DETAIL_READ_LIMIT_REACHED" in result["warnings"]
+    coverage = centre.coverage(SEMESTER)
+    assert coverage["complete"] is False
+
+
 def test_adapter_course_filter_limits_scope_and_does_not_mark_other_courses_absent(centre):
     provider = synthetic.FixtureProvider(
         courses=[
