@@ -7,6 +7,6 @@
 | tough-cookie 6.0.0 及传递依赖 | src/thu_assistant/package-lock.json | 按锁文件安装；许可见 src/thu_assistant/THIRD_PARTY_NOTICES.txt |
 | cryptography 50.0.2、Pillow 13.0.0、requests 2.33.0 | 运行时依赖（`pyproject.toml`、`requirements.txt`） | Apache-2.0 OR BSD-3-Clause、MIT-CMU、Apache-2.0；通过官方分发安装，不把本机安装目录打包 |
 | Playwright 1.57.0 | 可选浏览器依赖（`browser` extra） | Apache-2.0；Chromium 的下载是独立步骤，不在安装钩子中执行 |
-| pytest、build、jsonschema、setuptools | 开发工具（`requirements-dev.txt`） | MIT、MIT、MIT、MIT；不进入 wheel 的运行时依赖 |
+| pytest、build、jsonschema、wheel、setuptools | 开发工具（`requirements-dev.txt`） | MIT、MIT、MIT、MIT、MIT；不进入 wheel 的运行时依赖 |
 
 Openthu 自有代码采用根目录 MIT 许可。上游原作者的版权与许可不因项目改名而移除。未明确授权的参考项目、个人状态、旧安装备份和聊天记忆未进入公共仓库。

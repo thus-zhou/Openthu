@@ -241,7 +241,12 @@ def run_build(staging: Path, *, commit: str, commit_time: int) -> None:
     if result.returncode:
         sys.stderr.write(result.stdout[-4000:])
         sys.stderr.write(result.stderr[-4000:])
-        raise ReleaseError("RELEASE_BUILD_FAILED", "python -m build")
+        tail = [
+            line.strip()
+            for line in (result.stdout + result.stderr).splitlines()
+            if line.strip()
+        ][-3:]
+        raise ReleaseError("RELEASE_BUILD_FAILED", " | ".join(tail)[:300])
 
 
 def normalize_sdist(path: Path, *, epoch: int) -> None:
