@@ -136,8 +136,9 @@ def _run(operation: str, args, assistant: CampusAssistant):
         if args.export:
             return assistant.facade.export_agenda(
                 args.export, start_date=args.start_date, end_date=args.end_date,
-                services=_services(args.services), format=args.format,
-                overwrite=args.overwrite, allow_partial=args.allow_partial)
+                services=_services(args.services), semester=args.semester,
+                format=args.format, overwrite=args.overwrite,
+                allow_partial=args.allow_partial)
         parameters = {}
         for key, value in (('start_date', args.start_date), ('end_date', args.end_date),
                            ('semester', args.semester)):

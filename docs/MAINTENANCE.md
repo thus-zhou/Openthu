@@ -14,11 +14,12 @@ Codex 担任集成与发布维护者：整理需求和 Issue、审查和合并 P
 
 ## 发布步骤
 
-1. 从干净且已审查的 main 发布，核对 CHANGELOG、版本号、能力矩阵和未解决事项。
-2. 运行隐私扫描、完整离线测试、MCP smoke；在 Windows/Linux 验证。真实业务仅按该次具体授权进行。
-3. 构建源码包、wheel、sdist，检查归档成员和包内源码，确认没有认证状态、本机路径或个人资料。
+1. 从干净且已审查的 main 发布，核对 CHANGELOG、版本号、能力矩阵、用户手册、工具对照和未解决事项；候选说明必须写明“未发布”，不能出现正式发布用语。
+2. 运行隐私扫描、完整离线测试、MCP smoke、文档一致性测试；在 Windows/Linux 验证。真实业务仅按该次具体授权进行。
+3. 构建源码包、wheel、sdist，检查归档成员和包内源码，确认没有认证状态、本机路径或个人资料；运行 `package_release.py verify` 与 `install-check`。
 4. 创建 `vX.Y.Z` 标签与 GitHub Release，上传归档、构建包和 SHA256SUMS。预览版本用 prerelease 标记。
 5. 从公开下载地址读取校验文件并核对上传资产，记录对应提交和测试结果。更新维护资料和交接状态。
+6. 发布后核对 README、`docs/CAPABILITIES.md`、`docs/TOOLS.md` 和 `docs/UPGRADE.md` 的链接与版本状态；发现不一致时用补充说明澄清，不改写历史记录。
 
 ## 版本回归门禁与验证报告
 

@@ -1,0 +1,232 @@
+{
+  "module": "7.3",
+  "title": "能力文档、用户手册与升级记录",
+  "batch": 7,
+  "owner": "Hermes",
+  "status": "accepted",
+  "baseline_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
+  "integration_parent_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
+  "delivery_commit": "9726535",
+  "implementation_commits": [
+    "e5e0af6",
+    "f7564a9",
+    "d354025",
+    "3b0a9c6",
+    "9726535"
+  ],
+  "audit_fix_commits": [
+    "9726535: P1-1 README Chromium, P1-2 create_key_file, P1-3 image example schema, P1-4 _local_failure binding; P2-1 entry points, P2-2 changelog wording, P2-3 TOOLS coverage, P2-4 SWITCHED_OFF, P2-5 gap-table columns, P2-6 DPAPI codes, P2-7 image codes, P2-8 shell wiring, P2-9 semester pass-through, P2-10 schema tests, P2-11 table parser, P2-12 wheel contents"
+  ],
+  "record_commit": "the commit containing this record file",
+  "branch": "hermes/7.3",
+  "worktree": "~/projects/Openthu/.local/worktrees/7.3",
+  "worktree_note": "Recorded relative to the user home because contracts/v0.2/validate.py rejects absolute home-directory paths under plans/; the absolute path stays in the execution session and the pushed branch.",
+  "version_pr": null,
+  "batch_state": "batch 6 accepted at c98154d; batch 7 open; 7.3 accepted after the audit remediation, batch reconnect still outstanding",
+  "audit_report": "~/projects/Openthu/.local/audits/7.3-audit.md",
+  "audit_findings": {
+    "P0": 0,
+    "P1": 4,
+    "P2": 12,
+    "closed": 16,
+    "open": 0
+  },
+  "paths": [
+    "README.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "docs/CAPABILITIES.md",
+    "docs/USER_GUIDE.md",
+    "docs/TOOLS.md",
+    "docs/UPGRADE.md",
+    "docs/INSTALL.md",
+    "docs/HANDOVER.md",
+    "docs/ROADMAP.md",
+    "docs/BATCH_UPGRADES.md",
+    "docs/MAINTENANCE.md",
+    "docs/HERMES_START.md",
+    "integrations/codex/.codex-plugin/plugin.json",
+    "integrations/codex/README.md",
+    "integrations/codex/skills/openthu/SKILL.md",
+    "integrations/codex/skills/tsinghua-assistant/SKILL.md",
+    "integrations/codex/skills/tsinghua-assistant/references/models.md",
+    "src/thu_assistant/facade/core.py",
+    "src/thu_assistant/__main__.py",
+    "tests/test_docs_consistency.py",
+    "tests/test_facade_failure_envelopes.py"
+  ],
+  "contracts": [
+    "business-facade-v1",
+    "local-read-api-v1",
+    "compatibility-baseline-v1",
+    "result-envelope-v1",
+    "error-classification-v1",
+    "source-evidence-v1"
+  ],
+  "outputs": [
+    "docs/CAPABILITIES.md is keyed by registered service.operation and lists all 81 registrations (63 READ, 15 CAMPUS_WRITE, 2 LOCAL_WRITE, 1 MODEL) with state, evidence, owner and limit",
+    "the matrix separates code implemented, environment ready, protocol basis and real-business evidence instead of one blanket support column, and documents SWITCHED_OFF for a disabled write",
+    "the gap table uses separate state, reason and evidence columns instead of conflating reason with evidence",
+    "the user manual walks install, doctor, Windows DPAPI and Linux external-key conditions, read-only queries, the read-only dashboard, authorized actions, the course resource centre, agenda/incremental changes/calendar export, image input and a status-to-next-step table",
+    "the manual gives an executable create_key_file() step with the THU-KEY-1 header and 0600 rules, states that Linux has no production campus login, and never promises unattended automatic login",
+    "the image example uses the object media_id shape and an explicit model, and is validated against models.PROPERTIES by the documentation test",
+    "docs/TOOLS.md maps the 29 frozen MCP tools to registered operations, names info.directory, separates campus.page from services with a status operation, and keeps the legacy aliases and disabled create/cancel contracts explicit",
+    "docs/UPGRADE.md records what an upgrade does not do (credentials, keys, sessions, config, downloads, pending transactions, campus-side records) and how to keep a runtime that can still read an incompatible state format",
+    "rollback keeps the state directory, keys, actions-v1 and submissions-v1 journals and consent material; it explicitly refuses the delete-the-user-directory workaround",
+    "README installs Chromium before dev.py test, matching the fact that the full offline suite includes a real browser case",
+    "CHANGELOG 0.2.0 candidate notes are grouped as user-visible changes, compatibility, install resources, known limitations and unfinished work; entry points are described as six legacy entries plus openthu-doctor",
+    "the Codex plugin metadata reports the product version 0.2.0 and both skills point at the stable manuals",
+    "BusinessFacade._local_failure is an instance method calling self._local_read, so resources/todos/calendar/services return classified envelopes instead of TypeError and an HTTP 502",
+    "openthu agenda --export passes --semester through the facade to TodoEngine.export_agenda instead of accepting and dropping it",
+    "tests/test_docs_consistency.py compares the matrix with the running registry, the tool table with every available read and write, documented commands with the CLI, entry points with the manifests, and checks links, JSON schemas, table escaping and privacy wording",
+    "tests/test_facade_failure_envelopes.py covers resources/todos/calendar/services envelopes, the loopback /resources route and agenda export semester pass-through"
+  ],
+  "checks": {
+    "module_tests": {
+      "passed": 36,
+      "failed": 0,
+      "breakdown": {
+        "tests/test_docs_consistency.py": 28,
+        "tests/test_facade_failure_envelopes.py": 8
+      },
+      "command": "python -m pytest -o addopts='' -q tests/test_docs_consistency.py tests/test_facade_failure_envelopes.py"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 1607,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "python_errors": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test"
+    },
+    "dev_check": {
+      "ok": true,
+      "files_checked": 535,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check"
+    },
+    "smoke": {
+      "ok": true,
+      "tool_count": 29,
+      "live_campus_calls": 0,
+      "model_calls": 0,
+      "business_submissions": 0
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "legacy_tools": 29,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "github_actions": {
+      "commit": "9726535",
+      "run": 44135786057,
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": {
+        "test (ubuntu-24.04)": "success",
+        "test (ubuntu-24.04, 3.13)": "success",
+        "test (windows-2025)": "success"
+      },
+      "source": "GitHub Actions; Windows not reproduced on a local host"
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "browser_calls": 0,
+    "business_submissions": 0,
+    "message_sends": 0,
+    "candidate_build": {
+      "artifacts": 4,
+      "commit": "9726535",
+      "dirty": false,
+      "source_files": 532,
+      "source_archive_members": 532,
+      "wheel_members": 208,
+      "bundled_files": 54,
+      "sdist_members": 468,
+      "verify": "ok=true; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
+      "release_status": "candidate-not-released",
+      "published": false,
+      "command": "python scripts/package_release.py build --dist /tmp/openthu-73-fix"
+    },
+    "install_check": {
+      "source_root": null,
+      "missing": [],
+      "mcp_tools": 29,
+      "doctor_ok": true,
+      "user_state_unchanged": true,
+      "venv": "temporary",
+      "command": "python scripts/package_release.py install-check --dist /tmp/openthu-73-fix"
+    },
+    "audit_probes": "all 16 P1/P2 items were reproduced, fixed and re-run; each command and observed result is listed in the module record"
+  },
+  "verified_cases": [
+    "the capability matrix has exactly one row per running registration and the state and evidence columns match the CLI facade for all 81 entries",
+    "every available read operation resolves to a registered query description, and every available campus write resolves to an enabled action contract",
+    "the tool table lists the 29 frozen MCP tool names once, in order, and the set equals contracts/v0.2/compatibility-baseline.json; the operation tables cover every available read and all 15 campus writes",
+    "every command written as `openthu <name>` in the public docs exists in the CLI argument parser",
+    "all relative Markdown links in README, CHANGELOG, CONTRIBUTING, SECURITY, docs/ and integrations/ resolve",
+    "the public docs contain no /home path, Windows user directory, private key block, school address or unfilled template placeholder",
+    "the 0.2.0 changelog section is labelled candidate-unreleased, contains the five required headings and contains no released-version claim",
+    "the changelog says describe --service reports per-operation state, health reports service-level summaries and /services/{service_id} is a route",
+    "the entry-point check sees 6 v0.1 scripts, 6 compatibility-baseline entries and 7 current scripts with openthu-doctor as the addition",
+    "the user guide covers first use, read-only query, dashboard, authorized action, resource centre, agenda/incremental/export, image input and status handling in that order",
+    "the JSON examples in the user guide validate against models.PROPERTIES and the synthetic semester value matches the registered parameter pattern",
+    "the model_chat image example has a model and an object media_id that matches models.MEDIA_ID; the public call returns MODEL_IMAGE_INPUT_UNAVAILABLE",
+    "an arbitrary 32-byte file is refused with SECURE_KEY_FORMAT, while create_key_file() writes a 42-byte THU-KEY-1 file that load_provider accepts",
+    "README installs Chromium before dev.py test and the real browser test passes in the provisioned environment",
+    "resources without a semester returns INVALID_ARGUMENT_VALUE, resources with a semester but no provider returns FACADE_CAPABILITY_UNAVAILABLE, and todos/calendar bad ranges return INVALID_DATE_RANGE, each as an ERROR envelope with empty items",
+    "the loopback /api/v1/resources?semester=... route returns HTTP 200 with FACADE_CAPABILITY_UNAVAILABLE instead of a 502",
+    "THU_LIBRARY_WRITE=0 produces DISABLED/WRITES_DISABLED/SWITCHED_OFF for library writes, and the evidence value is documented",
+    "local.resources reports MISSING/RESOURCE_PROVIDER_UNAVAILABLE/LOCAL_INDEX_READ and visitors.* reports MISSING/ADAPTER_REQUIRED/NO_PROVIDER in the gap table",
+    "migration preview marks a .dpapi file UNSUPPORTED_PLATFORM while LegacyDpapiReader returns SECURE_LEGACY_UNAVAILABLE at runtime",
+    "the dashboard shell wording says 7.1 provides it and 8.1 still has to wire static_dir; the current CLI has no static_dir and / returns LOCAL_API_UI_NOT_INSTALLED",
+    "openthu agenda --export forwards --semester to the facade and the facade forwards it to TodoEngine.export_agenda",
+    "the docs test parses an escaped pipe into six cells and rejects a malformed capability row",
+    "the wheel top-level directories are learn_assistant, openthu-0.2.0.dist-info and thu_assistant; INSTALL says docs/, plans/, contracts/, tests/, scripts/ and top-level vendor/runtime are not in the wheel",
+    "the upgrade guide keeps pending transactions and keys, requires a recovery runtime for incompatible formats and refuses deleting the user directory",
+    "the capability matrix maps UNKNOWN, PARTIAL, PENDING_PAYMENT and PENDING_APPROVAL away from success wording",
+    "the Codex plugin manifest reports the same version as thu_assistant.version",
+    "dashboard --check was run in an empty state directory and returned status LISTENING with a loopback URL",
+    "read-only agenda in an empty state directory returned PARTIAL with source_complete=false and a per-source SECURE_KEY_NOT_CONFIGURED error, not an empty success",
+    "agenda export without --allow-partial returned EXPORT_SOURCE_INCOMPLETE; with --allow-partial it wrote an ICS with X-OPENTHU-SOURCE-COMPLETE:false",
+    "reusing an agenda change cursor in a new CLI process returned EVENT_CURSOR_EXPIRED, confirming the cursor is process-local",
+    "package_release build at 9726535 produced four artifacts with a clean tree and verify reported ok=true, 208 wheel members, 54 bundled files and 468 sdist members, with release_status candidate-not-released"
+  ],
+  "limits": [
+    "Documentation is the main deliverable, but the audit remediation also changes facade/core.py (_local_failure binding and export_agenda semester) and __main__.py (agenda export pass-through); no tool schema, capability registration or release metadata changed.",
+    "Linux was executed locally; Windows command compatibility and document readability are covered by the windows-2025 CI job, not reproduced on a local Windows host.",
+    "No real campus login, write, payment, submission or model image transfer was performed; the docs record existing evidence and blockers only.",
+    "local.resources remains RESOURCE_PROVIDER_UNAVAILABLE in the default CLI, MCP and dashboard; the manual shows the host API without claiming a public entry.",
+    "The dashboard HTML shell belongs to the parallel 7.1 module; the CLI still does not pass static_dir, so / returns LOCAL_API_UI_NOT_INSTALLED until 8.1 wires it.",
+    "src/thu_assistant/actions.py still carries the pre-0.2 module docstring 'No campus write adapter is enabled in block 5'; that file belongs to 4.4 and was not modified.",
+    "docs/contracts/source-matrix.md belongs to 2.3 and was not modified; its historical row assigning wording reconciliation to 4.4/7.3 remains for the source owner or 8.1 to update.",
+    "The candidate build was run to a temporary dist directory to verify the changelog and package metadata; it is not the integrated candidate, and install-check remains with 8.1 on the final tree.",
+    "No PR was opened, main was not merged, no tag or Release was created; version PR #2 stays Draft."
+  ],
+  "rollback": "Restore the documentation and integration paths to c98154d: README, CHANGELOG, CONTRIBUTING, the eight updated docs, the two new docs (delete USER_GUIDE.md and TOOLS.md), the Codex plugin metadata and skills, and delete tests/test_docs_consistency.py and tests/test_facade_failure_envelopes.py. Restore the code fixes to the pre-9726535 state: facade/core.py _local_failure as a static method and export_agenda without semester, and __main__.py without the export semester argument. Document rollback does not touch user state, keys, sessions, downloads or pending transactions; code rollback reintroduces the /resources 502 defect, so it should only be used when the dashboard failure envelopes are not needed.",
+  "next": "Batch 7 reconnects 7.1, 7.2 and 7.3, runs the full offline suite and both-platform CI, then 8.1 builds and verifies the candidate on the integrated tree. No PR, merge, tag or release is opened by this module.",
+  "cross_module_requests": [
+    "7.1: after the dashboard shell lands, re-check the 'provided by 7.1, wired by 8.1' wording and the actual / behaviour; register any new static route in the 6.2 read-only route table.",
+    "7.2: re-run the documentation consistency, failure-envelope and link checks on Windows and adjust the CI budget for the added checks.",
+    "4.4: correct the stale actions.py module docstring so it agrees with the registered create/cancel operations.",
+    "2.3/8.1: update the source-matrix row that still assigns wording reconciliation to 4.4/7.3; if the registry changes, regenerate the capability matrix and let the docs test enforce it.",
+    "8.1: on the final integrated tree run dev.py test, the candidate build/verify/install-check, wire static_dir for the dashboard shell, and re-check CHANGELOG candidate notes, README version status and the capability matrix against the registry."
+  ]
+}
