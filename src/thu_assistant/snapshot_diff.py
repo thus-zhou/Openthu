@@ -466,9 +466,9 @@ class SnapshotStore:
         if not blob:
             raise CampusError('SNAPSHOT_ENCRYPT_FAILED')
         path = self._path(record.get('account'), record.get('scope_digest'))
-        path.parent.mkdir(parents=True, exist_ok=True)
         temp = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
         try:
+            path.parent.mkdir(parents=True, exist_ok=True)
             with open(temp, 'xb') as handle:
                 handle.write(self.MAGIC + blob)
                 handle.flush()
@@ -486,7 +486,11 @@ class SnapshotStore:
         path = self._path(account, scope_hash)
         if not path.exists():
             return None
-        if path.stat().st_size > MAX_SNAPSHOT_BYTES:
+        try:
+            size = path.stat().st_size
+        except OSError:
+            raise CampusError('SNAPSHOT_CORRUPT') from None
+        if size > MAX_SNAPSHOT_BYTES:
             raise CampusError('SNAPSHOT_CORRUPT')
         blob = path.read_bytes()
         if not blob.startswith(self.MAGIC):
