@@ -189,7 +189,8 @@
       ],
       "evidence_refs": [
         "src/thu_assistant/models.js:5-58",
-        "src/thu_assistant/models.js:83-136",
+        "src/thu_assistant/models.js:88-250",
+        "src/thu_assistant/model_media.py:657-760",
         "src/thu_assistant/models.py:89-98"
       ],
       "missing_evidence": [
