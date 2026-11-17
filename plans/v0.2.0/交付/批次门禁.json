@@ -308,14 +308,22 @@
       ],
       "module_status": {
         "6.1": "pending",
-        "6.2": "pending",
+        "6.2": "accepted",
         "6.3": "pending"
       },
       "status": "ready",
       "integration_commit": null,
       "accepted_at": null,
       "entry_condition": "all batch 5 modules accepted and integrated",
-      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
+      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
+      "module_acceptance": {
+        "6.2": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "198aeb1",
+          "evidence": "audit 6.2-audit P0=0/P1=3/P2=16 closed or explicitly scoped; 162 module tests, 57 related regression; 18 audit probes re-run; check 505 files/0 findings; Linux Python 1430/7, Node 66; 0 live calls."
+        }
+      },
+      "gate_note": "6.2 accepted at 198aeb1 after the module audit; 6.3 is still pending, so batch 6 remains ready."
     },
     {
       "batch": 7,
@@ -367,5 +375,5 @@
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     }
   ],
-  "gate_note": "Batches 1-5 accepted and reconnected. Batch 5 final integration commit 0779fff (seam ac99326, 5.4 follow-up merge e9f5e67): 493 files/0 findings, 29 MCP tools, Linux Python 1268/7, Windows 1262/13, Node 66/0, zero live calls. Push 44037899338 and PR 44037908260 are green on both platforms. Batch 6 is ready."
+  "gate_note": "Batches 1-5 accepted and reconnected. Batch 6 is ready: 6.2 accepted at 198aeb1 after the module audit; 6.3 still pending. No batch is complete beyond batch 5."
 }
