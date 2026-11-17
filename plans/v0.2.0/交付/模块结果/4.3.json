@@ -1,0 +1,134 @@
+{
+  "module": "4.3",
+  "title": "图书馆体育查询一致性与规则读取",
+  "batch": 4,
+  "owner": "Hermes",
+  "status": "implemented",
+  "baseline_commit": "323a98b",
+  "integration_parent_commit": "323a98b",
+  "delivery_commit": "aa06b2e",
+  "record_commit": "the commit containing this record file",
+  "branch": "hermes/4.3",
+  "worktree": "/home/ubuntu/projects/Openthu/.local/worktrees/4.3",
+  "version_pr": null,
+  "batch_state": "module implemented and module-tested; batch 4 pending integration and acceptance",
+  "paths": [
+    "src/thu_assistant/precheck.py",
+    "src/thu_assistant/library.py",
+    "src/thu_assistant/spaces.py",
+    "src/thu_assistant/sports.py",
+    "src/thu_assistant/queries.py",
+    "tests/test_library_contracts.py",
+    "tests/test_spaces_contracts.py",
+    "tests/test_sports_contracts.py",
+    "docs/contracts/library-sports-read.md"
+  ],
+  "contracts": [
+    "source-evidence-v1",
+    "result-envelope-v1",
+    "calendar-event-v1"
+  ],
+  "additive_runtime_objects": [
+    "library-sports-precheck-v1"
+  ],
+  "outputs": [
+    "precheck object separating resource selection, window, availability, eligibility, fees and rules with source/checked_at/unknowns/preparation_state",
+    "seat area capacity (AREA_TOTAL_SEATS) separated from slot free_count; capacity_is_slot_availability=false",
+    "room availability and party/account eligibility represented separately; missing duration rule no longer falls back to 0/1440",
+    "sports session capacity (SESSION_ALLOW_USER_NUM) separated from venue totals; fees kept as integer FEN with exact display",
+    "sports reservation/approval/payment/refund axes mapped separately; unknown enums keep UNKNOWN plus a digest and never support a success-like state",
+    "own-record pagination keeps partial rows and a continuation/retry page for repeated, short or changed pages; seat 20/page, room default needStatus=6, sports orders page/limit documented",
+    "retrieval marks fresh reads as LIVE_AT_CHECKED_AT and cursor continuations as SNAPSHOT_ONLY_NOT_LIVE",
+    "public occupancy preview keeps only start_time/end_time/platform_status and removes identity/subject",
+    "library maintenance 503, rate limit 429 with Retry-After, login and parser failures stay distinct; empty results are never produced from failures",
+    "read operations remain available when library/sports write switches are disabled"
+  ],
+  "checks": {
+    "module_tests": {
+      "passed": 36,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_library_contracts.py tests/test_spaces_contracts.py tests/test_sports_contracts.py"
+    },
+    "related_read_regression": {
+      "passed": 109,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_library.py tests/test_library_actions.py tests/test_spaces.py tests/test_sports.py tests/test_queries.py tests/test_query_contracts.py tests/test_todos.py"
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "compatibility_baselines": 1,
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "fixtures": 7,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "privacy_check": {
+      "ok": true,
+      "files_checked": 407,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 684,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test",
+      "worktree": "clean tree at aa06b2e plus this module record"
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0
+  },
+  "verified_cases": [
+    "a seat area with capacity 300 and zero free seats in the target slot reports capacity=300, free_count=0, state=FULL and capacity_is_slot_availability=false",
+    "a study room can be FREE and NOT_PREPARABLE at the same time when the requested party size is outside minUser/maxUser",
+    "same-name areas, same-name scenes and same-name rooms return candidates with distinct stable ids; no page or seat is chosen by array order",
+    "repeated, short or missing own-order pages keep the rows already verified, set complete=false and expose the page to continue or retry; order_detail keeps a found record and reports the partial search",
+    "fees are integer fen; display values are produced by exact integer division (123456 -> 1234.56) and never multiplied by 100",
+    "unknown refund or approval enums keep UNKNOWN plus a digest, make the overall state UNKNOWN and never claim success, payment receipt or refund settlement",
+    "other people's occupancy is reduced to start_time, end_time and platform_status; synthetic names, logins, subjects and phone numbers do not enter public output",
+    "all library and sports read operations remain registered and executable with library/sports write switches disabled",
+    "missing room duration rules are MISSING, not 0/1440; wrong types are TYPE_MISMATCH; ambiguous sports cancelTime units stay UNIT_AMBIGUOUS with a null value",
+    "library 503/maintenance, 429 with retry_after_ms, login expiry and parser failures remain distinct from a real empty result",
+    "holdings copy visibility, account borrow eligibility and third-party electronic authorization remain separate; off-campus access stays UNVERIFIED",
+    "renewal eligibility is a hint only and never changes due_at or claims an execution result",
+    "own reservation results record the actual page size, status bitmask and date range; seat history records the fixed 20-row page size",
+    "a newly queried result is marked LIVE_AT_CHECKED_AT; a cursor continuation is marked SNAPSHOT_ONLY_NOT_LIVE with the original checked_at"
+  ],
+  "limits": [
+    "Offline synthetic verification only: no real campus login, catalog/loan read, seat/room read, sports availability or order read was performed.",
+    "sports.orders still reads the single page requested by the caller; cross-page duplicate detection is used by collect_pages and order_detail, not by a one-page query.",
+    "Room rules are per room; the top-level precheck only marks PER_ROOM and never applies one room's rule to another.",
+    "Seat and room fee state is UNKNOWN when the source reports no fee; the module does not infer that the service is free.",
+    "Sports cancelTime/deadlineTime units remain ambiguous; real cancellation deadlines still require the official page or batch-5 verification.",
+    "library_actions.py, library_wire.py and sports_actions.py were not modified; write paths keep the strict legacy pagination checks and receive partial results only through explicit read objects.",
+    "docs/contracts/README.md (owned by 2.3) was not edited; indexing docs/contracts/library-sports-read.md is recorded as a cross-module request."
+  ],
+  "rollback": "Restore src/thu_assistant/library.py, spaces.py, sports.py and queries.py to 323a98b; delete src/thu_assistant/precheck.py, tests/test_library_contracts.py, tests/test_spaces_contracts.py, tests/test_sports_contracts.py and docs/contracts/library-sports-read.md. New fields are optional and old clients ignore them; existing cursors become invalid explicitly and are never replayed or spliced into a new snapshot.",
+  "next": "Wait for modules 4.1, 4.2, 4.4 and 4.5; the integration owner forms the single batch-4 integration commit, runs the joint offline suite and both-platform CI, and only then marks the module accepted. This module does not open a PR, merge main or publish a release.",
+  "cross_module_requests": [
+    "5.1/5.2: consume precheck selection/availability/eligibility/fees/rules/retrieval; preparation_state is not authorization and money must not be derived from display text.",
+    "5.1/5.2: keep write paths on strict pagination checks; if partial results are used, record uncertainty explicitly and never replay.",
+    "6.1: precheck is additive; preserve the 29 legacy tools and choose whether to pass it through or summarize it.",
+    "7.3: index docs/contracts/library-sports-read.md and update the capability table's read-precheck evidence wording."
+  ]
+}
