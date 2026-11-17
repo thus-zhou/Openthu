@@ -22,6 +22,7 @@ No case contacts a campus service, a model endpoint or the internet.
 from __future__ import annotations
 
 import copy
+import http.client
 import json
 import os
 from pathlib import Path
@@ -329,6 +330,20 @@ def test_dashboard_prints_the_board_before_it_blocks(tmp_path):
         assert result["url"] == "http://127.0.0.1:%d" % result["port"]
         with socket.create_connection(("127.0.0.1", result["port"]), timeout=5):
             pass
+        connection = http.client.HTTPConnection("127.0.0.1", result["port"], timeout=5)
+        try:
+            connection.request("GET", "/")
+            root = connection.getresponse()
+            root_body = root.read().decode("utf-8")
+            assert root.status == 200, root_body
+            assert "Openthu" in root_body
+            connection.request("GET", "/assets/app.css")
+            asset = connection.getresponse()
+            asset_body = asset.read()
+            assert asset.status == 200
+            assert b"body" in asset_body
+        finally:
+            connection.close()
     finally:
         process.terminate()
         try:

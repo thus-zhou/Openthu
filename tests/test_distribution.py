@@ -463,6 +463,11 @@ def test_wheel_is_the_complete_layout_with_licenses_and_entry_points(candidate):
             assert any(name.endswith("/licenses/" + license_name) for name in names)
         assert "thu_assistant/_bundled/layout.json" in names
         for required in (
+            "thu_assistant/web_assets/index.html",
+            "thu_assistant/web_assets/assets/app.css",
+            "thu_assistant/web_assets/assets/app.js",
+            "thu_assistant/web_assets/assets/model.js",
+            "thu_assistant/web_assets/assets/api.js",
             "thu_assistant/_bundled/runtime/windows/access.js",
             "thu_assistant/_bundled/runtime/windows/import-session.py",
             "thu_assistant/_bundled/vendor/madmodel-proxy/package.json",
@@ -500,6 +505,9 @@ def test_sdist_contains_the_sources_needed_to_rebuild_the_bundles(candidate):
         names = {member.name for member in archive.getmembers()}
     for required in (
         "openthu-0.2.0/setup.py",
+        "openthu-0.2.0/src/thu_assistant/web_assets/index.html",
+        "openthu-0.2.0/src/thu_assistant/web_assets/assets/app.css",
+        "openthu-0.2.0/src/thu_assistant/web_assets/assets/app.js",
         "openthu-0.2.0/build_support/distribution.json",
         "openthu-0.2.0/build_support/materialize.py",
         "openthu-0.2.0/vendor/madmodel-proxy/package.json",

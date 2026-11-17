@@ -48,6 +48,9 @@ thu_assistant = [
     "*/README.md",
     "consent/README.md",
     "renewal/README.md",
+    "web_assets/*.html",
+    "web_assets/assets/*.css",
+    "web_assets/assets/*.js",
 ]
 learn_assistant = ["vendor/thu-learn-lib/*"]
 
