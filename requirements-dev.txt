@@ -3,3 +3,5 @@ playwright==1.57.0
 pytest==8.3.4
 build==1.2.2.post1
 jsonschema==4.26.0
+# PEP 639 license metadata (project.license-files) needs setuptools >= 77.
+setuptools>=77
