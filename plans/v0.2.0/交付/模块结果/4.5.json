@@ -5,12 +5,13 @@
   "owner": "Hermes",
   "status": "implemented",
   "baseline_commit": "323a98b",
-  "delivery_commit": "291432e",
+  "delivery_commit": "da0d1d2",
   "code_commits": [
-    "291432e"
+    "291432e",
+    "da0d1d2"
   ],
   "branch": "hermes/4.5",
-  "worktree": "/home/ubuntu/projects/Openthu/.local/worktrees/4.5",
+  "worktree": "~/projects/Openthu/.local/worktrees/4.5",
   "version_pr": 2,
   "paths": [
     "src/thu_assistant/models.py",
@@ -58,16 +59,16 @@
   },
   "checks": {
     "module_tests": {
-      "passed": 38,
+      "passed": 41,
       "skipped": 0,
       "failed": 0,
-      "python": 31,
+      "python": 34,
       "node_transport": 7,
       "command": "python -m pytest -o addopts='' -q tests/test_model_media.py"
     },
     "full_offline": {
       "command": "python scripts/dev.py test",
-      "python_passed": 686,
+      "python_passed": 689,
       "python_skipped": 7,
       "python_failed": 0,
       "node_passed": 66,
@@ -79,10 +80,10 @@
       "python_passed": 648,
       "python_skipped": 7,
       "python_failed": 0,
-      "note": "the 38 added tests are the only delta; no existing test changed state"
+      "note": "the 41 added tests are the only delta; no existing test changed state"
     },
     "privacy_scan": {
-      "files_checked": 405,
+      "files_checked": 407,
       "findings": 0
     },
     "mcp_smoke": {
