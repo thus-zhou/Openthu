@@ -52,6 +52,9 @@ def _require_git() -> None:
     probe = _git("rev-parse", "--git-dir")
     if probe.returncode:
         pytest.skip("no Git metadata in this tree")
+    shallow = _git("rev-parse", "--is-shallow-repository").stdout.strip()
+    if shallow == "true":
+        pytest.skip("shallow clone has no module history; CI checks out full history here")
 
 
 def test_every_module_and_batch_delivery_is_an_ancestor_of_the_candidate() -> None:
