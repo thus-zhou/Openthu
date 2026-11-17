@@ -1165,7 +1165,7 @@ def release_gate(*, reports_dir: Path | str | None = None, dist: Path | str = "d
                  marker_error: str | None = None,
                  require_markers: bool | None = None,
                  expected_commit: str | None = None,
-                 require_python_matrix: bool = False) -> dict:
+                 require_python_matrix: bool = True) -> dict:
     checks = {}
     gaps: list[dict] = []
     statuses: list[str] = []

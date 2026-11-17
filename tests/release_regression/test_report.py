@@ -119,10 +119,14 @@ def report_doc(platform="linux", commit="abc", *, system=None, ci_runner=None,
     }
 
 
-def write_reports(directory: Path, **overrides) -> Path:
+def write_reports(directory: Path, *, include_linux_313: bool = True, **overrides) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
-    for name, platform in (("linux.json", "linux"), ("windows.json", "windows")):
-        options = dict(overrides.get(name, {}))
+    rows = [("linux.json", "linux", {}), ("windows.json", "windows", {})]
+    if include_linux_313:
+        rows.append(("linux-313.json", "linux", {"python": "3.13"}))
+    for name, platform, defaults in rows:
+        options = dict(defaults)
+        options.update(overrides.get(name, {}))
         REPORT.write_report(report_doc(platform, **options), directory / name)
     return directory
 
@@ -491,6 +495,16 @@ def test_release_gate_is_incomplete_without_a_candidate_and_fails_when_required(
                                   require_dist=True, markers=MARKERS,
                                   marker_error=None, expected_commit="abc")
     assert strict["status"] == "FAIL"
+
+
+def test_release_gate_requires_the_python_matrix_by_default(tmp_path):
+    reports = write_reports(tmp_path / "reports", include_linux_313=False)
+    value = REPORT.release_gate(reports_dir=reports, dist=tmp_path / "missing",
+                                require_dist=False, markers=MARKERS,
+                                marker_error=None, expected_commit="abc")
+    assert value["checks"]["reports"]["status"] == "FAIL"
+    assert any(gap["kind"] == "python_matrix_incomplete" for gap in value["gaps"])
+    assert value["status"] == "FAIL"
 
 
 def test_release_gate_rejects_evidence_from_a_foreign_commit(tmp_path):
