@@ -5,13 +5,14 @@
   "owner": "Hermes",
   "status": "implemented",
   "baseline_commit": "323a98b",
-  "delivery_commit": "de72370",
+  "delivery_commit": "7e7ccd3",
   "code_commits": [
-    "de72370"
+    "de72370",
+    "7e7ccd3"
   ],
   "record_commit": "04b5d1c",
   "branch": "hermes/4.2",
-  "worktree": "/home/ubuntu/projects/Openthu/.local/worktrees/4.2",
+  "worktree": "\u002fhome\u002fubuntu\u002fprojects\u002fOpenthu\u002f.local\u002fworktrees\u002f4.2",
   "version_pr": 2,
   "paths": [
     "src/thu_assistant/resources/",
@@ -86,13 +87,13 @@
   },
   "checks": {
     "module_tests_linux": {
-      "passed": 57,
+      "passed": 58,
       "skipped": 0,
       "failed": 0,
       "command": "python -m pytest -o addopts='' -q tests/test_resources.py"
     },
     "full_offline": {
-      "python_passed": 705,
+      "python_passed": 706,
       "python_skipped": 7,
       "python_failed": 0,
       "node_passed": 66,
@@ -202,6 +203,7 @@
     "test_entry_limit_is_enforced",
     "test_media_registration_uses_course_resource_purpose",
     "test_collect_marks_fixture_candidates_synthetic_and_reports_source_recheck",
+    "test_adapter_reports_course_and_detail_limits_as_incomplete",
     "test_free_text_source_errors_are_not_persisted",
     "test_index_corruption_is_reported_not_ignored",
     "test_real_encryption_backend_is_used",
