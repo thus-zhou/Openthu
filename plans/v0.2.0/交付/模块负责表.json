@@ -1163,7 +1163,16 @@
         "batch 8 merged into hermes/1-install-diagnostics at 5ec73d9, so version PR #2 contains 8.1"
       ],
       "accepted_at": "2026-11-18",
-      "integration_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed"
+      "integration_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed",
+      "audit_fix": "8.1-audit P0=0/P1=3/P2=9",
+      "cross_module_handoffs": [
+        "1.1 (contract owner): local-read-api-v1 was revised in place with an 8.1 revision row for the request-side cursor; no other frozen field changed.",
+        "4.4: the actions.py module docstring was corrected by the integrator because it contradicted the registered seat/room/sports operations; no behaviour changed.",
+        "2.3: the source-matrix difference register was rewritten to the observed resolved/retained state; the v0.1 preview boundary is kept.",
+        "6.2: the QUERY_EXTENSION note and the describe_api query_extension field were removed after the contract declared the parameter.",
+        "7.2 (.github/workflows/ci.yml, scripts/regression_report.py): the test job checks out full history and the batch-7/batch-8 test files are attributed; job names, matrix and gate semantics unchanged.",
+        "9.1: rebuild and re-verify the candidate at the final merged head before tagging; the recorded SHA256 set belongs to ac94b63."
+      ]
     },
     {
       "id": "9.1",
@@ -1197,5 +1206,5 @@
       "status": "ready"
     }
   ],
-  "gate_note": "Batch 4 accepted: 4.1 bbe620a, 4.2 c66ee2e, 4.3 e14c11c, 4.4 cf255de, 4.5 2df5772; single batch integration commit recorded in 批次门禁.json."
+  "gate_note": "Batch 8 accepted: 8.1 accepted after the 8.1-audit remediation; the module branch merged into hermes/1-install-diagnostics at 5ec73d9 and version PR #2 carries the candidate. Batch 9 is ready for Codex; no new PR, main merge, tag or release was created."
 }

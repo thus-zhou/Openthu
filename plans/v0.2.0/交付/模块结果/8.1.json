@@ -20,7 +20,7 @@
   "worktree": "~/projects/Openthu/.local/worktrees/8.1",
   "worktree_note": "Recorded relative to the user home because contracts/v0.2/validate.py rejects absolute home-directory paths under plans/; the absolute path stays in the execution session and the pushed branch.",
   "version_pr": 2,
-  "batch_state": "batch 8 is ready with 8.1 implemented; accepted belongs to the review phase. 8.1 opens no PR, merges nothing, tags nothing and publishes nothing.",
+  "batch_state": "batch 8 is accepted with 8.1 accepted; batch 9 is ready for Codex. 8.1 opened no new PR, merged nothing to main, tagged nothing and published nothing.",
   "paths": [
     "contracts/v0.2/local-read-api.schema.json",
     "src/thu_assistant/local_api/contract.py",
@@ -40,7 +40,7 @@
     "plans/v0.2.0/进度清单.md",
     "plans/v0.2.0/版本总清单.md",
     "handoffs/v020-candidate.md",
-    "handoffs/v0.2.0-candidate.json",
+    "handoffs/v020-candidate.json",
     ".github/workflows/ci.yml",
     "scripts/regression_report.py",
     "src/thu_assistant/local_api/server.py"
@@ -63,7 +63,7 @@
     "docs/contracts/source-matrix.md replaces the pending-difference table with a resolved/retained register that names the 8.1 confirmation and the retained v0.1 preview boundary",
     "候选版本记录.md records the artifact set, verify/install-check results, the fresh-directory probes, privacy scans, known limits and rollback",
     "集成清单.md maps all 24 modules, batches 1-9, the 8.1 seam fixes and the retained external blockers to real commits",
-    "The batch gate keeps batch 8 ready with 8.1 implemented, the ownership table and acceptance map agree, and VERSION_MANIFEST/进度清单/版本总清单 describe one candidate",
+    "The batch gate is accepted for batches 1-8 and ready for batch 9, 8.1 is accepted, the ownership table and acceptance map agree, and VERSION_MANIFEST/进度清单/版本总清单 describe one candidate",
     "handoffs/v020-candidate.md gives Codex the reproduction, evidence and continuation point without claiming a release"
   ],
   "checks": {
@@ -296,7 +296,7 @@
   },
   "verified_cases": [
     "git merge-base --is-ancestor accepts all 21 module delivery commits and the batch 2-7 integration commits against the candidate tree",
-    "the batch gate is accepted for batches 1-7, ready for 8 and locked for 9, and 8.1 is implemented rather than accepted",
+    "the batch gate is accepted for batches 1-8 and ready for batch 9, and 8.1 is accepted rather than implemented",
     "contracts/v0.2 contains seven JSON schemas plus error-classification and the compatibility baseline; the set of contract versions is exactly the frozen eight",
     "every local-read API route accepts exactly the parameters declared by local-read-api-v1, and /todos, /calendar and /resources accept the request-side cursor",
     "the 8.1 revision is present in x-revisions and no QUERY_EXTENSION attribute remains on the runtime contract",
@@ -305,15 +305,15 @@
     "both distribution bundles list existing must-include files, all six licence files exist, and forbidden directories include .local, dist and node_modules",
     "the six legacy entry points plus openthu-doctor resolve in pyproject, and the compatibility baseline keeps 29 MCP tools and 6 entry points",
     "the source-matrix difference register no longer assigns work to 4.4/7.3 or 5.3 and records the 8.1 confirmation",
-    "the integration checklist names all 24 modules; the candidate record carries the SHA256 set and the module record reports implemented status",
+    "the integration checklist names all 24 modules; the candidate record carries the SHA256 set and the module record reports accepted status",
     "the candidate build at 9b1bef5 produced four artifacts with a clean tree; verify bound the commit and install-check ran outside the repository",
     "a fresh venv install served the dashboard shell from the package, refused /api/v1/health with 401, failed doctor on a missing bundled resource and reported SECURE_KEY_NOT_CONFIGURED without a key",
-    "privacy_scan found nothing in 568 source files and 1825 archive members",
+    "privacy_scan found nothing in 568 source files or 1,840 final-candidate archive members (the 9b1bef5 rehearsal scanned 1,825)",
     "the test job checks out the full history, so the ancestry case runs in CI instead of skipping on a depth-1 clone",
     "every new integration test file is registered for failure attribution, so a failure is attributed to its batch instead of unmapped"
   ],
   "limits": [
-    "The candidate record documents the local artifact set built at 9b1bef5; the release gate rebuilds the same source at the final head, so source-archive hashes and the manifest commit field change with the record commit while packaged product code does not.",
+    "The candidate record documents the final artifact set rebuilt by the release gate at ac94b63 and the earlier local rehearsal at 9b1bef5; rebuilding at the record head changes only record text, but the tag must be built at the final merged head and its hashes re-verified.",
     "Windows results come from GitHub Actions, not a local Windows host; Linux was executed locally.",
     "Firefox and Safari static-subresource behaviour (Sec-Fetch-Mode) remains unverified; only Chromium was exercised.",
     "The local read API HEAD performs one read without consuming the 10-second refresh budget, and a bootstrap token is single-use; sessions expire without a restart command.",
@@ -335,7 +335,7 @@
   "accepted_at": "2026-11-18",
   "integration_parent_note": "fb6edb1 is the batch-7 integration commit; 8d0606d is the branch point / record correction that 8.1 actually starts from.",
   "verification_commit": "the commit containing this record file",
-  "branch_head": "the head of hermes/8.1 after the integration fast-forward",
+  "branch_head": "3270fdc9f79a79a578e38ad403112a7611fad003 (record-only head after ac94b63)",
   "integration_branch": "hermes/1-install-diagnostics",
   "integration_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed",
   "audit": {

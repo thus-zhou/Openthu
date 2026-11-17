@@ -18,7 +18,8 @@
     "batch4_integration_test": "tests/test_batch4_integration.py",
     "batch5_integration_test": "tests/test_batch5_integration.py",
     "batch6_integration_test": "tests/test_batch6_integration.py",
-    "batch7_integration_test": "tests/test_batch7_integration.py"
+    "batch7_integration_test": "tests/test_batch7_integration.py",
+    "batch8_integration_test": "tests/test_batch8_integration.py"
   },
   "modules": [
     {
