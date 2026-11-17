@@ -228,5 +228,12 @@
     "4.4: correct the stale actions.py module docstring so it agrees with the registered create/cancel operations.",
     "2.3/8.1: update the source-matrix row that still assigns wording reconciliation to 4.4/7.3; if the registry changes, regenerate the capability matrix and let the docs test enforce it.",
     "8.1: on the final integrated tree run dev.py test, the candidate build/verify/install-check, and re-check CHANGELOG candidate notes, README version status and the capability matrix against the registry; the static_dir wiring is already in the integrated tree."
-  ]
+  ],
+  "batch_reconnection": {
+    "batch": 7,
+    "integration_commit": "fb6edb1e4071f574430ef5d0259d918b67f3b0dc",
+    "seam_commit": "d81c81c0f51325bdd99c64b733ec29b45ef4f9e6",
+    "accepted_at": "2026-11-18",
+    "seam_notes": "X1 USER_GUIDE and CAPABILITIES were updated from the pending 8.1 wiring to the real shipped-and-wired behaviour; X4 corrected the delivery SHA to 40 characters and the test list to test_docs_consistency.py."
+  }
 }

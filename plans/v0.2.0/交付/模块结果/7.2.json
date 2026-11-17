@@ -472,5 +472,12 @@
     "native_paths_included": false,
     "credentials_included": false,
     "synthetic_only": true
+  },
+  "batch_reconnection": {
+    "batch": 7,
+    "integration_commit": "fb6edb1e4071f574430ef5d0259d918b67f3b0dc",
+    "seam_commit": "d81c81c0f51325bdd99c64b733ec29b45ef4f9e6",
+    "accepted_at": "2026-11-18",
+    "seam_notes": "X2 the coverage matrix marks the dashboard as covered with real feature-to-case mappings; X5 the report test now asserts the declared platform name and the observed host separately, because P1-1 records the real host and the Windows CI job exposed the Linux-only assumption. Module behaviour is unchanged."
   }
 }

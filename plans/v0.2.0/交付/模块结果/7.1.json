@@ -245,5 +245,12 @@
     }
   ],
   "rollback": "Stop the dashboard entry and remove src/thu_assistant/web_assets/ plus tests/test_web_assets.py. There is no storage, data-structure or package-metadata migration; MCP/CLI and existing authentication data are untouched. After rollback 6.2's JSON API remains and `/` returns LOCAL_API_UI_NOT_INSTALLED.",
-  "next": "Batch 7 is reconnected: the dashboard shell is packaged and both CLI construction paths pass static_dir, so an installed `openthu dashboard` serves `/` from the package. 8.1 verifies the asset layout in the candidate build; no PR, merge, tag or release is opened here."
+  "next": "Batch 7 is reconnected: the dashboard shell is packaged and both CLI construction paths pass static_dir, so an installed `openthu dashboard` serves `/` from the package. 8.1 verifies the asset layout in the candidate build; no PR, merge, tag or release is opened here.",
+  "batch_reconnection": {
+    "batch": 7,
+    "integration_commit": "fb6edb1e4071f574430ef5d0259d918b67f3b0dc",
+    "seam_commit": "d81c81c0f51325bdd99c64b733ec29b45ef4f9e6",
+    "accepted_at": "2026-11-18",
+    "seam_notes": "X1 the user documents now describe the shell as shipped and wired, and the docs test checks both CLI construction sites and the packaged index.html; the 77 module tests and the 29 tool names are unchanged."
+  }
 }
