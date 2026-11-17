@@ -254,7 +254,7 @@
       "notes": [
         "Windows is a CI-only platform; the local host is Linux.",
         "Three earlier runs were not used as candidate evidence: 44173509428 and 44174931731 failed because the depth-1 checkout could not resolve module commits (fixed with fetch-depth 0 and a shallow-clone guard), and f8a026f's first attempt failed one flaky Windows concurrency case (test_concurrent_execute_dispatches_once); the rerun above is deterministic and green.",
-        "Commits after f8a026f change only plans/ text, not product code; rebuild at the final PR head and treat that build as the artifact set for release."
+        "Commits after f8a026f change only plans/ text and the regression-report attribution map (scripts/regression_report.py, not packaged), not product code; rebuild at the final PR head and treat that build as the artifact set for release."
       ]
     },
     "live_campus_calls": 0,
