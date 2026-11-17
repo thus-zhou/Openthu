@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN" data-app="loading">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <title>Openthu 本地看板</title>
+  <link rel="stylesheet" href="assets/app.css" crossorigin="anonymous">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <header class="app-header">
+    <div class="brand">
+      <p class="brand-name">Openthu</p>
+      <p class="brand-sub">清华校园助手 · 本地只读看板</p>
+    </div>
+    <nav class="app-nav" aria-label="看板页面">
+      <ul id="nav-list" class="nav-list"></ul>
+    </nav>
+    <p class="readonly-note" role="note">只读看板：不会预约、取消、提交、续借、付款或生成内容。</p>
+  </header>
+  <div id="session-banner" class="session-banner" role="alert" hidden></div>
+  <main id="main" tabindex="-1">
+    <h1 id="page-title" tabindex="-1">总览</h1>
+    <p id="page-note" class="page-note"></p>
+    <p id="live-status" class="live-status" role="status" aria-live="polite"></p>
+    <div id="view" class="view"></div>
+  </main>
+  <footer class="app-footer">
+    <p>数据只在本次页面内存中；关闭页面即清除。看板不读取源码目录、会话文件或第三方认证存储。</p>
+    <p>来源时间、实时性和完整性由本地读取 API 提供；未知与不完整不等于成功。</p>
+  </footer>
+  <noscript><p class="noscript">本看板需要 JavaScript 才能读取本地状态。JSON API 仍可用。</p></noscript>
+  <script src="assets/model.js" defer crossorigin="anonymous"></script>
+  <script src="assets/api.js" defer crossorigin="anonymous"></script>
+  <script src="assets/app.js" defer crossorigin="anonymous"></script>
+</body>
+</html>

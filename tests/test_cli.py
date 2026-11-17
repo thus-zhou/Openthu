@@ -118,6 +118,45 @@ def test_dashboard_refuses_a_public_bind_and_checks_the_local_api(tmp_path):
     assert str(tmp_path) not in checked.stdout
 
 
+def test_dashboard_wires_the_web_assets_static_dir(monkeypatch):
+    from thu_assistant import __main__ as cli_main
+    from thu_assistant import web_assets
+
+    seen = []
+
+    class FakeServer:
+        def __init__(self, facade, *, bind, port, static_dir=None):
+            seen.append(static_dir)
+            self.base_url = 'http://127.0.0.1:9'
+            self.port = 9
+            self.instance_id = '0' * 32
+
+        def start(self):
+            return self
+
+        def serve_forever(self):
+            raise KeyboardInterrupt
+
+        def stop(self):
+            return None
+
+    class FakeModule:
+        LocalApiServer = FakeServer
+        serve = staticmethod(lambda *args, **kwargs: None)
+
+    monkeypatch.setattr(cli_main.importlib, 'import_module',
+                        lambda name, *args, **kwargs: FakeModule)
+
+    class Owner:
+        facade = object()
+
+    for check in (True, False):
+        args = cli_main._parser().parse_args(['dashboard', '--check'])
+        args.check = check
+        cli_main._dashboard(args, Owner())
+        assert seen[-1] == web_assets.static_dir()
+
+
 def test_dashboard_reports_a_missing_provider(monkeypatch):
     """The 6.1 gap code still covers a checkout without the 6.2 module."""
     from thu_assistant import __main__ as cli_main

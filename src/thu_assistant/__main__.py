@@ -28,6 +28,7 @@ from pathlib import Path
 from .mcp_stdio import CampusAssistant
 from .bridge import CampusError, close_gateway
 from . import source_state
+from . import web_assets
 
 PARAMETER_LIMIT = 65536
 
@@ -177,13 +178,15 @@ def _dashboard(args, assistant: CampusAssistant):
         raise CampusError('LOCAL_DASHBOARD_UNAVAILABLE')
     bind = '127.0.0.1' if args.host == 'localhost' else args.host
     if args.check:
-        server = server_type(assistant.facade, bind=bind, port=args.port).start()
+        server = server_type(assistant.facade, bind=bind, port=args.port,
+                             static_dir=web_assets.static_dir()).start()
         try:
             return {'status': 'LISTENING', 'mode': 'CHECK', 'url': server.base_url,
                     'port': server.port, 'instance_id': server.instance_id}
         finally:
             server.stop()
-    server = server_type(assistant.facade, bind=bind, port=args.port).start()
+    server = server_type(assistant.facade, bind=bind, port=args.port,
+                         static_dir=web_assets.static_dir()).start()
     # The one JSON line goes out before the long-running loop: a user who starts
     # the board needs the URL, and the CLI contract allows exactly one object.
     _emit({'ok': True, 'command': args.command,

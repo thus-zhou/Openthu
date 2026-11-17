@@ -3,6 +3,7 @@ include ACTION-FRAMEWORK.md LEARN-READ.md requirements.txt requirements-dev.txt 
 include setup.py pyproject.toml MANIFEST.in
 recursive-include build_support *.py *.json
 recursive-include src *.py *.js *.json *.txt LICENSE
+recursive-include src/thu_assistant/web_assets *.html *.css *.js
 include src/thu_assistant/consent/README.md
 include src/thu_assistant/renewal/README.md
 recursive-include runtime *.py *.js
