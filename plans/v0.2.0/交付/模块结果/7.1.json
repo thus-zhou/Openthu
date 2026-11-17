@@ -191,16 +191,16 @@
       "background_processes": 0
     },
     "github_actions": {
-      "run_id": 44144269571,
-      "commit": "bfde78a38f6ca38f9f47179c4af8da9c94c3119d",
-      "code_commit": "bfde78a38f6ca38f9f47179c4af8da9c94c3119d",
+      "run_id": 44149654282,
+      "commit": "8034df101f3741c41cf20b4182db935464b1c9e6",
+      "code_commit": "e2b45facd3b9ff311ab4071b973277f63ed748ef",
       "status": "success",
       "jobs": [
         "test (ubuntu-24.04)",
         "test (ubuntu-24.04, 3.13)",
         "test (windows-2025)"
       ],
-      "note": "All three jobs succeeded on bfde78a, the final code commit (audit repair 2f8d87c plus the table-reuse consistency change). The Windows job ran the 77 browser cases. This supersedes runs 44122811569, 44137435823 and 44141199925; a metadata-only record update follows this tested commit."
+      "note": "All three jobs succeeded on 8034df1, which contains the P1-1/P1-2 wiring and packaging fix e2b45fa plus the accepted record. The Windows job ran the 77 browser cases and the CLI/distribution checks. A metadata-only record update follows this tested tree."
     }
   },
   "boundaries": [
