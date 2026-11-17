@@ -312,7 +312,7 @@
         "6.3": "accepted"
       },
       "status": "accepted",
-      "integration_commit": "69d6e6f2821c7866633fd088759106ebfb585237",
+      "integration_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
       "accepted_at": "2026-11-17",
       "entry_condition": "all batch 5 modules accepted and integrated",
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
@@ -333,7 +333,7 @@
           "evidence": "audit 6.3-audit P0=0/P1=7/P2=14 closed; 49 module tests; deterministic candidate build; verify binds HEAD and checks wheel metadata/entry points/licences/bundled hashes; install-check outside the repository with 29 tools and unchanged user state; 0 live calls."
         }
       },
-      "gate_note": "6.1 accepted at aee2559, 6.2 at 198aeb1 and 6.3 at 6f5df60 after their module audits; the three branches are merged in order into the integration branch and the batch-6 seams X1-X6 are fixed. The designated integration commit is the first fully green joint tree: check 529 files/0 findings/29 tools, Linux Python 1571/7, Node 66/0, Windows green in CI, candidate build/verify/install-check pass, 0 live calls. Batch 7 is ready.",
+      "gate_note": "6.1 accepted at aee2559, 6.2 at 198aeb1 and 6.3 at 6f5df60 after their module audits; the three branches are merged in order into the integration branch and the batch-6 seams X1-X7 are fixed. The designated integration commit is the first fully green joint tree: check 529 files/0 findings/29 tools, Linux Python 1571/7, Node 66/0, Windows green in CI, candidate build/verify/install-check pass, 0 live calls. Batch 7 is ready.",
       "checks": [
         "plan validator ok: 24 modules, 9 batches",
         "contract validator ok: 8 contracts + 1 compatibility baseline; 9/35/8 samples; 359 registered error codes (314 at batch 5 + 13 facade + 32 local API)",
@@ -344,10 +344,10 @@
         "tests/test_batch6_integration.py: 6 seam tests (consumer protocol, route ownership, semester, registries, ledger, dashboard entry)",
         "candidate build at the integration commit: 4 artifacts, wheel 208 members (54 bundled), sdist 463 members, verify ok, install-check 29 tools with unchanged user state",
         "live campus/model/business calls: 0/0/0",
-        "GitHub Actions at 69d6e6f: push 44085802990 and pull_request 44085813404; ubuntu-24.04 (3.12/3.13) and windows-2025 (3.12) both success"
+        "GitHub Actions at 4f5c62ee: push 44102600690 and pull_request 44102615127; ubuntu-24.04 (3.12/3.13) and windows-2025 (3.12) both success"
       ],
       "ci_heads": [
-        "69d6e6f2821c7866633fd088759106ebfb585237"
+        "4f5c62ee4526839dc69d32c6ba6f90a5833937be"
       ]
     },
     {
@@ -400,5 +400,5 @@
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     }
   ],
-  "gate_note": "Batches 1-6 accepted and reconnected. Batch 6 is accepted at 69d6e6f: 6.1/6.2/6.3 accepted, seams X1-X6 fixed, check 529/0, Linux Python 1571/7, Windows green, Node 66, candidate build/verify/install-check pass. Batch 7 is ready; batches 8-9 stay locked."
+  "gate_note": "Batches 1-6 accepted and reconnected. Batch 6 is accepted at 4f5c62ee: 6.1/6.2/6.3 accepted, seams X1-X7 fixed, check 529/0, Linux Python 1571/7, Windows green, Node 66, candidate build/verify/install-check pass. Batch 7 is ready; batches 8-9 stay locked."
 }

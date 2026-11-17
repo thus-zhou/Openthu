@@ -324,7 +324,7 @@
   },
   "batch_reconnection": {
     "batch": 6,
-    "integration_commit": "69d6e6f2821c7866633fd088759106ebfb585237",
+    "integration_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
     "accepted_at": "2026-11-17",
     "seam_notes": "X1 the facade implements the 6.2 consumer protocol (services/todos/calendar/resources) and the 4.2 provider attribute moved to resource_provider; X4 the dashboard prints its URL before serving; the 29 tool names, schemas and 68 module tests are unchanged."
   }

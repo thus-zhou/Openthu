@@ -275,7 +275,7 @@
   "acceptance_scope": "audit remediation verified locally on Linux and on GitHub Actions run 44076049516 (ubuntu-24.04 3.12/3.13 and windows-2025 3.12); no real campus, model, browser or business call was made",
   "batch_reconnection": {
     "batch": 6,
-    "integration_commit": "69d6e6f2821c7866633fd088759106ebfb585237",
+    "integration_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
     "accepted_at": "2026-11-17",
     "seam_notes": "X5 the wheel now carries facade/ and local_api/ (208 members, 54 bundled) and install-check passes outside the repository; the ledger records the delivered paths instead of the planning-time placeholders."
   }

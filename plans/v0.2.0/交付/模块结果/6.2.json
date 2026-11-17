@@ -322,7 +322,7 @@
   },
   "batch_reconnection": {
     "batch": 6,
-    "integration_commit": "69d6e6f2821c7866633fd088759106ebfb585237",
+    "integration_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
     "accepted_at": "2026-11-17",
     "seam_notes": "X1/X2/X3 the real facade feeds services/todos/calendar/resources, /resources forwards the semester and /todos and /calendar split one agenda snapshot; X6 a busy port is refused on Windows with SO_EXCLUSIVEADDRUSE; the seven routes and the frozen argument lists are unchanged."
   }
