@@ -318,5 +318,5 @@
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     }
   ],
-  "gate_note": "Batches 1-4 accepted and reconnected. Batch 4 integration commit 2cc1c05: 460 files/0 findings, 29 MCP tools, Linux Python 1005/7 and Node 66, seam fixes X1-X3, zero live calls. Batch 5 is ready."
+  "gate_note": "Batches 1-4 accepted and reconnected. Batch 4 integration commit 2cc1c05: 460 files/0 findings, 29 MCP tools, Linux Python 1005/7, Windows 1000/12, Node 66/0, seam fixes X1-X5, zero live calls. Push and PR CI at 4e07357 are green on both platforms. Batch 5 is ready."
 }
