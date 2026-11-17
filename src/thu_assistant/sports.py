@@ -4,6 +4,7 @@ import html
 import re
 
 from .bridge import CampusError
+from . import domain_models
 from .sports_transport import Reader, SCENE, LOCATION, PAGE, RECORDS, DETAIL, HOME, PERSONAL
 
 VERSION = 'sports-v1'
@@ -11,6 +12,8 @@ TZ = timezone(timedelta(hours=8))
 MODES = ('SPORT_GROUP', 'SPORT_PERSON')
 PAYMENT = {1:'PENDING_PAYMENT', 2:'PROCESSING', 4:'PAID', 8:'PAYMENT_CANCELLED', 16:'PAYMENT_EXPIRED'}
 REFUND = {0:'NONE', 1:'REQUESTED', 2:'REJECTED', 4:'REFUNDING', 8:'REFUNDED', 16:'FAILED', 128:'PENDING', 256:'MANUAL'}
+APPROVAL = {'RESV_WAIT_APPROVE':'PENDING', 'RESV_APPROVING':'PENDING', 'RESV_APPROVE_PASS':'APPROVED'}
+RESERVATION = {'RESV_EFFECT':'EFFECTIVE', 'RESV_UNEFFECT':'INEFFECTIVE', 'RESV_END':'ENDED'}
 ID = {'type':'string','pattern':r'[A-Za-z0-9_-]{1,100}'}
 DAY = {'type':'string','pattern':r'\d{4}-\d{2}-\d{2}'}
 WINDOW = {'page':{'type':'integer','minimum':1,'maximum':1000}, 'limit':{'type':'integer','minimum':1,'maximum':50}}
@@ -28,6 +31,11 @@ def ident(value):
 
 def label(value):
     return html.unescape(re.sub('<[^>]+>', '', str(value or ''))).strip()[:500]
+
+
+def fen_display(value):
+    """Exact fen-to-yuan text; never a float and never a second *100."""
+    return f'{value // 100}.{value % 100:02d}' if type(value) is int and value >= 0 else None
 
 
 def local_day(value):
@@ -56,15 +64,87 @@ def array(raw):
     return rows
 
 
-def page_rows(raw, page, size, key):
+def page_rows(raw, page, size, key, strict=True):
+    """Validate one upstream page.
+
+    ``strict`` is the legacy behaviour used by write reconciliation.  Read
+    operations pass ``strict=False`` so a short or repeated page is returned as
+    a partial page with its continuation instead of being hidden behind an
+    exception.  A structurally wrong payload still fails closed.
+    """
     rows = array(raw)
     total = raw.get('count')
-    require(type(total) is int and total >= 0 and len(rows) == max(0, min(size,total-(page-1)*size)),
-            'SPORTS_PAGINATION_CHANGED')
+    require(type(total) is int and total >= 0, 'SPORTS_PAGINATION_CHANGED')
+    expected = max(0, min(size, total - (page - 1) * size))
+    complete = len(rows) == expected
+    warnings = []
+    if not complete:
+        if strict:
+            raise CampusError('SPORTS_PAGINATION_CHANGED')
+        warnings.append('UPSTREAM_PAGE_COUNT_MISMATCH')
     ids = [ident(x.get(key)) for x in rows]
-    require(len(set(ids)) == len(ids), 'SPORTS_DUPLICATE_RECORD')
+    if len(set(ids)) != len(ids):
+        if strict:
+            raise CampusError('SPORTS_DUPLICATE_RECORD')
+        unique_rows, seen = [], set()
+        for row in rows:
+            record_id = ident(row.get(key))
+            if record_id in seen:
+                continue
+            seen.add(record_id)
+            unique_rows.append(row)
+        rows = unique_rows
+        ids = [ident(x.get(key)) for x in rows]
+        complete = False
+        warnings.append('SPORTS_DUPLICATE_RECORD')
     return rows, {'upstream_page':page,'upstream_page_size':size,'upstream_total':total,
-                  'next_page':page+1 if page*size < total else None}
+                  'next_page':(page+1 if page*size < total else None) if complete else page,
+                  'complete':complete,'warnings':sorted(set(warnings)),
+                  'expected_rows':expected,'returned_rows':len(rows)}
+
+
+def collect_pages(read_page, key, *, max_pages=50):
+    """Read every page of one own-record list without hiding a partial read.
+
+    Returns the rows read so far and the page to read next (possibly the same
+    page when the source returned it short).  A repeated page or a changed
+    upstream total stops the walk instead of appending the same record twice.
+    """
+    rows = []
+    seen = set()
+    total = None
+    pages = 0
+    warnings = []
+    next_page = None
+    for number in range(1, max_pages + 1):
+        block, scope = read_page(number)
+        pages += 1
+        if total is not None and scope['upstream_total'] != total:
+            warnings.append('UPSTREAM_TOTAL_CHANGED')
+            return {'rows': rows, 'complete': False, 'warnings': sorted(set(warnings)),
+                    'pages_read': pages, 'upstream_total': total, 'next_page': number}
+        total = scope['upstream_total']
+        current = {ident(row.get(key)) for row in block}
+        if seen & current:
+            warnings.append('REPEATED_OWN_RECORD_PAGE')
+            return {'rows': rows, 'complete': False, 'warnings': sorted(set(warnings)),
+                    'pages_read': pages, 'upstream_total': total, 'next_page': number}
+        seen.update(current)
+        rows.extend(block)
+        warnings.extend(scope.get('warnings') or [])
+        if scope.get('next_page') is None:
+            complete = scope.get('complete', True) and len(rows) == total
+            if len(rows) != total and 'UPSTREAM_PAGE_COUNT_MISMATCH' not in warnings:
+                warnings.append('UPSTREAM_PAGE_COUNT_MISMATCH')
+            return {'rows': rows, 'complete': complete, 'warnings': sorted(set(warnings)),
+                    'pages_read': pages, 'upstream_total': total, 'next_page': None}
+        next_page = scope['next_page']
+        if not scope.get('complete', True):
+            return {'rows': rows, 'complete': False, 'warnings': sorted(set(warnings)),
+                    'pages_read': pages, 'upstream_total': total, 'next_page': next_page}
+    warnings.append('OWN_RECORD_PAGE_LIMIT')
+    return {'rows': rows, 'complete': False, 'warnings': sorted(set(warnings)),
+            'pages_read': pages, 'upstream_total': total, 'next_page': next_page}
 
 
 def result(items, url, **extra):
@@ -142,8 +222,11 @@ def field_row(row, scene_id, mode, day, room_id):
         available = {'Y':True,'N':False}.get(status.get('reserveStatus'))
         sessions.append({'session_id':ident(entry.get('uuid')), 'start_at':start, 'end_at':end,
                          'available':available, 'reason':label(status.get('reserveStatusReason')),
-                         'unit_fee_fen':cents, 'quoted_total_fen':total, 'currency':'CNY','charging_mode':fee.get('chargingMode'),
+                         'unit_fee_fen':cents, 'unit_fee_display':fen_display(cents),
+                         'quoted_total_fen':total, 'quoted_total_display':fen_display(total),
+                         'fee_unit':'FEN', 'currency':'CNY','charging_mode':fee.get('chargingMode'),
                          'payment_hint':fee.get('payType'),'capacity':entry.get('allowUserNum'),
+                         'capacity_unit':'PERSON','capacity_scope':'SESSION_ALLOW_USER_NUM',
                          'reserved_count':entry.get('resvUserNum')})
     require(len({s['session_id'] for s in sessions}) == len(sessions), 'SPORTS_DUPLICATE_SESSION')
     rule = row.get('reserveRule') or {}
@@ -178,14 +261,27 @@ def availability(reader, params):
                    'searchValue':'','siteKindId':'','pageNum':number,'pageSize':size}
         raw = reader.call(PAGE, payload)
         rows, scope = page_rows(raw,number,size,'uuid')
+        page_complete = scope.pop('complete', True)
+        page_warnings = scope.pop('warnings', [])
         if rows or scope['upstream_total'] > 0:
             items = [field_row(x,scene['scene_id'],mode,day,room['room_id']) for x in rows]
             incomplete = any(not x['sessions'] or any(s['available'] is None for s in x['sessions']) for x in items)
             return result(items,HOME,**scope,date=day,scene=scene,room=room,mode=mode,
-                          complete=not incomplete,warnings=['UNVERIFIED_SESSION_OR_FREE_PERIOD'] if incomplete else [],
+                          complete=page_complete and not incomplete,
+                          warnings=page_warnings + (['UNVERIFIED_SESSION_OR_FREE_PERIOD'] if incomplete else []),
                           scope='ONE_ROOM_DATE_MODE_AND_UPSTREAM_PAGE')
     return result([],HOME,complete=False,status='PARTIAL',warnings=['EMPTY_AVAILABILITY_UNVERIFIED'],
                   scene=scene,room=room,date=day,checked_modes=modes,scope='NO_VERIFIED_FIELDS')
+
+
+def axis(value, mapping):
+    """One source status axis; an unfamiliar value keeps UNKNOWN plus a digest."""
+    if value is None:
+        return {'status': 'UNKNOWN', 'mapping_state': 'MISSING',
+                'source_status_digest': None}
+    mapped = domain_models.mapped_status(value, mapping)
+    return {'status': mapped['status'], 'mapping_state': mapped['mapping_state'],
+            'source_status_digest': mapped['source_status_digest']}
 
 
 def normalize_order(row):
@@ -197,8 +293,18 @@ def normalize_order(row):
     extended = row.get('resvExtendStatus')
     approval, phase = row.get('resvCheckStatus'), row.get('resvStatus')
     payment = PAYMENT.get(row.get('orderStatus'),'UNKNOWN')
+    refund = REFUND.get(row.get('orderRefundStatus'),'UNKNOWN')
+    axes = {'reservation': axis(phase, RESERVATION),
+            'approval': axis(approval, APPROVAL),
+            'payment': axis(row.get('orderStatus'), PAYMENT),
+            'refund': axis(row.get('orderRefundStatus'), REFUND)}
+    axes_confirmed = all(value['mapping_state'] == 'MAPPED' for value in axes.values())
     if type(extended) is int and extended & 2:
         state = 'CANCELLED'
+    elif not axes_confirmed:
+        # An unfamiliar status axis cannot support an overall success-like
+        # state, even when another axis still looks effective.
+        state = 'UNKNOWN'
     elif phase == 'RESV_END':
         state = 'COMPLETED'
     elif approval in ('RESV_WAIT_APPROVE','RESV_APPROVING'):
@@ -209,19 +315,27 @@ def normalize_order(row):
         state = 'SCHEDULED'
     else:
         state = 'UNKNOWN'
+    paid, total = row.get('paidAmount'), row.get('totalAmount')
+    require(paid is None or type(paid) is int and paid >= 0, 'SPORTS_FEE_FORMAT_CHANGED')
+    require(total is None or type(total) is int and total >= 0, 'SPORTS_FEE_FORMAT_CHANGED')
     return {'reservation_id':rid,'scene_id':ident(row.get('sceneUuid')),'scene_name':label(row.get('sceneName')),
             'sites':[{'site_id':ident(x.get('uuid')),'name':label(x.get('siteName'))} for x in sites],
-            'start_at':start,'end_at':end,'status':state,'platform_status':phase,'approval_status':approval,
-            'extended_status':extended,'payment_status':payment,'refund_status':REFUND.get(row.get('orderRefundStatus'),'UNKNOWN'),
-            'paid_amount_fen':row.get('paidAmount'),'payment_deadline':stamp(row.get('paymentDeadline')),
+            'start_at':start,'end_at':end,'status':state,'state_confirmed':axes_confirmed,
+            'platform_status':phase,'approval_status':approval,
+            'extended_status':extended,'payment_status':payment,'refund_status':refund,
+            'status_axes':axes,'status_axes_confirmed':axes_confirmed,
+            'paid_amount_fen':paid,'paid_amount_display':fen_display(paid),
+            'total_amount_fen':total,'total_amount_display':fen_display(total),
+            'fee_unit':'FEN','payment_receipt_verified':False,
+            'payment_deadline':stamp(row.get('paymentDeadline')),
             'cancel_before_start_minutes':row.get('cancelBeforeStartTime'),'mode':row.get('sceneUseType'),
             'official_url':PERSONAL}
 
 
-def order_page(reader, number, size):
+def order_page(reader, number, size, strict=True):
     raw = reader.call(RECORDS, {'pageNum':number,'pageSize':size,'containsActivity':False,
                                 'orderItems':'resvBeginTime','orderRule':'desc'})
-    rows, scope = page_rows(raw,number,size,'resvUuid')
+    rows, scope = page_rows(raw,number,size,'resvUuid',strict=strict)
     return rows, scope
 
 
@@ -237,29 +351,14 @@ def row_identity(row):
     return identity_fields(row.get('sceneUuid'),row.get('siteVoList'),row.get('resvTime'),row.get('resvMemberVos'))
 
 
-def own_order(reader, record_id):
+def order_detail_for(reader, row, candidates):
     # Some PC detail responses leave resvUuid blank. In that case require an
     # exact, unique match over all own records, independent of the request URL.
-    seen = {}
-    expected_total = None
-    for number in range(1,51):
-        rows, scope = order_page(reader,number,50)
-        require(expected_total in (None,scope['upstream_total']), 'SPORTS_ORDER_LIST_CHANGED')
-        expected_total = scope['upstream_total']
-        for row in rows:
-            rid = ident(row.get('resvUuid'))
-            require(rid not in seen,'SPORTS_ORDER_LIST_CHANGED')
-            seen[rid] = row
-        if not scope['next_page']:
-            break
-    else:raise CampusError('SPORTS_ORDER_SEARCH_INCOMPLETE')
-    if record_id not in seen:raise CampusError('SPORTS_OWN_RECORD_NOT_FOUND')
-    row = seen[record_id]
-    detail = reader.call(DETAIL, {'resvUuid':record_id}).get('data')
+    detail = reader.call(DETAIL, {'resvUuid':ident(row.get('resvUuid'))}).get('data')
     require(isinstance(detail,dict) and isinstance((detail.get('data') or {}).get('moduleData'),dict),
             'SPORTS_DETAIL_MISMATCH')
     if detail.get('resvUuid'):
-        require(str(detail['resvUuid'])==record_id,'SPORTS_DETAIL_MISMATCH')
+        require(str(detail['resvUuid'])==ident(row.get('resvUuid')),'SPORTS_DETAIL_MISMATCH')
     else:
         module = detail['data']['moduleData']
         sites = module.get('resvSite')
@@ -273,8 +372,35 @@ def own_order(reader, record_id):
             identity = row_identity(candidate)
             return identity[1:]==signature[1:] and (signature[0] is None or identity[0]==signature[0])
         require(matches(row),'SPORTS_DETAIL_MISMATCH')
-        require(sum(matches(candidate) for candidate in seen.values())==1,'SPORTS_DETAIL_AMBIGUOUS')
-    return row,detail
+        require(sum(matches(candidate) for candidate in candidates)==1,'SPORTS_DETAIL_AMBIGUOUS')
+    return detail
+
+
+def own_order_read(reader, record_id):
+    """Read one own order with explicit partial-search semantics.
+
+    The read operation keeps the records it could verify and reports the page
+    that should be continued.  It never turns a repeated or short page into a
+    claim that the record does not exist.
+    """
+    collection = collect_pages(lambda number: order_page(reader, number, 50, strict=False),
+                               'resvUuid')
+    seen = {ident(row.get('resvUuid')): row for row in collection['rows']}
+    if record_id not in seen:
+        return {'state': 'NOT_FOUND' if collection['complete'] else 'SEARCH_PARTIAL',
+                'collection': collection}
+    row = seen[record_id]
+    detail = order_detail_for(reader, row, list(seen.values()))
+    return {'state': 'FOUND', 'row': row, 'detail': detail, 'collection': collection}
+
+
+def own_order(reader, record_id):
+    found = own_order_read(reader, record_id)
+    if found['state'] == 'SEARCH_PARTIAL':
+        raise CampusError('SPORTS_ORDER_SEARCH_INCOMPLETE')
+    require(found['state'] == 'FOUND', 'SPORTS_OWN_RECORD_NOT_FOUND')
+    require(found['collection']['complete'], 'SPORTS_ORDER_SEARCH_INCOMPLETE')
+    return found['row'], found['detail']
 
 
 def query(browsers, operation, params):
@@ -288,15 +414,38 @@ def query(browsers, operation, params):
         if operation == 'availability':
             return availability(reader, params)
         if operation == 'orders':
-            rows, scope = order_page(reader,params.get('page',1),params.get('limit',20))
-            return result([normalize_order(x) for x in rows],PERSONAL,**scope,scope='OWN_RESERVATIONS_REQUESTED_PAGE')
+            number, size = params.get('page',1), params.get('limit',20)
+            rows, scope = order_page(reader,number,size,strict=False)
+            return result([normalize_order(x) for x in rows],PERSONAL,**scope,
+                          scope='OWN_RESERVATIONS_REQUESTED_PAGE',
+                          pagination={'kind':'OWN_ORDER_WINDOW','page':number,'page_size':size,
+                                      'upstream_total':scope['upstream_total'],
+                                      'next_page':scope['next_page'],
+                                      'scope':'OWN_RESERVATIONS_REQUESTED_PAGE',
+                                      'complete':scope['complete']})
         if operation == 'order_detail':
-            row, detail = own_order(reader,params['record_id'])
+            found = own_order_read(reader,params['record_id'])
+            require(found['state']=='FOUND',
+                    'SPORTS_OWN_RECORD_NOT_FOUND' if found['state']=='NOT_FOUND'
+                    else 'SPORTS_ORDER_SEARCH_INCOMPLETE')
+            row, detail = found['row'], found['detail']
             item = normalize_order(row)
             data = detail['data']
             require(row.get('resvStatus') == data.get('resvRecStatus') and row.get('resvExtendStatus') == data.get('resvExtendStatus'),
                     'SPORTS_RECORD_CHANGED_REFRESH')
             item.update(detail_verified=True,order_info_present=isinstance(detail.get('orderInfo'),dict))
-            return result([item],PERSONAL,scope='VERIFIED_OWN_RECORD_AND_DETAIL')
+            collection = found['collection']
+            return result([item],PERSONAL,scope='VERIFIED_OWN_RECORD_AND_DETAIL',
+                          complete=collection['complete'],warnings=collection['warnings'],
+                          collection={'pages_read':collection['pages_read'],
+                                      'upstream_total':collection['upstream_total'],
+                                      'next_page':collection['next_page'],
+                                      'complete':collection['complete']},
+                          pagination={'kind':'OWN_ORDER_SEARCH','page_size':50,
+                                      'upstream_total':collection['upstream_total'],
+                                      'next_page':collection['next_page'],
+                                      'pages_read':collection['pages_read'],
+                                      'complete':collection['complete'],
+                                      'scope':'ALL_OWN_RESERVATION_PAGES'})
     raise CampusError('UNREGISTERED_QUERY_OPERATION')
 

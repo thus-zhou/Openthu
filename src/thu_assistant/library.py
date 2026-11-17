@@ -26,9 +26,15 @@ def require(condition):
 
 def code_check(data):
     require(isinstance(data, dict))
-    if data.get('code') in (401, 403):
-        raise CampusError('AUTH_REQUIRED' if data['code'] == 401 else 'FORBIDDEN')
-    if data.get('code') != 200:
+    code = data.get('code')
+    message = str(data.get('message') or data.get('msg') or '')
+    if code in (401, 403):
+        raise CampusError('AUTH_REQUIRED' if code == 401 else 'FORBIDDEN')
+    if code == 429:
+        raise CampusError('RATE_LIMITED')
+    if code == 503 or re.search('系统维护|维护中|系统升级|暂停服务', message):
+        raise CampusError('MAINTENANCE')
+    if code != 200:
         raise CampusError('LIBRARY_QUERY_FAILED')
     return data.get('data')
 
@@ -82,6 +88,12 @@ def safe_link(value):
         return None
     return value
 
+def retry_after_ms(response):
+    value = response.headers.get('Retry-After')
+    if isinstance(value, str) and value.strip().isdigit():
+        return min(int(value.strip()), 86400) * 1000
+    return None
+
 ENDPOINTS = {
     'jwt': ('POST', PRIMO+'jwt'), 'search': ('POST', PRIMO+'listData'),
     'detail': ('POST', PRIMO+'pnxDetail'), 'holdings': ('POST', PRIMO+'holdings'),
@@ -110,8 +122,10 @@ class PublicReader:
             with self.session.request(method, url, headers=headers, params=params if method=='GET' else None,
                                       data=params if method=='POST' else None, timeout=(6, 20),
                                       allow_redirects=False, stream=True) as response:
-                if response.status_code in (401, 403, 429):
-                    raise CampusError({401:'AUTH_REQUIRED', 403:'FORBIDDEN', 429:'RATE_LIMITED'}[response.status_code])
+                if response.status_code in (401, 403, 429, 503):
+                    raise CampusError({401:'AUTH_REQUIRED', 403:'FORBIDDEN', 429:'RATE_LIMITED',
+                                       503:'MAINTENANCE'}[response.status_code],
+                                      retry_after_ms(response) if response.status_code == 429 else None)
                 if 300 <= response.status_code < 400:
                     raise CampusError('LIBRARY_REDIRECT_BLOCKED')
                 require(response.status_code == 200)
@@ -144,6 +158,7 @@ def record(doc):
             'edition':first(display.get('edition') or add.get('edition')), 'publication_date':first(display.get('creationdate') or add.get('date')),
             'publisher':first(display.get('publisher')), 'isbn':values(add.get('isbn')), 'resource_type':values(display.get('type')),
             'delivery_categories':categories, 'availability':values(delivery.get('availability')),
+            'availability_scope':'SOURCE_LISTING_NOT_HOLDINGS',
             'electronic_links':electronic, 'electronic_access_page':detail_url if electronic or 'Alma-E' in categories else None,
             'detail_url':detail_url}
 
@@ -212,7 +227,10 @@ def read_copies(call, mmsid, h, budget):
             policy = described(copy,'policy')
             unavailable = process in {'LOAN','LOST_LOAN','HOLDSHELF','TRANSIT','MISSING','ILL','ACQ','WORK_ORDER_DEPARTMENT'} or bool(policy and re.search('不外借|不可借|仅限馆内|非外借',policy))
             item['copies'].append({'item_id':pid, 'status':described(copy,'work_order_type') or described(copy,'process_type') or described(copy,'base_status'),
-                                   'loan_policy':policy,'borrowable':False if unavailable else None,'due':plain(copy.get('due_date'))})
+                                   'loan_policy':policy,'borrowable':False if unavailable else None,
+                                   'borrowable_state':'NOT_BORROWABLE' if unavailable else 'UNVERIFIED',
+                                   'availability_scope':'COPY_STATUS_NOT_ACCOUNT_ELIGIBILITY',
+                                   'borrow_eligibility':'UNVERIFIED','due':plain(copy.get('due_date'))})
         offset += len(batch)
         if offset == total:
             return item, None
@@ -270,7 +288,10 @@ def database_links(call,p):
         require(isinstance(data,dict) and data.get('mmsid')==mid and plain(data.get('databasename')))
         return result([{'database_id':mid,'name':plain(data['databasename']), 'official_url':DATABASES+'entrance/detail?'+urlencode({'mmsid':mid}),
                         'offcampus_conditions':plain(data.get('offcampus')), 'special_notice':plain(data.get('specialNotice')),
-                        'access_state':'OFFICIAL_GUIDE_ONLY'}],GUIDE_API+'viewDatabaseDesc')
+                        'access_state':'OFFICIAL_GUIDE_ONLY',
+                        'electronic_access':{'state':'OFFICIAL_GUIDE_ONLY','institutional_authorization':'UNVERIFIED',
+                                             'off_campus_access':'UNVERIFIED','third_party_terms':'NOT_CHECKED',
+                                             'cookie_forwarded':False}}],GUIDE_API+'viewDatabaseDesc')
     if not p.get('query'):
         return result([{'name':'数据库导航','official_url':DATABASES},{'name':'校外访问说明','official_url':OFF_CAMPUS}],
                       'https://lib.tsinghua.edu.cn/',scope='registered official entry points',level='DIRECTORY_CACHE',
@@ -286,7 +307,10 @@ def database_links(call,p):
         mid = identifier(row.get('mmsid'))
         require(plain(row.get('databasename')))
         entries.append({'database_id':mid,'name':plain(row['databasename']), 'official_url':DATABASES+'entrance/detail?'+urlencode({'mmsid':mid}),
-                        'source_updated_at':plain(row.get('updateTime')), 'access_state':'OFFICIAL_GUIDE_ONLY'})
+                        'source_updated_at':plain(row.get('updateTime')), 'access_state':'OFFICIAL_GUIDE_ONLY',
+                        'electronic_access':{'state':'OFFICIAL_GUIDE_ONLY','institutional_authorization':'UNVERIFIED',
+                                             'off_campus_access':'UNVERIFIED','third_party_terms':'NOT_CHECKED',
+                                             'cookie_forwarded':False}})
     return window(entries,raw.get('total'),offset,limit,GUIDE_API+'searchDesc')
 
 def loan_date(raw):
@@ -312,11 +336,16 @@ def parse_loans(payload):
         hour = first(row.get('duehour'))
         if hour and not re.fullmatch(r'(?:[01]\d|2[0-3])[0-5]\d',hour):
             raise CampusError('LIBRARY_LOAN_TIME_INVALID')
+        renew_raw = first(row.get('renew'))
         records.append({'loan_id':first(row['loanid']), 'title':title, 'loan_date':loan_date(row.get('loandate')),
                         'due_date':due,'due_time':hour[:2]+':'+hour[2:] if hour else None,
+                        'due_at':(due+'T'+hour[:2]+':'+hour[2:]+'+08:00' if due and hour else due),
                         'due_precision':('minute' if hour else 'date') if due else None,
                         'timezone':'Asia/Shanghai','overdue':overdue(due,hour),
-                        'renewable':{'Y':True,'N':False}.get(first(row.get('renew'))),
+                        'renewable':{'Y':True,'N':False}.get(renew_raw),
+                        'renewal_state':{'Y':'ELIGIBLE','N':'NOT_ELIGIBLE'}.get(renew_raw,'UNKNOWN'),
+                        'renewal':{'state':'HINT_ONLY','source_field':'renew',
+                                   'does_not_change_due_date':True,'execution_attempted':False},
                         'renewal_hints':values((row.get('renewstatuses') or {}).get('renewstatus'))})
     return records, more=='Y'
 
@@ -342,6 +371,8 @@ LOAN_FETCH = """async offset => {
 }"""
 
 def read_loans(browsers):
+    pagination = {'kind':'OWN_LOANS','page_size':10,'upstream_total':None,
+                  'scope':'ACTIVE_LOANS_PAGED_10_PER_REQUEST','complete':False}
     opened = browsers.open(service_id='library-catalog',visible=False)
     sid = opened['session_id']
     try:
@@ -360,7 +391,8 @@ def read_loans(browsers):
                     if isinstance(exc, CampusError):
                         raise
                     raise CampusError('LIBRARY_LOAN_PAGE_FAILED') from None
-                return result(items,PRIMO+'loans',complete=False,warnings=['LATER_LOAN_PAGE_FAILED'])
+                return result(items,PRIMO+'loans',complete=False,warnings=['LATER_LOAN_PAGE_FAILED'],
+                              pagination={**pagination,'pages_read':(offset-1)//10+1})
             if offset==1:
                 body = page.locator('.el-table__body-wrapper')
                 observed = body.inner_text() if body.count()==1 else ''
@@ -368,16 +400,20 @@ def read_loans(browsers):
                 empty = any(t.strip() in ('暂无数据','No Data','No data') for t in marker.all_text_contents())
                 matches = all(row['title'] in observed for row in rows) if rows else empty
                 if not matches:
-                    return result(rows,PRIMO+'loans',complete=False,warnings=['LOAN_PAGE_DISAGREES_WITH_API'],official_page_matches=False)
+                    return result(rows,PRIMO+'loans',complete=False,warnings=['LOAN_PAGE_DISAGREES_WITH_API'],official_page_matches=False,
+                                  pagination={**pagination,'pages_read':1})
             if any(row['loan_id'] in seen for row in rows) or len({row['loan_id'] for row in rows})!=len(rows):
-                return result(items,PRIMO+'loans',complete=False,warnings=['REPEATED_LOAN_PAGE'])
+                return result(items,PRIMO+'loans',complete=False,warnings=['REPEATED_LOAN_PAGE'],
+                              pagination={**pagination,'pages_read':(offset-1)//10+1})
             items.extend(rows)
             seen.update(row['loan_id'] for row in rows)
             if not more:
-                return result(items,PRIMO+'loans',official_page_matches=True)
+                return result(items,PRIMO+'loans',official_page_matches=True,
+                              pagination={**pagination,'complete':True,'pages_read':(offset-1)//10+1})
             if len(rows)!=10:
                 break
-        return result(items,PRIMO+'loans',complete=False,warnings=['LOAN_PAGINATION_UNVERIFIED'])
+        return result(items,PRIMO+'loans',complete=False,warnings=['LOAN_PAGINATION_UNVERIFIED'],
+                      pagination={**pagination,'pages_read':max(1,(offset-1)//10+1)})
     finally:
         browsers.close(sid)
 

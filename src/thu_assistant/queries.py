@@ -19,7 +19,7 @@ import re
 import secrets
 import time
 from .bridge import CampusError
-from . import catalog, cache_policy, source_state
+from . import catalog, cache_policy, precheck, source_state
 
 VERSION = 'query-v1'
 CURSOR_VERSION = 'c1'
@@ -240,6 +240,9 @@ class Snapshots:
     def page(self, sid, index):
         e = self.entries[sid]
         out = deepcopy(e['result'])
+        if index > 0 and isinstance(out.get('retrieval'), dict):
+            out['retrieval'] = {**out['retrieval'], 'freshness': 'SNAPSHOT_ONLY_NOT_LIVE',
+                                'current_source_read': False, 'reused_snapshot': True}
         kind = e['kind']
         value = e['value']
         if kind in ('list', 'text'):
@@ -321,6 +324,13 @@ def read_scope_for(service, operation, parameters, items, raw, query_time):
         return _scope('FULL_LIST', offset=0, limit=max(1, count),
                       pages_read=len(pages), expected_pages=expected, query_time=query_time, parameters=parameters)
     if operation in RECORD_OPS:
+        if operation == 'order_detail' and isinstance(raw.get('collection'), dict):
+            collection = raw['collection']
+            total = collection.get('upstream_total')
+            expected = ((total + 49) // 50) if type(total) is int and total >= 0 else None
+            return _scope('FULL_LIST', offset=0, limit=max(1, total or count),
+                          pages_read=collection.get('pages_read') or 1, expected_pages=expected,
+                          query_time=query_time, parameters=parameters)
         return _scope('RECORD', offset=0, limit=1, pages_read=1, expected_pages=1,
                       query_time=query_time, parameters=parameters)
     if operation in WINDOW_OPS:
@@ -486,6 +496,12 @@ class QueryEngine:
                               query_time=query_time)
             result['source']['adapter_version'] = library.VERSION
             result.update(raw)
+            result['retrieval'] = precheck.retrieval(service_id, operation,
+                                                      checked_at=result['checked_at'],
+                                                      parameters=parameters)
+            built = precheck.build(service_id, operation, result, items, parameters,
+                                   result['checked_at'])
+            result['precheck'] = built['summary']
             scope = read_scope_for(service_id, operation, parameters, items, raw, query_time)
             result['upstream_total'] = raw.get('upstream_total') if type(raw.get('upstream_total')) is int else None
             if service_id == 'sports' and operation == 'scenes' and parameters.get('query'):
