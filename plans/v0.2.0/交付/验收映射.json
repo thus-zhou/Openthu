@@ -678,11 +678,13 @@
       ],
       "tests": [
         "tests/test_facade.py",
-        "tests/test_cli.py"
+        "tests/test_cli.py",
+        "tests/test_facade_audit.py"
       ],
       "docs": [
         "docs/CAPABILITIES.md",
-        "docs/HANDOVER.md"
+        "docs/HANDOVER.md",
+        "README.md"
       ],
       "install_assets": [
         "src/thu_assistant/facade/",

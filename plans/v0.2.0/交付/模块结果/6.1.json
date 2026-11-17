@@ -76,7 +76,7 @@
     "13 new error codes registered in contracts/v0.2/error-classification.json and mirrored in source_state.ERROR_CODES"
   ],
   "capability_registry": {
-    "total_entries": 80,
+    "total_entries": 81,
     "services": 20,
     "available_reads": "every registered read operation of info, learn, library, sports, campus plus local.agenda/agenda_changes",
     "blocked": {
