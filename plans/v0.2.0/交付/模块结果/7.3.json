@@ -111,14 +111,16 @@
       "command": "python contracts/v0.2/sources/validate.py"
     },
     "github_actions": {
-      "commit": "e5e0af6",
-      "run": 44114632917,
-      "status": "queued at record time",
+      "commit": "3625a5d3bf9b4c67922a4737749f48a87dd7f9da",
+      "content_commit": "d354025",
+      "run": 44115807167,
+      "conclusion": "success",
       "jobs": {
-        "test (ubuntu-24.04)": "pending",
-        "test (ubuntu-24.04, 3.13)": "pending",
-        "test (windows-2025)": "pending"
-      }
+        "test (ubuntu-24.04)": "success",
+        "test (ubuntu-24.04, 3.13)": "success",
+        "test (windows-2025)": "success"
+      },
+      "source": "GitHub Actions; Windows not reproduced on a local host"
     },
     "live_campus_calls": 0,
     "model_calls": 0,
