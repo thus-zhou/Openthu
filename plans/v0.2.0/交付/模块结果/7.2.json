@@ -1,0 +1,244 @@
+{
+  "module": "7.2",
+  "title": "跨平台回归、隐私与故障注入",
+  "batch": 7,
+  "owner": "Hermes",
+  "status": "implemented",
+  "status_note": "Implementation and module tests are complete. accepted is intentionally left to the fix/review stage; this record does not accept the module or the batch.",
+  "target_version": "0.2.0",
+  "baseline_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
+  "integration_parent_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
+  "batch6_integration_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
+  "delivery_commit": "49adeca8dd231611ae0f3249698fdc22d9eb76d8",
+  "implementation_commits": [
+    "4b4eb907ad43967069c6ef5b5cc324c350f53685",
+    "7fa39cd901da285ebc473ca62d663f4f86375c4c",
+    "49adeca8dd231611ae0f3249698fdc22d9eb76d8"
+  ],
+  "record_commit": "the commit containing this record file",
+  "branch": "hermes/7.2",
+  "worktree": "~/projects/Openthu/.local/worktrees/7.2",
+  "worktree_note": "Recorded relative to the user home because the frozen contract privacy validator rejects absolute home-directory paths inside plans/; the absolute path stays in the execution session.",
+  "version_pr": null,
+  "batch_state": "batch 7 is open; this module opens no PR, merges nothing and publishes nothing",
+  "paths": [
+    "scripts/regression_report.py",
+    "tests/release_regression/__init__.py",
+    "tests/release_regression/coverage_matrix.json",
+    "tests/release_regression/test_clean_environment.py",
+    "tests/release_regression/test_coverage_matrix.py",
+    "tests/release_regression/test_fault_injection.py",
+    "tests/release_regression/test_platform_backends.py",
+    "tests/release_regression/test_report.py",
+    "tests/release_regression/test_scope_integrity.py",
+    "tests/security_regression/__init__.py",
+    "tests/security_regression/marker_set.json",
+    "tests/security_regression/test_production_boundary.py",
+    "tests/security_regression/test_secret_markers.py",
+    ".github/workflows/ci.yml",
+    "docs/MAINTENANCE.md"
+  ],
+  "contracts": [
+    "result-envelope-v1",
+    "error-classification-v1",
+    "secure-storage-header-v1",
+    "source-evidence-v1",
+    "media-reference-v1",
+    "calendar-event-v1",
+    "business-facade-v1",
+    "local-read-api-v1",
+    "compatibility-baseline-v1"
+  ],
+  "outputs": [
+    "coverage_matrix.json maps 24 planned modules, 63 feature-to-case entries, 8 release acceptance criteria and 45 v0.1 test files; states are covered, pending_same_batch, documentation_only or future_gate",
+    "the matrix validator resolves every referenced file::test node with AST, requires non-empty test files for covered modules, keeps old test files present, and checks the 29-tool catalog, entry points, import paths and the original mock query",
+    "Linux tests use the real file-key backend: 0600 mode, broad permission refusal, symlink refusal, key/data separation, tamper detection and ciphertext without plaintext",
+    "Windows tests use the real DPAPI backend and are skipped on Linux with an explicit platform reason; no Windows host result is claimed from the Linux run",
+    "the seven-fault matrix covers timeout, lost/cut response, cancellation, lock conflict, process exit, disk full and partial write; every write path has request counters and no uncertain write is replayed",
+    "protected-store rotation interruption, pointer-switch failure, ENOSPC, short write and fsync failure keep the previous verified record readable; no temporary file is adopted as a record",
+    "lost upload response keeps upload count at one across repeated result reads; prepare sends zero remote writes; a lost submit is resolved by readback, not resend",
+    "cursor, cache, media reference and dashboard session are bound to account and scope; cross-account and cross-semester use is refused instead of returning old data",
+    "cross-midnight intervals keep their exact start/end and Asia/Shanghai timezone; date-only deadlines stay DATE and never receive midnight; stable ids survive title changes and separate same-title sources",
+    "a failed source produces SOURCE_UNAVAILABLE with historical carry-forward and zero DELETED; a missing page produces SOURCE_INCOMPLETE and suppresses deletion; neither becomes an empty success",
+    "report generator fields: schema, source commit/branch/dirty, product version, contract inventory and set digest, platform/Python/Node, scope, totals, Node totals, module buckets, skip reasons, gaps, failures and side-effect counters",
+    "failure records contain only the node id, module, stable error class and a pytest minimal repro; raw exception text, paths, tokens, cookies and account values never enter the report",
+    "skip classification: platform hints are explainable, environment hints set the platform INCOMPLETE, unexplained reasons fail the gate; the platform name itself must be known",
+    "aggregate requires the requested platforms (linux and windows by default) and one source commit across reports; missing platform or commit mismatch fails",
+    "release gate requires test evidence, scans source and every candidate archive with privacy_scan, audits the frozen runtime/dev/Node pins, checks conservative defaults, verifies the candidate and scans the installed wheel for the exact marker set",
+    "CI test jobs emit per-platform JUnit, build and upload only safe regression-report JSON, and the release-gate job downloads all platform reports, builds the candidate, runs the gate with marker_set.json and uploads release-gate.json",
+    "CI uses fixed Ubuntu 24.04 / Windows 2025, Python 3.12/3.13, Node 24, explicit Chromium installation, read-only contents permission, persist-credentials false and no pull_request_target; no raw logs or secrets are uploaded",
+    "docs/MAINTENANCE.md documents report, aggregate and release-gate commands, skip semantics, marker scope and blocking rules"
+  ],
+  "checks": {
+    "module_tests": {
+      "collected": 74,
+      "passed": 73,
+      "skipped": 1,
+      "failed": 0,
+      "skip_reason": "Windows DPAPI tests are platform-only and run on the Windows CI job",
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/release_regression tests/security_regression"
+    },
+    "module_test_breakdown": {
+      "tests/release_regression/test_clean_environment.py": 4,
+      "tests/release_regression/test_coverage_matrix.py": 8,
+      "tests/release_regression/test_fault_injection.py": 14,
+      "tests/release_regression/test_platform_backends.py": 9,
+      "tests/release_regression/test_report.py": 14,
+      "tests/release_regression/test_scope_integrity.py": 10,
+      "tests/security_regression/test_production_boundary.py": 7,
+      "tests/security_regression/test_secret_markers.py": 8
+    },
+    "regression_report": {
+      "ok": true,
+      "status": "PASS",
+      "totals": {
+        "passed": 1710,
+        "failed": 0,
+        "skipped": 8,
+        "errors": 0,
+        "total": 1718
+      },
+      "python_passed": 1644,
+      "python_skipped": 8,
+      "node_passed": 66,
+      "node_skipped": 0,
+      "modules": 25,
+      "gaps": 0,
+      "failures": 0,
+      "commit": "49adeca8dd231611ae0f3249698fdc22d9eb76d8",
+      "command": "python scripts/regression_report.py gate --junit artifacts/junit.xml --dev-results .local/test-results.json --platform linux --commit 49adeca --output artifacts/regression-report.json"
+    },
+    "aggregate": {
+      "ok": true,
+      "status": "PASS",
+      "platforms": [
+        "linux",
+        "windows"
+      ],
+      "source_commit": "49adeca8dd231611ae0f3249698fdc22d9eb76d8",
+      "missing_platforms": [],
+      "note": "The Linux report is a real local run. The Windows report is a Windows-shaped report generated from the same JUnit to exercise aggregation; it is not a Windows host run and must not be cited as one."
+    },
+    "release_gate": {
+      "ok": true,
+      "status": "PASS",
+      "checks": {
+        "reports": "PASS",
+        "privacy_source": "PASS",
+        "privacy_archives": "PASS",
+        "marker_archives": "PASS",
+        "marker_reports": "PASS",
+        "dependencies": "PASS",
+        "defaults": "PASS",
+        "candidate": "VERIFIED"
+      },
+      "marker_count": 7,
+      "wheel_members_checked": 208,
+      "candidate_artifacts": 4,
+      "gaps": 0,
+      "command": "python scripts/regression_report.py release-gate --reports artifacts/reports --dist dist --markers tests/security_regression/marker_set.json --require-dist --output artifacts/release-gate.json"
+    },
+    "candidate": {
+      "ok": true,
+      "commit": "49adeca8dd231611ae0f3249698fdc22d9eb76d8",
+      "artifacts": 4,
+      "wheel_members": 208,
+      "wheel_bundled_members": 54,
+      "sdist_members": 476,
+      "published": false,
+      "command": "python scripts/package_release.py build"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 1644,
+      "python_skipped": 8,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test"
+    },
+    "dev_check": {
+      "ok": true,
+      "files_checked": 542,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "compatibility_baselines": 1,
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8,
+      "legacy_tools": 29,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "fixtures": 7,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "side_effects": {
+      "live_campus_calls": 0,
+      "model_calls": 0,
+      "business_submissions": 0,
+      "browser_launches": 0,
+      "message_sends": 0,
+      "background_processes": 0
+    }
+  },
+  "verified_cases": [
+    "a secret marker in a public archive fails both privacy_scan and the exact marker gate, and the findings never echo the marker value",
+    "the production entry cannot enable a synthetic codec: no synthetic_store import or switch exists in src, missing key/DPAPI fails closed, and the default submission transport refuses every read and write",
+    "an upload response that is lost leaves upload count at one; repeated result reads and reconciliation only read and never increase upload, draft or submit counts",
+    "a cursor from another account or another scope raises EVENT_CURSOR_SCOPE_MISMATCH; a cache entry from another account or semester is rejected with CACHE_BINDING_MISMATCH; another media scope is refused; another dashboard instance rejects the cookie",
+    "rotation interruption on the second record, a pointer-switch failure, ENOSPC, a short write and fsync failure all keep the previous verified record readable and healthy",
+    "a failed source produces SOURCE_UNAVAILABLE with two carried-forward events and zero DELETED; a missing page produces SOURCE_INCOMPLETE and no deletion; a failed read is not an empty todo list",
+    "the MCP server starts from an isolated HOME with the 29-tool catalog and static services, and generated paths stay under that HOME without user config or credentials",
+    "with library, sports and learn-submit switches off, the 29-tool catalog and the original mock course/assignment queries still work",
+    "the coverage matrix references only existing nodes and keeps all 45 v0.1 test files present",
+    "an unexplainable skip fails the gate, an environment gap makes the platform INCOMPLETE, and platform-only skips are explainable and pass",
+    "two platform reports at different commits fail aggregation; a missing platform fails aggregation",
+    "the release gate fails without test evidence and when a marker enters the installed wheel, and passes with both platform reports, pinned dependencies, conservative defaults and a verified candidate"
+  ],
+  "limits": [
+    "7.1 is a same-batch module that is not integrated in this worktree. The matrix marks tests/test_web_assets.py as pending_same_batch; 7.2 proves the 6.2 local API protocol and process boundary, not the 7.1 dashboard UI. The matrix state must change to covered after 7.1 reconnection.",
+    "7.3 is documentation-only and 8.1/9.1 are future serial gates; the matrix marks them explicitly and invents no tests for them.",
+    "This host is Linux. Windows DPAPI, Windows ACL and Windows session migration cases are skipped with explicit platform reasons. A real Windows result must come from the windows-2025 CI job at the same commit; a skipped case is not a pass and the Windows-shaped report used for local aggregation is not Windows evidence.",
+    "Skip classification is policy-based. A new skip reason outside the platform/environment hints fails the gate until it is explained; this is intentional, not an omission.",
+    "Exact marker scanning covers the installed wheel only. The source archive and sdist intentionally include tests and marker_set.json, so privacy_scan.py's generic credential/sensitive-file rules cover them; scanning those archives for the committed marker definitions would self-report the definitions as leaks.",
+    "Fault injection uses the 5.3 synthetic submission transport and temporary 2.2 keys. No production upload endpoint, real account or real campus write exists in this module.",
+    "The local API timeout case uses a 0.15 s deadline and a non-cooperative facade; the worker thread may outlive the request until process exit, which is the 6.2 documented process boundary, not a new cancellation capability.",
+    "The report keeps only error classes and repository-relative node ids. Skip reasons and findings are path/token sanitized, but the report is an engineering summary, not a general data-loss-prevention system.",
+    "The local release-gate pass used a real Linux JUnit plus a Windows-shaped report at the same commit to exercise aggregation. The two-platform CI result remains to be observed and recorded by 8.1 at the integration commit.",
+    "The candidate package is a local candidate build, not a release. No main merge, tag or GitHub Release was created.",
+    "regression_report.py adds no runtime dependency and uses the existing pinned Python/Node runtimes and the explicit Chromium install.",
+    "The CI workflow was not executed on GitHub from this session. The same commands and gates passed locally on Linux; the actual Ubuntu/Windows CI result is an 8.1 step."
+  ],
+  "rollback": "Revert to c98154d: delete scripts/regression_report.py, tests/release_regression/ and tests/security_regression/, and restore .github/workflows/ci.yml and docs/MAINTENANCE.md. There is no store or data-format migration. Local dist/, artifacts/ and .local/ are untracked build/runtime output and can be deleted. Per the module plan, a CI-rule rollback must keep the discovered security regression cases instead of restoring a rule that ignores them.",
+  "next": "Batch 7 reconnects 7.1, 7.2 and 7.3. 7.2 implementation and module tests are complete. 8.1 must run the real two-platform CI at the integration commit, aggregate the actual Linux and Windows reports, build the candidate and run release-gate; it must not cite this Linux evidence or the Windows-shaped report as a Windows run. accepted is left to the fix/review stage.",
+  "cross_module_requests": [
+    "7.1: after reconnection add tests/test_web_assets.py and change the matrix 7.1 state from pending_same_batch to covered; keep display.state, single-use bootstrap and LOCAL_API_BUSY semantics.",
+    "8.1: run both-platform CI at the integration commit, aggregate the real reports, build the candidate and run release-gate with marker_set.json; update 验收映射.json evidence for 7.2 and resolve the 7.1 pending state.",
+    "7.3: reference the report, aggregate and release-gate commands and skip semantics from docs/MAINTENANCE.md in the user-facing manual; this module does not edit the manual body.",
+    "2.1/6.3: no change required. 7.2 reuses scripts/privacy_scan.py and scripts/package_release.py; exact marker scanning is additive inside regression_report.py.",
+    "6.2: no change required. 7.2 reuses its local API timeout, process-instance session and read-only route contract."
+  ],
+  "privacy": {
+    "raw_payload_included": false,
+    "personal_records_included": false,
+    "native_paths_included": false,
+    "credentials_included": false,
+    "synthetic_only": true
+  }
+}
