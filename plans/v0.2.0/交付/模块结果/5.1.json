@@ -14,7 +14,7 @@
   "worktree": ".local/worktrees/5.1",
   "worktree_note": "Repo-relative by project privacy rule; the absolute path is kept outside Git and is not written into a committed record.",
   "version_pr": null,
-  "batch_state": "batch 5 is open; this module does not create a PR, merge main or publish a release",
+  "batch_state": "batch 5 accepted and reconnected at 0779fff; this module does not create a PR, merge main or publish a release",
   "audit_report": ".local/audits/5.1-audit.md",
   "paths": [
     "src/thu_assistant/library_actions.py",

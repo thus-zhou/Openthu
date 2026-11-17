@@ -15,7 +15,8 @@
     "model_calls": 0,
     "business_submissions": 0,
     "release_owner": "Codex",
-    "batch4_integration_test": "tests/test_batch4_integration.py"
+    "batch4_integration_test": "tests/test_batch4_integration.py",
+    "batch5_integration_test": "tests/test_batch5_integration.py"
   },
   "modules": [
     {

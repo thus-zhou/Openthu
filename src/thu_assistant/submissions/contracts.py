@@ -4,10 +4,11 @@ The contract is registered into the frozen action engine registry by
 ``register()``.  Public MCP/CLI wiring belongs to 6.1; this module only owns the
 operation, its input schema and the adapter descriptor.
 
-``enabled`` is ``False`` on purpose: ``actions.action_enabled`` only knows the
-library and sports write switches, and this module must not inherit the sports
-switch.  Submission write enablement is owned here (``THU_LEARN_SUBMIT``) and
-checked by the adapter before any request is built.
+``enabled`` is ``False`` on purpose: ``actions.action_enabled`` only enables the
+library and sports services and fails closed for every other service, so this
+module must not inherit the sports switch.  Submission write enablement is owned
+here (``THU_LEARN_SUBMIT``) and checked by the adapter before any request is
+built.
 """
 from __future__ import annotations
 

@@ -20,7 +20,7 @@
   "worktree": "~/projects/Openthu/.local/worktrees/5.4",
   "worktree_note": "Recorded relative to the user home because the contract privacy validator rejects absolute home-directory paths; the absolute path stays in the execution session.",
   "version_pr": null,
-  "batch_state": "module 5.4 accepted after audit remediation; batch 5 integration and batch acceptance remain pending",
+  "batch_state": "batch 5 accepted and reconnected at 0779fff; 5.4 delivered at 6145ed2",
   "evidence_tree": "clean checkout of 6145ed2 after `python scripts/dev.py setup-node` (or an equivalent src/thu_assistant/node_modules link); otherwise dev.py check stops on the missing tough-cookie runtime dependency",
   "paths": [
     "src/thu_assistant/events.py",

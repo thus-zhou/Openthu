@@ -37,8 +37,9 @@ from .transport import references, request_specs
 def enabled():
     """Module-owned write switch; fail-closed until explicitly enabled.
 
-    ``actions.action_enabled`` has no ``learn`` branch, and this module must not
-    inherit the sports switch, so the switch lives here and defaults to off.
+    ``actions.action_enabled`` fails closed for every service without a write
+    switch, so this module must not inherit the sports switch; the switch lives
+    here and defaults to off.
     """
     return os.environ.get('THU_LEARN_SUBMIT') == '1'
 
