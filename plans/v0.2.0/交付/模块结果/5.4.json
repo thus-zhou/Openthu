@@ -40,7 +40,7 @@
     "error-classification-v1"
   ],
   "additive_runtime_objects": [
-    "agenda-item-v1: calendar-event-v1 plus time_semantics/source_version/time_trusted/completeness",
+    "agenda-events-v1: calendar-event-v1 plus time_semantics/source_version/time_trusted/completeness",
     "event-snapshot-v1: account, scope, canonical-version-bound incremental baseline",
     "calendar-export-v1: iCalendar, Markdown and structured summary exports",
     "opaque evc1 cursor: account/scope-bound, 600-second expiry, no timestamp breakpoint"
