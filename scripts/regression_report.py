@@ -136,17 +136,11 @@ _PRIVATE_IP = re.compile(
     r"(?<![\d.])(?:10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}"
     r"|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2})(?![\d.])"
 )
-_ACCOUNT_SCOPE = re.compile(r"\bacct_[A-Za-z0-9_-]{16,}\b")
 _CREDENTIAL_FILES = {
     "creds.json", "credentials.json", "cookies.json", "session.json",
     "token.json", "auth.json", "hosts.yml",
 }
-MARKER_RULES = {
-    "credential-token": _TOKEN_PATTERNS,
-    "private-path": _PRIVATE_PATH_PATTERNS,
-    "private-host": (_PRIVATE_IP,),
-    "account-scope": (_ACCOUNT_SCOPE,),
-}
+_MARKER_LABEL = re.compile(r"^[A-Za-z0-9_.-]{1,40}$")
 
 ENVIRONMENT_SKIP_HINTS = (
     "node is unavailable", "node.js is not installed", "node is not installed",
@@ -625,26 +619,34 @@ def privacy_scan_archives(paths: list[Path]) -> dict:
             "scope": "candidate-archives"}
 
 
-def marker_findings(name: str, data: bytes) -> list[dict]:
-    """Find full secret markers in public bytes without returning the value."""
+def marker_findings(name: str, data: bytes,
+                    markers: dict[str, str] | None = None) -> list[dict]:
+    """Find exact injected marker values in public bytes.
+
+    Generic token/path regexes are deliberately not used here: product source
+    contains regex literals and synthetic examples that are not leaks.  The
+    caller supplies the marker set it actually injected; only those exact values
+    (or a credential-shaped file name) fail the gate.
+    """
     findings = []
     base = name.replace("\\", "/").rsplit("/", 1)[-1].casefold()
     if base in _CREDENTIAL_FILES or base == ".env" or (
             base.startswith(".env.") and base != ".env.example"):
         findings.append({"file": name, "line": 0, "rule": "credential-file"})
-    text = data.decode("utf-8", "ignore")
-    for rule, patterns in MARKER_RULES.items():
-        for pattern in patterns:
-            for match in pattern.finditer(text):
-                findings.append({"file": name,
-                                 "line": text.count("\n", 0, match.start()) + 1,
-                                 "rule": rule})
-                if len(findings) >= 50:
-                    return findings
+    for label, value in (markers or {}).items():
+        if not isinstance(value, str) or not value:
+            continue
+        rule_label = label if _MARKER_LABEL.fullmatch(label) else "value"
+        needle = value.encode("utf-8")
+        start = data.find(needle)
+        if start < 0:
+            continue
+        findings.append({"file": name, "line": data.count(b"\n", 0, start) + 1,
+                         "rule": "marker:" + rule_label})
     return findings
 
 
-def marker_scan_archives(paths: list[Path]) -> dict:
+def marker_scan_archives(paths: list[Path], markers: dict[str, str] | None = None) -> dict:
     scanner = _load_script("privacy_scan")
     findings = []
     count = 0
@@ -652,16 +654,16 @@ def marker_scan_archives(paths: list[Path]) -> dict:
         try:
             for name, data in scanner.archive_files(path):
                 count += 1
-                findings.extend(marker_findings(path.name + "/" + name, data))
+                findings.extend(marker_findings(path.name + "/" + name, data, markers))
         except (OSError, ValueError, zipfile.BadZipFile) as error:
             findings.append({"file": path.name, "line": 0,
                              "rule": "archive-unreadable:" + failure_class(type(error).__name__)})
     return {"ok": not findings, "files_checked": count,
             "findings": findings[:50], "finding_count": len(findings),
-            "scope": "public-archives"}
+            "marker_count": len(markers or {}), "scope": "public-archives"}
 
 
-def marker_scan_files(directory: Path | str) -> dict:
+def marker_scan_files(directory: Path | str, markers: dict[str, str] | None = None) -> dict:
     findings = []
     count = 0
     for path in sorted(Path(directory).rglob("*")):
@@ -669,12 +671,12 @@ def marker_scan_files(directory: Path | str) -> dict:
             continue
         count += 1
         try:
-            findings.extend(marker_findings(path.name, path.read_bytes()))
+            findings.extend(marker_findings(path.name, path.read_bytes(), markers))
         except OSError:
             findings.append({"file": path.name, "line": 0, "rule": "unreadable"})
     return {"ok": not findings, "files_checked": count,
             "findings": findings[:50], "finding_count": len(findings),
-            "scope": "public-reports"}
+            "marker_count": len(markers or {}), "scope": "public-reports"}
 
 
 def _pins(rows) -> dict[str, str]:
@@ -822,7 +824,8 @@ def _all_archives(dist: Path) -> list[Path]:
 
 
 def release_gate(*, reports_dir: Path | str | None = None, dist: Path | str = "dist",
-                 require_dist: bool = False, platform_name: str | None = None) -> dict:
+                 require_dist: bool = False, platform_name: str | None = None,
+                 markers: dict[str, str] | None = None) -> dict:
     checks = {}
     gaps = []
     statuses = []
@@ -848,14 +851,16 @@ def release_gate(*, reports_dir: Path | str | None = None, dist: Path | str = "d
     }
     checks["privacy_archives"] = privacy_archives
     statuses.append("PASS" if privacy_archives["ok"] else "FAIL")
-    marker_archives = marker_scan_archives(archive_paths) if archive_paths else {
+    marker_candidates = [path for path in archive_paths if path.suffix == ".whl"]
+    marker_archives = marker_scan_archives(marker_candidates, markers) if marker_candidates else {
         "ok": True, "files_checked": 0, "findings": [], "finding_count": 0,
-        "scope": "public-archives", "state": "NO_ARCHIVES",
+        "marker_count": len(markers or {}), "scope": "public-archives",
+        "state": "NO_PRODUCT_ARCHIVES",
     }
     checks["marker_archives"] = marker_archives
     statuses.append("PASS" if marker_archives["ok"] else "FAIL")
     if reports_dir:
-        marker_reports = marker_scan_files(reports_dir)
+        marker_reports = marker_scan_files(reports_dir, markers)
         checks["marker_reports"] = marker_reports
         statuses.append("PASS" if marker_reports["ok"] else "FAIL")
     dependencies = dependency_audit()
@@ -900,6 +905,20 @@ def release_gate(*, reports_dir: Path | str | None = None, dist: Path | str = "d
 # CLI
 # ---------------------------------------------------------------------------
 
+def load_markers(path: Path | str | None) -> dict[str, str]:
+    """Read an exact marker set; a malformed file is an empty set, not a crash."""
+    if not path:
+        return {}
+    try:
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(value, dict):
+        return {}
+    return {str(key): str(item) for key, item in value.items()
+            if isinstance(item, str) and item and not str(key).startswith("_")}
+
+
 def _report_from_args(args) -> dict:
     cases = parse_junit(args.junit)
     return build_report(cases, platform=args.platform, commit=args.commit,
@@ -938,6 +957,7 @@ def main(argv=None) -> int:
     release.add_argument("--require-dist", action="store_true")
     release.add_argument("--output", required=True)
     release.add_argument("--platform")
+    release.add_argument("--markers", help="JSON object of exact injected marker values")
 
     args = parser.parse_args(argv)
     if args.command in ("report", "gate"):
@@ -957,7 +977,8 @@ def main(argv=None) -> int:
                           "gaps": len(value["gaps"])}, ensure_ascii=False))
         return 0 if value["status"] == "PASS" else 1
     value = release_gate(reports_dir=args.reports, dist=args.dist,
-                         require_dist=args.require_dist, platform_name=args.platform)
+                         require_dist=args.require_dist, platform_name=args.platform,
+                         markers=load_markers(args.markers))
     write_report(value, args.output)
     print(json.dumps({"status": value["status"],
                       "checks": {name: bool(row.get("ok")) for name, row in value["checks"].items()},

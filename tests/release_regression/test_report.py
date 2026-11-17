@@ -39,6 +39,9 @@ def marker(kind: str) -> str:
     return "SYNTHETIC-MARKER"
 
 
+MARKERS = {"path": marker("path"), "token": marker("token"), "host": marker("host")}
+
+
 def write_junit(path: Path, cases: list[dict]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     rows = []
@@ -158,11 +161,11 @@ def test_marker_scan_rejects_an_archive_with_a_private_path_and_token(tmp_path):
         bundle.writestr("notes.txt", f"see {marker('path')} with {marker('token')}\n")
         bundle.writestr("session.json", "{}")
         bundle.writestr("host.txt", marker("host"))
-    result = REPORT.marker_scan_archives([archive])
+    result = REPORT.marker_scan_archives([archive], MARKERS)
     text = json.dumps(result, ensure_ascii=False)
     assert result["ok"] is False
     rules = {row["rule"] for row in result["findings"]}
-    assert {"private-path", "credential-token", "credential-file", "private-host"} <= rules
+    assert {"marker:path", "marker:token", "marker:host", "credential-file"} <= rules
     assert marker("path") not in text
     assert marker("token") not in text
     assert marker("host") not in text
@@ -172,7 +175,7 @@ def test_marker_scan_accepts_a_clean_public_report(tmp_path):
     archive = tmp_path / "clean.zip"
     with zipfile.ZipFile(archive, "w") as bundle:
         bundle.writestr("report.json", json.dumps({"status": "PASS", "items": []}))
-    assert REPORT.marker_scan_archives([archive])["ok"] is True
+    assert REPORT.marker_scan_archives([archive], MARKERS)["ok"] is True
 
 
 def test_release_gate_is_incomplete_without_a_candidate_and_fails_when_required(tmp_path):
@@ -190,6 +193,20 @@ def test_release_gate_is_incomplete_without_a_candidate_and_fails_when_required(
     strict = REPORT.release_gate(reports_dir=reports, dist=tmp_path / "missing",
                                  require_dist=True)
     assert strict["status"] == "FAIL"
+
+
+def test_release_gate_rejects_a_leaking_wheel(tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    wheel = dist / "openthu-0.2.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as bundle:
+        bundle.writestr("leak.txt", MARKERS["path"])
+    value = REPORT.release_gate(dist=dist, markers=MARKERS)
+    assert value["checks"]["marker_archives"]["ok"] is False
+    assert any(row["rule"] == "marker:path"
+               for row in value["checks"]["marker_archives"]["findings"])
+    assert value["status"] == "FAIL"
+    assert marker("path") not in json.dumps(value, ensure_ascii=False)
 
 
 def test_candidate_check_reports_not_built_without_dist(tmp_path):

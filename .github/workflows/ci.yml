@@ -92,6 +92,7 @@ jobs:
           python scripts/regression_report.py release-gate
           --reports artifacts/reports
           --dist dist
+          --markers tests/security_regression/marker_set.json
           --require-dist
           --output artifacts/release-gate.json
       - name: Upload the release gate report

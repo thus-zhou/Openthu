@@ -33,16 +33,9 @@ from thu_assistant.submissions.errors import SubmissionError
 ROOT = Path(__file__).resolve().parents[2]
 PLATFORM = "windows-dpapi" if os.name == "nt" else "file-key"
 ACCOUNT_SCOPE = "acct_" + "c" * 24
-MARKERS = {
-    "name": "SYNTHETIC-PERSON-" + "A1B2C3",
-    "account": "SYNTHETIC-STUDENT-" + "D4E5F6",
-    "scope": ACCOUNT_SCOPE,
-    "home": "/" + "home/" + "synthetic-marker" + "/private/notes.txt",
-    "host": ".".join(["192", "168", "77", "9"]),
-    "token": "ghp_" + "Q" * 36,
-    "file": "SYNTHETIC-PRIVATE-FILE.pdf",
-    "image": "SYNTHETIC-IMAGE-COMMENT-7.2",
-}
+MARKERS = json.loads((Path(__file__).parent / "marker_set.json").read_text(encoding="utf-8"))
+MARKERS = {key: value for key, value in MARKERS.items() if not key.startswith("_")}
+MARKERS["token"] = "ghp_" + "Q" * 36
 
 
 def load_report_module():
@@ -200,21 +193,21 @@ def test_privacy_gate_rejects_markers_in_public_archives(tmp_path):
             MARKERS["scope"]]))
         bundle.writestr("session.json", "{}")
     privacy = REPORT.privacy_scan_archives([archive])
-    markers = REPORT.marker_scan_archives([archive])
+    markers = REPORT.marker_scan_archives([archive], MARKERS)
     assert privacy["ok"] is False
     assert markers["ok"] is False
     assert "github-token" in {row["rule"] for row in privacy["findings"]}
-    assert {"private-path", "credential-token", "private-host", "account-scope",
-            "credential-file"} <= {row["rule"] for row in markers["findings"]}
+    assert {"marker:home", "marker:token", "marker:host", "marker:account",
+            "marker:scope", "credential-file"} <= {row["rule"] for row in markers["findings"]}
     assert_clean(privacy)
     assert_clean(markers)
 
 
 def test_marker_findings_scan_stdout_without_returning_the_value():
     text = "stdout: " + " ".join([MARKERS["home"], MARKERS["token"], MARKERS["host"]])
-    rows = REPORT.marker_findings("stdout", text.encode("utf-8"))
-    assert {row["rule"] for row in rows} >= {"private-path", "credential-token",
-                                             "private-host"}
+    rows = REPORT.marker_findings("stdout", text.encode("utf-8"), MARKERS)
+    assert {row["rule"] for row in rows} >= {"marker:home", "marker:token",
+                                             "marker:host"}
     assert_clean(rows)
 
 

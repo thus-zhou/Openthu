@@ -112,6 +112,7 @@ def test_ci_gate_runs_privacy_dependency_and_candidate_checks():
     assert "python scripts/package_release.py build" in text
     assert "release-gate" in text
     assert "--require-dist" in text
+    assert "--markers tests/security_regression/marker_set.json" in text
     assert "download-artifact" in text
 
 
