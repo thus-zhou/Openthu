@@ -9,19 +9,21 @@
   "baseline_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
   "integration_parent_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
   "batch6_integration_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
-  "delivery_commit": "10ad698155332ee02e0892206086871df3c416b3",
+  "delivery_commit": "3eeb2d335059f5c41ff4dc08a79242e0c890cb30",
   "implementation_commits": [
     "4b4eb907ad43967069c6ef5b5cc324c350f53685",
     "7fa39cd901da285ebc473ca62d663f4f86375c4c",
     "49adeca8dd231611ae0f3249698fdc22d9eb76d8",
     "0e3063144465686b36383d7a111cb185ca89ff58",
     "625a8c038a2079e3414c1be7ce0add33be8b94b5",
-    "10ad698155332ee02e0892206086871df3c416b3"
+    "10ad698155332ee02e0892206086871df3c416b3",
+    "3eeb2d335059f5c41ff4dc08a79242e0c890cb30"
   ],
   "audit_fix_commits": [
     "0e3063144465686b36383d7a111cb185ca89ff58",
     "625a8c038a2079e3414c1be7ce0add33be8b94b5",
-    "10ad698155332ee02e0892206086871df3c416b3"
+    "10ad698155332ee02e0892206086871df3c416b3",
+    "3eeb2d335059f5c41ff4dc08a79242e0c890cb30"
   ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/7.2",
@@ -97,7 +99,8 @@
           "tests/release_regression/test_report.py::test_shape_report_is_rejected_by_default",
           "tests/release_regression/test_report.py::test_ci_runner_mismatch_is_rejected",
           "7.2-audit-probes.py fake_platform -> aggregate FAIL",
-          "tests/release_regression/test_report.py::test_release_gate_requires_the_python_matrix_by_default"
+          "tests/release_regression/test_report.py::test_release_gate_requires_the_python_matrix_by_default",
+          "tests/release_regression/test_report.py::test_cli_release_gate_requires_the_python_matrix_by_default"
         ]
       },
       {
@@ -248,8 +251,8 @@
   },
   "checks": {
     "module_tests": {
-      "collected": 99,
-      "passed": 98,
+      "collected": 100,
+      "passed": 99,
       "skipped": 1,
       "failed": 0,
       "skip_reason": "Windows DPAPI tests are platform-only and run on the Windows CI job",
@@ -260,7 +263,7 @@
       "tests/release_regression/test_coverage_matrix.py": 8,
       "tests/release_regression/test_fault_injection.py": 14,
       "tests/release_regression/test_platform_backends.py": 9,
-      "tests/release_regression/test_report.py": 39,
+      "tests/release_regression/test_report.py": 40,
       "tests/release_regression/test_scope_integrity.py": 10,
       "tests/security_regression/test_production_boundary.py": 7,
       "tests/security_regression/test_secret_markers.py": 8
@@ -269,22 +272,22 @@
       "ok": true,
       "status": "PASS",
       "totals": {
-        "passed": 1735,
+        "passed": 1736,
         "failed": 0,
         "skipped": 8,
         "errors": 0,
-        "total": 1743
+        "total": 1744
       },
-      "python_passed": 1669,
+      "python_passed": 1670,
       "python_skipped": 8,
       "node_passed": 66,
       "node_skipped": 0,
       "modules": 25,
-      "module_bucket_sum": 1735,
+      "module_bucket_sum": 1736,
       "gaps": 0,
       "failures": 0,
-      "commit": "10ad698155332ee02e0892206086871df3c416b3",
-      "command": "python scripts/regression_report.py gate --junit .local/scratch7.2/audit-final2/junit.xml --dev-results .local/test-results.json --platform linux --commit 10ad698 --output .local/scratch7.2/audit-final2/report.json"
+      "commit": "3eeb2d335059f5c41ff4dc08a79242e0c890cb30",
+      "command": "python scripts/regression_report.py gate --junit .local/scratch7.2/audit-final3/junit.xml --dev-results .local/test-results.json --platform linux --commit 3eeb2d3 --output .local/scratch7.2/audit-final3/report.json"
     },
     "aggregate": {
       "shape_report_default": "FAIL",
@@ -294,17 +297,31 @@
       ],
       "shape_report_diagnostic_only": true,
       "note": "A Linux report relabeled as Windows is rejected by default; the diagnostic allow flag is not used by release-gate and is not release evidence.",
-      "python_matrix_default": "FAIL when the Linux 3.13 report is absent; release_gate enforces the floor matrix by default"
+      "python_matrix_default": "FAIL when Linux 3.13 or Windows 3.12 is absent; release_gate and the CLI enforce the floor matrix by default"
     },
     "release_gate": {
       "ok": false,
       "status": "FAIL",
-      "expected": "FAIL because no real Windows report exists on this Linux host",
+      "expected": "FAIL because the host only has a real Linux 3.12 report: the Windows report, Linux 3.13 and Windows 3.12 matrix entries are missing",
       "gaps": [
         {
           "kind": "platform_report_missing",
           "platforms": [
             "windows"
+          ]
+        },
+        {
+          "kind": "python_matrix_incomplete",
+          "platform": "linux",
+          "missing": [
+            "3.13"
+          ]
+        },
+        {
+          "kind": "python_matrix_incomplete",
+          "platform": "windows",
+          "missing": [
+            "3.12"
           ]
         }
       ],
@@ -342,11 +359,11 @@
           "findings": 0
         }
       ],
-      "command": "python scripts/regression_report.py release-gate --reports .local/scratch7.2/audit-final2/reports --dist dist --markers tests/security_regression/marker_set.json --expected-commit 10ad698 --require-dist --output .local/scratch7.2/audit-final2/release-gate.json"
+      "command": "python scripts/regression_report.py release-gate --reports .local/scratch7.2/audit-final3/reports --dist dist --markers tests/security_regression/marker_set.json --expected-commit 3eeb2d3 --require-dist --output .local/scratch7.2/audit-final3/release-gate.json"
     },
     "candidate": {
       "ok": true,
-      "commit": "10ad698155332ee02e0892206086871df3c416b3",
+      "commit": "3eeb2d335059f5c41ff4dc08a79242e0c890cb30",
       "artifacts": 4,
       "wheel_members": 208,
       "wheel_bundled_members": 54,
@@ -355,7 +372,7 @@
       "command": "python scripts/package_release.py build"
     },
     "full_offline_suite_linux": {
-      "python_passed": 1669,
+      "python_passed": 1670,
       "python_skipped": 8,
       "python_failed": 0,
       "python_errors": 0,
