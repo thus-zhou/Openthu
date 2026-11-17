@@ -41,7 +41,7 @@
 | `availability` | `state`、`free_count`、`capacity`、`capacity_scope`、`capacity_is_slot_availability`、`source_complete`；座位另含 `row_count`/`mapped_seat_count`/`unknown_seat_count` |
 | `eligibility` | `state`（`VERIFIED`/`UNVERIFIED`/`INELIGIBLE`/`UNKNOWN`；借阅续借为 `ELIGIBLE`/`NOT_ELIGIBLE`/`UNKNOWN`）、原因；续借时另含 `renewal` |
 | `fees` | `state`（`UNKNOWN`/`QUOTED`/`PAID`/`SEE_SESSIONS`/`NOT_APPLICABLE`）与 `items`（分、展示值、币种、原字段、来源、检查时间） |
-| `rules` | `state`（`DECLARED`/`MISSING`/`PARTIAL`/`PER_SESSION`/`NOT_APPLICABLE`）与逐字段规则项（原字段、值、单位、来源、检查时间） |
+| `rules` | `state`（`READ`/`MISSING`/`PARTIAL`/`PER_SESSION`/`NOT_APPLICABLE`）与逐字段规则项（原字段、值、单位、来源、检查时间） |
 | `unknowns` | 后续准备仍需补查的项目，例如 `ACCOUNT_ELIGIBILITY`、`FEE_STATE` |
 | `preparation_state` | `READY_FOR_CONFIRMATION`/`NEEDS_ELIGIBILITY_CHECK`/`NEEDS_RULE_CHECK`/`NEEDS_USER_ACTION`/`NEEDS_OFFICIAL_PAGE`/`NOT_PREPARABLE`/`UNKNOWN`/`NOT_APPLICABLE`/`SEE_ITEMS` |
 
