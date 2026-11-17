@@ -36,38 +36,81 @@
     {
       "id": "overview",
       "title": "总览",
-      "sources": ["/api/v1/health", "/api/v1/todos", "/api/v1/query/learn/courses", "/api/v1/resources", "/api/v1/query/library/loans", "/api/v1/query/library/reservations", "/api/v1/query/sports/orders"]
+      "sources": [
+        "/api/v1/health",
+        "/api/v1/todos",
+        "/api/v1/query/learn/courses",
+        "/api/v1/resources",
+        "/api/v1/query/library/loans",
+        "/api/v1/query/library/reservations",
+        "/api/v1/query/sports/orders"
+      ]
     },
     {
       "id": "courses",
       "title": "课程",
-      "sources": ["/api/v1/query/learn/semesters", "/api/v1/query/learn/courses"],
-      "filters": ["semester", "kind", "query"]
+      "sources": [
+        "/api/v1/query/learn/semesters",
+        "/api/v1/query/learn/courses"
+      ],
+      "filters": [
+        "semester",
+        "kind",
+        "query"
+      ]
     },
     {
       "id": "resources",
       "title": "课程资料",
-      "sources": ["/api/v1/query/learn/semesters", "/api/v1/resources"],
-      "filters": ["semester", "course_id", "kind", "query"],
+      "sources": [
+        "/api/v1/query/learn/semesters",
+        "/api/v1/resources"
+      ],
+      "filters": [
+        "semester",
+        "course_id",
+        "kind",
+        "query"
+      ],
       "selection": "stable_resource_uid across pages; filter change clears selection and cursor"
     },
     {
       "id": "calendar",
       "title": "日程",
-      "sources": ["/api/v1/calendar"],
-      "views": ["timeline", "list"],
-      "states": ["overdue", "today", "upcoming", "undated", "completed", "conflict", "period-limitation"]
+      "sources": [
+        "/api/v1/calendar"
+      ],
+      "views": [
+        "timeline",
+        "list"
+      ],
+      "states": [
+        "overdue",
+        "today",
+        "upcoming",
+        "undated",
+        "completed",
+        "conflict",
+        "period-limitation"
+      ]
     },
     {
       "id": "library",
       "title": "借阅与预约",
-      "sources": ["/api/v1/query/library/loans", "/api/v1/query/library/reservations", "/api/v1/query/sports/orders"],
+      "sources": [
+        "/api/v1/query/library/loans",
+        "/api/v1/query/library/reservations",
+        "/api/v1/query/sports/orders"
+      ],
       "actions": "none; official HTTPS entry links only"
     },
     {
       "id": "health",
       "title": "来源健康",
-      "sources": ["/api/v1/health", "/api/v1/services"],
+      "sources": [
+        "/api/v1/health",
+        "/api/v1/services"
+      ],
       "actions": "none"
     }
   ],
@@ -142,6 +185,17 @@
       "browser_writes": 0,
       "messages": 0,
       "background_processes": 0
+    },
+    "github_actions": {
+      "run_id": 44122811569,
+      "commit": "4f0f59f",
+      "status": "success",
+      "jobs": [
+        "test (ubuntu-24.04)",
+        "test (ubuntu-24.04, 3.13)",
+        "test (windows-2025)"
+      ],
+      "note": "All three jobs succeeded; the Windows job ran the 63 browser cases as well. The run is on the final record commit; the code commits are 21b4d7d and 181216c."
     }
   },
   "boundaries": [
