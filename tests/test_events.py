@@ -427,9 +427,18 @@ def test_modules_have_no_network_polling_or_messaging_path():
     root = Path(__file__).resolve().parents[1] / 'src' / 'thu_assistant'
     forbidden = ('threading', 'asyncio', 'subprocess', 'requests', 'urlopen',
                  'model_chat', 'wechat', 'smtplib')
-    for name in ('events.py', 'snapshot_diff.py', 'calendar_export.py'):
+    for name in ('events.py', 'snapshot_diff.py', 'calendar_export.py', 'todos.py'):
         text = (root / name).read_text(encoding='utf-8')
         assert not [word for word in forbidden if word in text], name
+
+
+def test_agenda_and_changes_do_not_start_threads():
+    import threading
+    before = threading.active_count()
+    engine = _engine()
+    engine.agenda()
+    engine.changes(start_date='2026-11-17', end_date='2026-11-23')
+    assert threading.active_count() == before
 
 
 def test_stable_uid_survives_a_status_change():
