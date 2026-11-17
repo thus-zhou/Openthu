@@ -1,0 +1,169 @@
+{
+  "module": "5.4",
+  "title": "统一日程、增量事件与日历导出",
+  "batch": 5,
+  "owner": "Hermes",
+  "status": "implemented",
+  "baseline_commit": "37b1605",
+  "integration_parent_commit": "37b1605",
+  "delivery_commit": "f9e9918",
+  "implementation_commits": [
+    "4172bce",
+    "ed47c0d",
+    "f9e9918"
+  ],
+  "record_commit": "the commit containing this record file",
+  "branch": "hermes/5.4",
+  "worktree": "~/projects/Openthu/.local/worktrees/5.4",
+  "worktree_note": "Recorded relative to the user home because the contract privacy validator rejects absolute home-directory paths; the absolute path stays in the execution session.",
+  "version_pr": null,
+  "batch_state": "batch 5 is not yet accepted; 5.4 is implemented and tested, acceptance belongs to the integration/fix phase",
+  "evidence_tree": "clean checkout of f9e9918 after `python scripts/dev.py setup-node` (or an equivalent src/thu_assistant/node_modules link); otherwise dev.py check stops on the missing tough-cookie runtime dependency",
+  "paths": [
+    "src/thu_assistant/events.py",
+    "src/thu_assistant/snapshot_diff.py",
+    "src/thu_assistant/calendar_export.py",
+    "src/thu_assistant/todos.py",
+    "src/thu_assistant/source_state.py",
+    "tests/test_events.py",
+    "tests/test_calendar_export.py",
+    "contracts/v0.2/error-classification.json"
+  ],
+  "contracts": [
+    "calendar-event-v1",
+    "result-envelope-v1",
+    "source-evidence-v1",
+    "error-classification-v1"
+  ],
+  "additive_runtime_objects": [
+    "agenda-item-v1: calendar-event-v1 plus time_semantics/source_version/time_trusted/completeness",
+    "event-snapshot-v1: account, scope, canonical-version-bound incremental baseline",
+    "calendar-export-v1: iCalendar, Markdown and structured summary exports",
+    "opaque evc1 cursor: account/scope-bound, 600-second expiry, no timestamp breakpoint"
+  ],
+  "outputs": [
+    "stable event_uid from account, service, kind, source record and occurrence; title and array order never participate",
+    "deadline, interval and occurrence time semantics separated; date-only values stay DATE and never gain midnight",
+    "undated agenda items keep calendar_valid=false; export refuses them instead of inventing a date",
+    "views for upcoming, overdue, undated, completed and by_source computed from one as_of instant",
+    "conflicts only for trusted DATE_TIME intervals; all-day, deadline points, unknown times and timetable entries without a period table never participate",
+    "incremental change types ADDED/MODIFIED/CANCELLED/DELETED/SOURCE_UNAVAILABLE/SOURCE_INCOMPLETE",
+    "deletions only when the previous and current source reads are both complete; failed or partial pages carry prior events forward as HISTORICAL",
+    "deterministic change ids for external de-duplication; no delivered/pushed state without consumption evidence",
+    "iCalendar RFC 5545 escaping, UTF-8-safe 75-octet folding, Asia/Shanghai VTIMEZONE and date-level DTSTART for all-day deadlines",
+    "stable UID, sequence and STATUS:CANCELLED for repeatable import/update of the same event",
+    "Markdown and JSON exports with sanitised fields, https-only source links, formula/HTML/path injection neutralised",
+    "atomic local writes with temporary file, fsync and replace; a failed write leaves no half file",
+    "explicit scope required; out-of-scope events are counted as excluded, never silently exported",
+    "academics exams/timetable are opt-in and capability-gated; blocked capabilities return UNKNOWN/ADAPTER_REQUIRED, never EMPTY",
+    "grades are not a selectable agenda source and never become todos or public summary events",
+    "get_todos keeps its legacy parameters, 200-item snapshot paging, cursor binding and empty/partial/failed semantics",
+    "agenda()/changes()/export_calendar()/describe_agenda() expose on-demand results with background_polling=false and message_delivery=false"
+  ],
+  "checks": {
+    "module_tests": {
+      "passed": 41,
+      "failed": 0,
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_events.py tests/test_calendar_export.py"
+    },
+    "related_regression": {
+      "passed": 203,
+      "skipped": 1,
+      "failed": 0,
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_todos.py tests/test_academics.py tests/test_queries.py tests/test_query_contracts.py"
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "compatibility_baselines": 1,
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8,
+      "legacy_tools": 29,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "fixtures": 7,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "dev_check": {
+      "ok": true,
+      "files_checked": 467,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 1046,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test",
+      "evidence_tree": "clean checkout of f9e9918 after setup-node"
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0,
+    "message_sends": 0,
+    "background_processes": 0
+  },
+  "verified_cases": [
+    "the same snapshot compared twice produces no semantic changes and deterministic change ids",
+    "a disconnected source emits SOURCE_UNAVAILABLE, keeps prior events HISTORICAL and never reports them all as deleted",
+    "a partial page emits SOURCE_INCOMPLETE and suppresses deletion until two complete reads agree",
+    "an incomplete previous baseline cannot make a deletion",
+    "a cross-midnight reservation keeps 23:00-01:00 in Asia/Shanghai and the original export scope",
+    "UTC and +02:00 summer timestamps convert to the correct +08:00 local time without changing the date-only rule",
+    "a date-only deadline exports DTSTART;VALUE=DATE and no midnight time or DTEND",
+    "a title with semicolons, commas, newlines, backslashes and script characters is escaped and folded without breaking VEVENT structure",
+    "the same event exported twice has the same UID; a semantic change raises SEQUENCE and a cancellation keeps STATUS:CANCELLED",
+    "two same-title items from different sources keep distinct event_uids",
+    "grades are rejected as a service selection and are absent from ACADEMIC_SOURCES",
+    "a blocked academics capability is opt-in only, returns UNKNOWN/ADAPTER_REQUIRED with PARTIAL status, and is never read",
+    "an available synthetic academics capability enters the agenda only when explicitly selected",
+    "all-day, unknown-time and period-table-missing timetable items do not participate in conflicts",
+    "overlapping trusted reservations produce one conflict with both source ids and the overlap interval",
+    "an invalid end before start degrades to a DATE with TIME_RANGE_INVALID_DATE_ONLY instead of an invented interval",
+    "views for upcoming, overdue, undated, completed and by_source share one as_of and the requested window",
+    "scope, canonical-version and account changes rebuild or reject the baseline instead of comparing across it",
+    "an expired baseline returns REBUILT with BASELINE_EXPIRED and no invented changes",
+    "the cursor is opaque, versioned, account/scope-bound and expires after the configured TTL",
+    "no change or result records delivered_at, pushed=true or delivery_evidence=true",
+    "an atomic write failure leaves no temporary or half file in the target directory",
+    "relative or existing destinations fail closed; overwrite requires an explicit flag",
+    "Markdown neutralises leading formula characters, HTML tags and table separators",
+    "the structured summary omits raw source status, drops non-https links and contains only code-like warnings",
+    "all 27 new 5.4 error codes are registered in the frozen contract and the source_state mirror"
+  ],
+  "limits": [
+    "Personal timetable, exam and grade production adapters remain BLOCKED_SOURCE_EVIDENCE; this module only gates and converts them, and no real academic record was read.",
+    "Timetable events require explicit expansion from the 4.1 reader; the production reader is blocked, so only the synthetic path is covered here.",
+    "The outer THU-TODOS-1 cache container and record_id-in-AAD migration were not changed; like the 4.4 THU-ACTION-1 boundary this remains a later storage/integration step, and the existing cache format stays readable.",
+    "SnapshotStore prefers the 2.2 SecureStore EVENT_CURSOR purpose and falls back to the existing protected-file wrapper; without a usable key it keeps an in-memory baseline and never writes plaintext.",
+    "Cross-process incremental continuation requires a configured secure key; otherwise cursors remain valid only in the current process.",
+    "iCalendar has no UNKNOWN status, so STATUS:UNKNOWN is exported as TENTATIVE plus X-OPENTHU-CALENDAR-STATUS:UNKNOWN; this is not a success claim.",
+    "Exports write only to an explicit absolute path whose parent exists; existing files require overwrite=true and symbolic-link targets are refused.",
+    "Batch 5 has not been reconnected or accepted; this record does not make the module or the batch accepted."
+  ],
+  "rollback": "Delete events.py, snapshot_diff.py, calendar_export.py, tests/test_events.py and tests/test_calendar_export.py; restore todos.py to 37b1605; revert the 5.4 error codes in contracts/v0.2/error-classification.json and source_state.py. The new get_todos parameters are optional and old callers ignore them; existing todo snapshots and cache format are unchanged. The events-v1 snapshot directory is separate from the legacy cache; invalidate new cursors explicitly on rollback. User-exported local calendar files are never deleted or remotely revoked.",
+  "next": "Batch 5 integration reconnects 5.1-5.4, reruns scripts/dev.py check and test at the joint tree, and then records acceptance. 6.1 registers the public agenda/export/change methods; 7.3 updates capability and user documentation. This module opens no PR, does not merge main and does not publish a release.",
+  "cross_module_requests": [
+    "6.1: register get_agenda, get_event_changes, export_calendar and describe_agenda; update the get_todos description for the opt-in academics/semester parameters; keep the 29 legacy tools and do not turn local export into a message send.",
+    "6.1/8.1: the outer THU-TODOS-1 cache container and record_id-in-AAD migration remains a later storage step, matching the 4.4 THU-ACTION-1 boundary; do not assume 5.4 changed the cache format.",
+    "5.1/5.2/5.3: preserve the time_trusted rule; pending approval, pending payment, upload success and draft state must not become confirmed agenda entries.",
+    "6.2/7.1: read calendar_events/views/conflicts only; HTML rendering must apply its own escaping instead of reusing Markdown or ICS text.",
+    "7.3: document on-demand reads, no background polling, no automatic messaging and no automatic booking, and record that academic sources remain blocked."
+  ]
+}
