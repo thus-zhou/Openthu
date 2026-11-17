@@ -6,14 +6,18 @@
   "status": "implemented",
   "baseline_commit": "37b1605",
   "integration_parent_commit": "37b1605",
-  "delivery_commit": "4172bce",
+  "delivery_commit": "ed47c0d",
+  "implementation_commits": [
+    "4172bce",
+    "ed47c0d"
+  ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/5.4",
   "worktree": "~/projects/Openthu/.local/worktrees/5.4",
   "worktree_note": "Recorded relative to the user home because the contract privacy validator rejects absolute home-directory paths; the absolute path stays in the execution session.",
   "version_pr": null,
   "batch_state": "batch 5 is not yet accepted; 5.4 is implemented and tested, acceptance belongs to the integration/fix phase",
-  "evidence_tree": "clean checkout of 4172bce after `python scripts/dev.py setup-node` (or an equivalent src/thu_assistant/node_modules link); otherwise dev.py check stops on the missing tough-cookie runtime dependency",
+  "evidence_tree": "clean checkout of ed47c0d after `python scripts/dev.py setup-node` (or an equivalent src/thu_assistant/node_modules link); otherwise dev.py check stops on the missing tough-cookie runtime dependency",
   "paths": [
     "src/thu_assistant/events.py",
     "src/thu_assistant/snapshot_diff.py",
@@ -106,7 +110,7 @@
       "node_passed": 66,
       "node_failed": 0,
       "command": "python scripts/dev.py test",
-      "evidence_tree": "clean checkout of 4172bce after setup-node"
+      "evidence_tree": "clean checkout of ed47c0d after setup-node"
     },
     "live_campus_calls": 0,
     "model_calls": 0,
