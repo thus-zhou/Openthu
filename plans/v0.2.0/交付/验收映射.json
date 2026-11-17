@@ -591,10 +591,11 @@
       ],
       "completion_standard": "作业上传、草稿/正式提交分离和结果核对",
       "evidence": [
-        "58 module tests and 159 related regression tests at 6eca3de; Python full offline 1063 passed/7 skipped/0 failed, Node 66 passed; check 472 files/0 findings",
-        "ordered single-use upload -> draft -> submit sequence behind the 4.4 request gate and side-effect ledger",
-        "file identity re-hashed at preflight and before each upload; changed files invalidate the plan with zero requests",
-        "submission-v1 records are emitted only from an observed platform state; no production transport exists (BLOCKED_SOURCE_EVIDENCE)"
+        "98 module tests and 159 related regression tests at b49f86d; Python full offline 1103 passed/7 skipped/0 failed, Node 66 passed; check 474 files/0 findings",
+        "ordered single-use upload -> draft -> submit sequence behind the 4.4 request gate and side-effect ledger, with a pre-submit recheck",
+        "assignment rules are fail-closed and file identity is re-hashed at preflight and before each upload",
+        "submission-v1 records are emitted only from an observed platform state; no production transport exists (BLOCKED_SOURCE_EVIDENCE)",
+        "5.3-audit P0=0/P1=4/P2=16 fixed; hermes/5.3 merges with hermes/5.4 without a conflict"
       ]
     },
     {

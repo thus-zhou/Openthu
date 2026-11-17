@@ -687,14 +687,17 @@
         "作业上传、草稿/正式提交分离和结果核对"
       ],
       "integration_order": 15,
-      "status": "implemented",
-      "delivery_commit": "6eca3de",
+      "status": "accepted",
+      "delivery_commit": "b49f86d",
+      "previous_delivery_commit": "6eca3de",
       "implemented_at": "2026-11-17",
-      "implementation_note": "Boundary implemented with a declared-synthetic transport; production upload, draft save, final submit and result query remain BLOCKED_SOURCE_EVIDENCE. Acceptance is written by the fix stage.",
+      "accepted_at": "2026-11-17",
+      "audit_fix": "5.3-audit: 4 P1 + 16 P2 fixed through c2766a6 and b49f86d; assignment rules are fail-closed, the submit is rechecked, submission-v1 is enforced and the batch-5 merge is conflict free.",
       "evidence": [
-        "58 module tests and 159 related regression tests at 6eca3de; Linux Python 1063 passed/7 skipped/0 failed, Node 66 passed; check 472 files/0 findings",
-        "ordered single-use upload -> draft -> submit sequence on the 4.4 action engine with a per-step side-effect ledger",
+        "98 module tests and 159 related regression tests at b49f86d; Linux Python 1103 passed/7 skipped/0 failed, Node 66 passed; check 474 files/0 findings",
+        "ordered single-use upload -> draft -> submit sequence on the 4.4 action engine with a per-step side-effect ledger and a pre-submit recheck",
         "file identity re-hashed at preflight and before each upload; a changed file invalidates the plan with zero requests",
+        "hermes/5.3 + hermes/5.4 merge tree validates and both module test files pass (138 passed)",
         "no live campus call, model call or assignment submission"
       ],
       "cross_module_handoffs": [

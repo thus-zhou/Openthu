@@ -3,10 +3,13 @@
   "title": "网络学堂作业上传与正式提交",
   "batch": 5,
   "owner": "Hermes",
-  "status": "implemented",
-  "status_note": "Implementation and module tests are complete. The production upload, draft-save and final-submit contracts are still unverified, so the module ships the boundary with a declared-synthetic transport and an explicit block; acceptance is written by the fix stage, and the batch integrator reconnects the module.",
+  "status": "accepted",
+  "status_note": "Implementation, module tests and the 5.3 audit remediation (P0=0, P1=4, P2=16) are complete and verified. The production upload, draft-save and final-submit contracts are still unverified, so the module ships the boundary with a declared-synthetic transport and an explicit, recorded source block; the batch integrator reconnects the module.",
   "baseline_commit": "37b1605",
-  "delivery_commit": "6eca3de",
+  "delivery_commit": "b49f86d",
+  "previous_delivery_commit": "6eca3de",
+  "audit_baseline": "fb8fbe1",
+  "audit_fix_commits": ["c2766a6", "b49f86d"],
   "branch": "hermes/5.3",
   "worktree": ".local/worktrees/5.3",
   "worktree_note": "Repository-relative linked worktree on branch hermes/5.3; the absolute home path is intentionally not committed because contracts/v0.2/validate.py rejects it and the project privacy rule forbids host paths in Git.",
@@ -17,7 +20,8 @@
     "tests/test_submissions.py",
     "src/thu_assistant/source_state.py",
     "contracts/v0.2/error-classification.json",
-    "contracts/v0.2/sources/source-registry.json"
+    "contracts/v0.2/sources/source-registry.json",
+    "contracts/v0.2/sources/source-tasks.json"
   ],
   "contracts": [
     "submission-v1",
@@ -34,8 +38,17 @@
     "max_files": 8,
     "max_requests": 10,
     "write_switch": "THU_LEARN_SUBMIT",
+    "write_switch_default": "OFF",
     "engine_contract_enabled": false,
-    "engine_contract_enabled_note": "actions.action_enabled() has no learn branch; enabling the contract there would make learn writes depend on THU_SPORTS_WRITE. The module owns its own switch and 6.1 owns the facade switch."
+    "engine_contract_enabled_note": "actions.action_enabled() has no learn branch; enabling the contract there would make learn writes depend on THU_SPORTS_WRITE. The module owns its own switch (default off) and 6.1 owns the facade switch.",
+    "error_codes": 23,
+    "required_assignment_rules": [
+      "deadline",
+      "allowed_extensions",
+      "max_bytes",
+      "allow_multiple_files",
+      "requires_official_confirmation"
+    ]
   },
   "interfaces": {
     "facade": [
@@ -58,7 +71,8 @@
       "requires_draft (bool)",
       "read_assignment(assignment_id)",
       "read_submission(assignment_id)",
-      "send(spec, payload)"
+      "send(spec, payload) -> {accepted: true, receipt_id}",
+      "accepted must be true and uploads/drafts must carry a receipt_id; anything else is a rejected or unknown step"
     ],
     "registration": [
       "submissions.contracts.register() adds ('learn','submit_assignment') to actions.REGISTRY and learn-submission-v1 to actions.VERIFIED_ADAPTERS",
@@ -68,23 +82,99 @@
   "stage_table": {
     "PREPARED_LOCAL": "plan frozen; files hashed; zero requests",
     "UPLOADING": "dispatch started; per-file side effects recorded before each send",
-    "UPLOADED_STAGING": "every upload returned a receipt; no draft yet",
-    "DRAFT_SAVED": "draft accepted; still not a submission",
-    "SUBMIT_SENT_UNVERIFIED": "final submit sent; result not observed",
+    "UPLOADED_STAGING": "every upload returned accepted=true with a receipt",
+    "DRAFT_SAVED": "draft returned accepted=true with a receipt; still not a submission",
+    "SUBMIT_SENT_UNVERIFIED": "final submit sent after the pre-submit recheck; result not observed",
     "VERIFIED": "an observed submission-v1 record proves the final submission",
-    "UNKNOWN": "a write response was lost or a remote result is not provable; read-only reconciliation",
+    "UNKNOWN": "a write response was lost, a pre-submit recheck failed or a remote result is not provable; read-only reconciliation",
     "FAILED": "plan expiry, changed preconditions, definite not-sent or an observed remote failure"
+  },
+  "audit_remediation": {
+    "report": ".local/audits/5.3-audit.md",
+    "p0": 0,
+    "p1": 4,
+    "p2": 16,
+    "fixed": [
+      "P1-1 assignment rules are read fail-closed: missing, empty or malformed deadline, allowed_extensions, max_bytes, allow_multiple_files and requires_official_confirmation produce rules_state=PARTIAL with missing_rules and block prepare/preflight (SUBMISSION_RULE_UNVERIFIED); late_submission_deadline is honoured and only deadline_state=NONE declares no deadline",
+      "P1-2 the platform is re-read after the uploads/draft and before the submit request is consumed; a changed window, incomplete rules, changed replaced version, changed assignment digest or a second local plan stops the sequence with no submit request",
+      "P1-3 submission_record enforces the submission-v1 allOf rules (only SUBMITTED may be final); a contradictory observation is downgraded with IS_FINAL_CONTRADICTED instead of emitting an invalid record",
+      "P1-4 an observation must identify the assignment (assignment_id or assignment_uid); without it no submission-v1 record is built, and verification compares the observed uid independently",
+      "P2-1 a replacement is verified only when the observed version is newer than the replaced version; older or equal is VERSION_NOT_VERIFIED",
+      "P2-2 cancel, result and execute share the same account binding; another account gets ACTION_ACCOUNT_MISMATCH and cancel reports cancel_reason=LOCAL_CANCEL_NO_REMOTE_EFFECT",
+      "P2-3 the synthetic flag and source_evidence_id come from the transport/observation, not a constant; a live (non-synthetic) record is refused with SUBMISSION_LIVE_EVIDENCE_UNVERIFIED and a payload that contradicts the transport gets SYNTHETIC_FLAG_MISMATCH",
+      "P2-4 upload and draft receipts must return accepted=true (and a receipt id for uploads/drafts); otherwise the file is REJECTED, later steps are not sent and the code is SUBMISSION_PLATFORM_REJECTED",
+      "P2-5 the submission journal read-modify-write takes a per-plan file lock, so concurrent execute/result merges cannot lose an update",
+      "P2-6 a failed prepare deletes the file set it just wrote, leaving no orphan record with local paths",
+      "P2-7 prune requires the live reference set and never deletes a file set a non-terminal plan still needs",
+      "P2-8 prepare warnings are stored separately and merged with each observation instead of being replaced",
+      "P2-9 preflight writes its specific codes into the module journal; last_error keeps the specific code and engine_reason keeps the engine's generic reason",
+      "P2-10 malformed observation file rows are filtered and reported as OBSERVED_FILE_ROW_INVALID instead of raising AttributeError",
+      "P2-11 the error code count is 23 (19 original + 4 remediation codes) and every record states that number",
+      "P2-12 the public_output statement now says the observed submission record keeps its own receipt ids; paths, file content and note text remain absent",
+      "P2-13 the SUBMISSION_* block now sits at its alphabetical anchor (after STATE_WRITE_FAILED), so hermes/5.3 merges with hermes/5.4 without a textual conflict; the merged tree validates and both test files pass",
+      "P2-14 an unreadable deadline is SUBMISSION_DEADLINE_UNVERIFIED with its own message, distinct from SUBMISSION_ASSIGNMENT_CLOSED",
+      "P2-15 the legacy test parses learn_assistant/core.py imports and runs the legacy path with a transport whose send raises, so it fails if the old path is ever wired to the submission transport",
+      "P2-16 the write switch defaults to off (THU_LEARN_SUBMIT must be exactly 1); capability_report reports enabled=false and write_switch_default=OFF"
+    ],
+    "not_closable": [],
+    "verification": {
+      "P1-1": [
+        "test_a_missing_multiple_files_rule_blocks_the_plan",
+        "test_missing_size_and_extension_rules_block_the_plan",
+        "test_a_missing_confirmation_rule_blocks_the_plan",
+        "test_preflight_refuses_a_rule_set_that_became_partial",
+        "test_the_late_submission_deadline_alias_is_honoured",
+        "audit probe p1 now raises SUBMISSION_RULE_UNVERIFIED"
+      ],
+      "P1-2": [
+        "test_a_deadline_change_after_the_uploads_stops_the_final_submit",
+        "test_a_version_change_after_the_uploads_stops_a_replacement",
+        "test_another_local_plan_blocks_a_second_plan",
+        "audit probe p2: submit requests 0"
+      ],
+      "P1-3": [
+        "test_only_the_submitted_state_may_be_final (parameterised over every non-SUBMITTED state)",
+        "test_the_submitted_state_must_be_final",
+        "test_a_contradictory_observation_is_downgraded_not_published",
+        "audit probe p3: DRAFT_SAVED / UPLOADED_STAGING / SUPERSEDED -> schema OK"
+      ],
+      "P1-4": [
+        "test_an_observation_without_an_assignment_id_is_not_matched",
+        "test_an_observation_for_another_assignment_uid_is_not_matched",
+        "test_an_anonymous_observation_never_completes_a_plan"
+      ],
+      "P2-1": ["test_an_older_version_never_verifies_a_replacement", "audit probe p5: version_verified False"],
+      "P2-2": ["test_cancel_is_account_bound", "audit probe p6: ACTION_ACCOUNT_MISMATCH"],
+      "P2-3": ["test_a_live_record_cannot_be_built_before_the_source_is_verified", "test_the_submission_record_matches_the_frozen_contract"],
+      "P2-4": ["test_an_upload_receipt_without_accepted_true_stops_the_sequence", "test_a_draft_receipt_without_accepted_true_stops_the_submit", "audit probe p8: status UNKNOWN, file REJECTED"],
+      "P2-5": ["test_concurrent_journal_merges_keep_every_update"],
+      "P2-6": ["test_a_failed_prepare_leaves_no_orphan_file_set", "audit probe p9: 0 orphans"],
+      "P2-7": ["test_prune_never_deletes_a_live_plan_file_set", "test_a_live_plan_file_set_survives_a_full_prepare", "audit probe p10: prune now requires keep_ids"],
+      "P2-8": ["test_prepare_warnings_survive_reconcile"],
+      "P2-9": ["test_the_specific_preflight_code_is_kept_after_invalidation", "audit probe p12: execute last_error SUBMISSION_FILE_CHANGED"],
+      "P2-10": ["test_a_non_dict_observed_row_is_a_limitation_not_an_exception", "audit probe p13: no exception"],
+      "P2-11": ["test_every_module_code_is_registered_and_mirrored asserts 23 codes against the frozen table and the runtime mirror", "python -c \"from thu_assistant.submissions import CODES; print(len(CODES))\""],
+      "P2-12": ["test_the_public_result_keeps_receipt_ids_but_no_paths_or_content"],
+      "P2-13": [
+        "git merge-tree --write-tree hermes/5.3 hermes/5.4 exits 0",
+        "the merged tree serves contracts/v0.2/validate.py and contracts/v0.2/sources/validate.py ok and tests/test_submissions.py + tests/test_events.py pass (138 passed); the frozen code table equals source_state.ERROR_CODES (290 entries)"
+      ],
+      "P2-14": ["test_an_unreadable_deadline_is_not_reported_as_passed", "audit probe p14: SUBMISSION_DEADLINE_UNVERIFIED"],
+      "P2-15": ["test_the_legacy_path_has_no_submission_transport_wiring"],
+      "P2-16": ["test_the_write_switch_is_off_by_default", "test_the_write_switch_blocks_execution_without_losing_the_plan"]
+    },
+    "probe_note": "The original read-only probes remain in .local/audits/5.3-audit-probes.py; .local/audits/5.3-audit-after.py re-runs them and prints the post-fix outcome. p7 and p15 are expected to be superseded: p7 asserted that a payload's synthetic flag overrides the transport (the transport declaration is authoritative and a live record is refused), and p15's barrier sits inside the journal read that the new lock serialises."
   },
   "acceptance": [
     {
       "case": "the legacy prepare_submission uploads and submits nothing",
-      "tests": ["test_prepare_never_touches_the_old_prepare_tool"],
-      "note": "A transport that raises on send is attached; the legacy path returns submit_supported=false and never reaches it."
+      "tests": ["test_prepare_never_touches_the_old_prepare_tool", "test_the_legacy_path_has_no_submission_transport_wiring"],
+      "note": "learn_assistant/core.py is parsed for imports and run with a transport whose send raises; the legacy path returns submit_supported=false and never reaches it."
     },
     {
       "case": "a file edited after preview invalidates the plan even with the same name",
       "tests": ["test_a_changed_file_invalidates_the_plan", "test_a_deleted_file_invalidates_the_plan"],
-      "note": "preflight re-hashes every file; the engine invalidates on the changed digest/checks with zero requests."
+      "note": "preflight re-hashes every file; the engine invalidates on the changed digest/checks with zero requests, and the specific code reaches last_error."
     },
     {
       "case": "a failure on the second upload keeps the first effect and the recovery state",
@@ -103,8 +193,8 @@
     },
     {
       "case": "an existing submission is not overwritten without replacement authorization",
-      "tests": ["test_prepare_refuses_an_existing_submission_without_replacement", "test_replacement_without_a_version_is_refused", "test_a_changed_existing_version_blocks_a_replacement"],
-      "note": "REPLACE_EXISTING requires the exact version frozen at preview; a version change between preview and execute fails closed."
+      "tests": ["test_prepare_refuses_an_existing_submission_without_replacement", "test_replacement_without_a_version_is_refused", "test_a_changed_existing_version_blocks_a_replacement", "test_a_second_prepare_is_refused_after_the_first_submission"],
+      "note": "REPLACE_EXISTING requires the exact version frozen at preview; a version change between preview and execute fails closed, and a later prepare sees the new submission."
     },
     {
       "case": "a platform that returns only file names never proves hash equality",
@@ -114,14 +204,13 @@
     {
       "case": "local cancellation and code rollback never withdraw or resubmit",
       "tests": ["test_a_local_cancel_never_claims_a_remote_change", "test_result_after_success_does_not_resend"],
-      "note": "cancel() reports remote_changes=NONE, there is no withdraw API, and result() performs no write."
+      "note": "cancel() reports remote_changes=NONE and cancel_reason=LOCAL_CANCEL_NO_REMOTE_EFFECT, there is no withdraw API, and result() performs no write."
     }
   ],
   "additional_coverage": [
     "test_a_lost_submit_response_is_resolved_by_readback",
     "test_official_confirmation_hands_off_without_a_write",
     "test_executing_without_a_human_grant_sends_nothing",
-    "test_the_write_switch_blocks_execution_without_losing_the_plan",
     "test_concurrent_execution_uploads_once",
     "test_the_request_sequence_is_exactly_the_frozen_one",
     "test_the_submission_record_matches_the_frozen_contract",
@@ -136,7 +225,7 @@
   ],
   "checks": {
     "module_tests_linux": {
-      "passed": 58,
+      "passed": 98,
       "skipped": 0,
       "failed": 0,
       "command": "python -m pytest -o addopts='' -q tests/test_submissions.py"
@@ -148,7 +237,7 @@
       "note": "No existing test was edited; the legacy preparation tool, the 4.4 action framework and the 29 MCP tools are unchanged."
     },
     "full_offline_suite_linux": {
-      "python_passed": 1063,
+      "python_passed": 1103,
       "python_skipped": 7,
       "python_failed": 0,
       "node_passed": 66,
@@ -157,7 +246,7 @@
     },
     "privacy_check": {
       "ok": true,
-      "files_checked": 472,
+      "files_checked": 474,
       "findings": 0,
       "mcp_tools": 29,
       "command": "python scripts/dev.py check"
@@ -166,6 +255,10 @@
       "plan": "ok, 24 modules / 9 batches",
       "contracts": "ok, 8 contracts / 1 compatibility baseline / 9 schema samples / 35 rejection samples / 8 extra samples / 29 legacy tools",
       "sources": "ok, 29 sources / 10 models / 8 tasks / 14 readiness rows / 7 fixtures"
+    },
+    "batch_merge_preview": {
+      "command": "git merge-tree --write-tree hermes/5.3 hermes/5.4",
+      "result": "exit 0; merged tree validates and tests/test_submissions.py + tests/test_events.py pass (138 passed)"
     },
     "live_campus_calls": 0,
     "model_calls": 0,
@@ -176,9 +269,11 @@
     "request_gate": "one exact ordered single-use RequestGate over at most ten requests; bodies are fully determined at preflight from client-derived references",
     "dispatch_intent": "DISPATCHING, the ticket and the per-step SideEffectLedger entries are durable before the transport is called",
     "file_binding": "only name/size/sha256 enter the business object; local paths stay in the protected module store; files are re-hashed in preflight and again before each upload",
-    "storage": "THU-SUBMISSION-FILES-1 and THU-SUBMISSION-STATE-1 use the same protect/unprotect as ActionStore (2.2 envelope or Windows DPAPI), atomic temp+fsync+replace, POSIX 0600; a configured key fails closed instead of falling back to the test codec",
-    "no_production_path": "only a transport that declares synthetic=true is accepted; every request URL uses the reserved /synthetic/ prefix so no real endpoint is guessed",
-    "public_output": "no local path, file content, note text or receipt value; only file names, sizes, hashes, statuses and the observed submission-v1 record",
+    "rules": "a rule the reader did not supply is UNVERIFIED and blocks the plan; the module never turns an omitted field into a permissive default",
+    "pre_submit": "the platform is re-read immediately before the submit request; a changed window, rule set, replaced version or a conflicting local plan stops the sequence",
+    "storage": "THU-SUBMISSION-FILES-1 and THU-SUBMISSION-STATE-1 use the same protect/unprotect as ActionStore (2.2 envelope or Windows DPAPI), atomic temp+fsync+replace, POSIX 0600, a per-plan lock for journal merges; a configured key fails closed instead of falling back to the test codec",
+    "no_production_path": "only a transport that declares synthetic=true is accepted; every request URL uses the reserved /synthetic/ prefix so no real endpoint is guessed; the write switch is off unless THU_LEARN_SUBMIT=1",
+    "public_output": "no local path, file content or note text; the observed submission-v1 record keeps its own remote_submission_id and upload_receipt_id so the user can check the official page",
     "replay": "no automatic replay anywhere; lost responses leave UNKNOWN and only readback reconciliation follows"
   },
   "cross_module_requests": [
@@ -188,11 +283,15 @@
     },
     {
       "owner": "6.1",
-      "request": "describe_actions('learn') currently reports ADAPTER_REQUIRED because the engine contract is registered with enabled=false; present the module's capability_report() for the real state (production transport NOT_IMPLEMENTED, synthetic rehearsal available)."
+      "request": "read_assignment must supply deadline (or deadline_state=NONE), allowed_extensions, max_bytes, allow_multiple_files and requires_official_confirmation from the real source. A model default copied from asdict() is treated as a declaration; omit what the source did not provide so the plan stops on an explicit rule gap."
+    },
+    {
+      "owner": "6.1",
+      "request": "describe_actions('learn') currently reports ADAPTER_REQUIRED because the engine contract is registered with enabled=false; present the module's capability_report() for the real state (write switch default OFF, production transport NOT_IMPLEMENTED, synthetic rehearsal available)."
     },
     {
       "owner": "6.2",
-      "request": "The read-only board may call result() only; it must never call prepare/execute and must show stage plus verification limitations rather than a bare success flag."
+      "request": "The read-only board may call result() only; it must never call prepare/execute and must show stage, verification limitations and prepare warnings rather than a bare success flag."
     },
     {
       "owner": "6.3",
@@ -200,25 +299,28 @@
     },
     {
       "owner": "7.2",
-      "request": "Include tests/test_submissions.py in the cross-platform regression; the POSIX 0600 assertion and the symlink case skip on Windows for platform reasons."
+      "request": "Include tests/test_submissions.py in the cross-platform regression; the POSIX 0600 assertion and the symlink case skip on Windows for platform reasons, and the write switch must be enabled explicitly in the harness."
     },
     {
       "owner": "7.3",
-      "request": "Keep the capability matrix at 'production upload/draft/submit not enabled' and document the local plan/rehearsal boundary and the THU_LEARN_SUBMIT switch."
+      "request": "Keep the capability matrix at 'production upload/draft/submit not enabled' and document the fail-closed assignment rules, the write switch default and the pre-submit recheck."
     },
     {
       "owner": "batch integrator",
-      "request": "This module changed error-classification.json, source_state.py (error mirror) and the learn.submission source-registry row. Reconnect them with the batch-5 batch commit and confirm no other module edited the same rows."
+      "request": "hermes/5.3 now merges with hermes/5.1, hermes/5.2 and hermes/5.4 without a conflict; the merged 5.3+5.4 tree was validated. Run the batch-5 check and full offline suite on the reconnected commit."
     }
   ],
   "remaining_limits": [
     "No production transport exists: upload, draft-save, final-submit and result-query endpoints, their response shapes and the result query fields are unverified. That is the recorded blocker, not a hidden placeholder.",
-    "The synthetic transport and the /synthetic/ request paths are engineering evidence only; they are never live campus success and cannot be enabled by configuration.",
-    "Reconcile and preflight do not write to the action journal by design (a write would collide with the engine's captured revision), so per-precondition codes are visible only through a direct adapter.preflight() call or the module journal's last_error; the engine reports the generic PRECONDITIONS_CHANGED_PREPARE_AGAIN.",
+    "The synthetic transport and the /synthetic/ request paths are engineering evidence only; they are never live campus success and cannot be enabled by configuration. The transport declaration is authoritative for a record's synthetic flag; a page or payload cannot claim provenance.",
+    "A caller that maps a model with invented defaults must not present them as source values; the fail-closed rule gate depends on the reader telling the truth about what it actually read.",
+    "The local single-flight check covers a second plan that is prepared before or during the sequence; two plans that both preflight in the same instant can still race, each plan still dispatches at most once.",
+    "Pre-submit rechecking happens inside the dispatch that already holds the one-use gate; it can stop the submit, but it cannot re-authorize a new upload sequence. A stopped plan stays UNKNOWN and requires a new plan.",
+    "Reconcile and preflight do not write the action journal by design (a write would collide with the engine's captured revision); their codes live in the module journal and are surfaced through last_error/preflight_errors.",
     "A platform rejection after a request was sent leaves the engine in UNKNOWN (the framework never marks FAILED after a send); the module records SUBMISSION_PLATFORM_REJECTED for the caller but does not claim the write did not happen.",
-    "File sets accumulate under submissions-v1/files; prune keeps the newest 200 and never removes one referenced by a live plan.",
+    "File sets are bounded at 200 and pruning requires the live reference set; a caller using FileSetStore directly must pass it or prune refuses.",
     "Withdrawing a draft, deleting a remote attachment and replacing an existing submission version are not implemented; only an explicit REPLACE_EXISTING plan with the exact replaced version is described.",
-    "The engine contract is registered with enabled=false (the write switch is module-owned) so describe_actions('learn') reports ADAPTER_REQUIRED until 6.1 wires the facade switch."
+    "The engine contract is registered with enabled=false (the write switch is module-owned and off by default) so describe_actions('learn') reports ADAPTER_REQUIRED until 6.1 wires the facade switch."
   ],
   "blockers": [
     {
@@ -232,8 +334,8 @@
       "next_action": "Collect sanitized source evidence from the authorized local owner without submitting a real assignment, then implement a production transport behind the existing boundary."
     }
   ],
-  "rollback": "Remove src/thu_assistant/submissions/ and tests/test_submissions.py and revert the additive error codes and the learn.submission registry row. Older clients ignore the new codes; no remote submission, draft or attachment is created or deleted by this module, and existing action journals remain readable.",
+  "rollback": "Remove src/thu_assistant/submissions/ and tests/test_submissions.py and revert the additive error codes, the learn.submission registry row and the task evidence refs. Older clients ignore the new codes; no remote submission, draft or attachment is created or deleted by this module, and existing action journals remain readable.",
   "next_step": "The batch-5 integrator reconnects 5.1-5.4 on one batch commit, runs the batch check and the full offline suite, and only then marks batch 5 accepted. This module does not create a PR, merge main, tag or publish.",
-  "batch_state": "batch 5 in progress; 5.3 implemented, not accepted",
+  "batch_state": "batch 5 in progress; 5.3 accepted at the fix commit, batch reconnect pending",
   "next": "Await the batch-5 integration commit; keep the production transport blocked until sanitized source evidence exists."
 }
