@@ -112,8 +112,13 @@ class ProtocolProfile:
             raise ValueError("source_id does not match the evidence pattern")
         if not isinstance(self.synthetic, bool):
             raise ValueError("synthetic must be a boolean")
-        if self.checked_at is not None and not isinstance(self.checked_at, str):
-            raise ValueError("checked_at must be an ISO string or None")
+        if self.checked_at is not None:
+            if not isinstance(self.checked_at, str):
+                raise ValueError("checked_at must be an ISO string or None")
+            try:
+                datetime.fromisoformat(self.checked_at)
+            except ValueError:
+                raise ValueError("checked_at must be an ISO-8601 instant") from None
         media_types = tuple(self.media_types)
         if not media_types or any(item not in IMAGE_MIME_TYPES for item in media_types):
             raise ValueError("media_types must be a non-empty subset of JPEG/PNG/WebP")
@@ -283,6 +288,10 @@ class TransportStage:
         for image in images:
             data = bytes(image.data)
             if len(data) <= 0:
+                raise CampusError("MODEL_IMAGE_STAGING_FAILED")
+            # The broker's hash is the contract; staging a different byte run
+            # would hand the transport something the user never approved.
+            if hashlib.sha256(data).hexdigest() != image.sha256:
                 raise CampusError("MODEL_IMAGE_STAGING_FAILED")
             token = secrets.token_hex(16)
             path = self.root / f"{token}.bin"

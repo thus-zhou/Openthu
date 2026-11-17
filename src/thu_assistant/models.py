@@ -99,7 +99,7 @@ def chat(bridge,args,*,media=None,protocols=None):
     if os.environ.get('THU_MODEL_READ','1')=='0':
         require('prompt' in args and not set(args)-{'prompt','model','max_tokens'},'MODEL_EXTENSION_DISABLED')
         return bridge('model',**args)
-    if args.get('images'):
+    if 'images' in args:
         from .model_media import chat as image_chat
         return image_chat(bridge,args,media=media,protocols=protocols)
     prepared,sources=prepare(args)

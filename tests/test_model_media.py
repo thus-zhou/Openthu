@@ -281,6 +281,33 @@ def test_protocol_media_types_are_enforced(tmp_path, assets):
     assert recorder.calls == []
 
 
+def test_empty_image_selection_is_refused(tmp_path, assets):
+    recount = Recorder()
+    with pytest.raises(CampusError, match="MODEL_IMAGE_SELECTION_INVALID"):
+        models.chat(recount, {"model": MODEL, "prompt": "x", "images": []},
+                    media=binding(assets, tmp_path), protocols=registry())
+    assert recount.calls == []
+
+
+def test_protocol_checked_at_must_be_an_iso_instant():
+    with pytest.raises(ValueError):
+        model_media.ProtocolProfile(
+            protocol_id="madmodel.image.v1", model_id=MODEL, checked_at="yesterday")
+
+
+def test_staging_refuses_bytes_that_do_not_match_the_released_hash(tmp_path):
+    class Image:
+        media_id = "media_" + "a" * 12
+        mime_type = "image/png"
+        data = b"synthetic"
+        sha256 = "0" * 64
+
+    stage = model_media.TransportStage(tmp_path / "transport")
+    with pytest.raises(CampusError, match="MODEL_IMAGE_STAGING_FAILED"):
+        stage.write([Image()])
+    assert not any((tmp_path / "transport").iterdir())
+
+
 def test_protocol_cannot_widen_the_frozen_limits():
     with pytest.raises(ValueError):
         model_media.ProtocolProfile(
