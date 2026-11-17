@@ -195,6 +195,13 @@ def test_release_gate_is_incomplete_without_a_candidate_and_fails_when_required(
     assert strict["status"] == "FAIL"
 
 
+def test_release_gate_requires_test_evidence(tmp_path):
+    value = REPORT.release_gate(dist=tmp_path / "missing")
+    assert value["checks"]["reports"]["status"] == "MISSING"
+    assert any(gap["kind"] == "test_evidence_missing" for gap in value["gaps"])
+    assert value["status"] == "FAIL"
+
+
 def test_release_gate_rejects_a_leaking_wheel(tmp_path):
     dist = tmp_path / "dist"
     dist.mkdir()

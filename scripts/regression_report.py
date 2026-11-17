@@ -841,6 +841,14 @@ def release_gate(*, reports_dir: Path | str | None = None, dist: Path | str = "d
         }
         statuses.append(aggregate["status"])
         gaps.extend(aggregate["gaps"])
+    else:
+        checks["reports"] = {
+            "ok": False, "status": "MISSING", "platforms": [],
+            "source_commit": None,
+            "gaps": [{"kind": "test_evidence_missing"}],
+        }
+        statuses.append("FAIL")
+        gaps.append({"kind": "test_evidence_missing"})
     privacy_source = privacy_scan_source()
     checks["privacy_source"] = privacy_source
     statuses.append("PASS" if privacy_source["ok"] else "FAIL")
