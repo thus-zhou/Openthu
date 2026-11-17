@@ -1,0 +1,10 @@
+{
+  "name": "SYNTHETIC-PERSON-A1B2C3",
+  "account": "SYNTHETIC-STUDENT-D4E5F6",
+  "scope": "acct_cccccccccccccccccccccccc",
+  "home": "/home/synthetic-marker/private/notes.txt",
+  "host": "synthetic-host-7-2.invalid",
+  "file": "SYNTHETIC-PRIVATE-FILE.pdf",
+  "image": "SYNTHETIC-IMAGE-COMMENT-7.2",
+  "_note": "Exact synthetic values used by the 7.2 marker scan. They are not credentials or user data; the token marker is generated at runtime so no token-shaped literal is committed."
+}

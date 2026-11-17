@@ -1,0 +1,476 @@
+{
+  "module": "7.2",
+  "title": "跨平台回归、隐私与故障注入",
+  "batch": 7,
+  "owner": "Hermes",
+  "status": "accepted",
+  "status_note": "Audit findings P0=0, P1=6 and P2=10 are fixed and verified in this branch. accepted covers the implementation and the audit-fix review; 8.1 still has to observe the real two-platform CI at the integration commit before a release can cite it.",
+  "target_version": "0.2.0",
+  "baseline_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
+  "integration_parent_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
+  "batch6_integration_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
+  "delivery_commit": "3eeb2d335059f5c41ff4dc08a79242e0c890cb30",
+  "implementation_commits": [
+    "4b4eb907ad43967069c6ef5b5cc324c350f53685",
+    "7fa39cd901da285ebc473ca62d663f4f86375c4c",
+    "49adeca8dd231611ae0f3249698fdc22d9eb76d8",
+    "0e3063144465686b36383d7a111cb185ca89ff58",
+    "625a8c038a2079e3414c1be7ce0add33be8b94b5",
+    "10ad698155332ee02e0892206086871df3c416b3",
+    "3eeb2d335059f5c41ff4dc08a79242e0c890cb30"
+  ],
+  "audit_fix_commits": [
+    "0e3063144465686b36383d7a111cb185ca89ff58",
+    "625a8c038a2079e3414c1be7ce0add33be8b94b5",
+    "10ad698155332ee02e0892206086871df3c416b3",
+    "3eeb2d335059f5c41ff4dc08a79242e0c890cb30"
+  ],
+  "record_commit": "the commit containing this record file",
+  "branch": "hermes/7.2",
+  "worktree": "~/projects/Openthu/.local/worktrees/7.2",
+  "worktree_note": "Recorded relative to the user home because the frozen contract privacy validator rejects absolute home-directory paths inside plans/; the absolute path stays in the execution session.",
+  "version_pr": null,
+  "batch_state": "batch 7 is open; this module opens no PR, merges nothing and publishes nothing",
+  "paths": [
+    "scripts/regression_report.py",
+    "scripts/privacy_scan.py",
+    "tests/release_regression/__init__.py",
+    "tests/release_regression/coverage_matrix.json",
+    "tests/release_regression/evidence_floor.json",
+    "tests/release_regression/test_clean_environment.py",
+    "tests/release_regression/test_coverage_matrix.py",
+    "tests/release_regression/test_fault_injection.py",
+    "tests/release_regression/test_platform_backends.py",
+    "tests/release_regression/test_report.py",
+    "tests/release_regression/test_scope_integrity.py",
+    "tests/security_regression/__init__.py",
+    "tests/security_regression/marker_set.json",
+    "tests/security_regression/test_production_boundary.py",
+    "tests/security_regression/test_secret_markers.py",
+    ".github/workflows/ci.yml",
+    "docs/MAINTENANCE.md"
+  ],
+  "contracts": [
+    "result-envelope-v1",
+    "error-classification-v1",
+    "secure-storage-header-v1",
+    "source-evidence-v1",
+    "media-reference-v1",
+    "calendar-event-v1",
+    "business-facade-v1",
+    "local-read-api-v1",
+    "compatibility-baseline-v1"
+  ],
+  "outputs": [
+    "coverage_matrix.json maps 24 planned modules, 63 feature-to-case entries, 8 release acceptance criteria and 45 v0.1 test files; states are covered, pending_same_batch, documentation_only or future_gate",
+    "the matrix validator resolves every referenced file::test node with AST, requires non-empty test files for covered modules, keeps old test files present, and checks the 29-tool catalog, entry points, import paths and the original mock query",
+    "evidence_floor.json requires at least 1600 passing cases, no more than 5% skips, Node results, dev-results side-effect counters, coverage-matrix test files and the Linux 3.12/3.13 plus Windows 3.12 Python matrix",
+    "Linux tests use the real file-key backend: 0600 mode, broad permission refusal, symlink refusal, key/data separation, tamper detection and ciphertext without plaintext",
+    "Windows tests use the real DPAPI backend and are skipped on Linux with an explicit platform reason; no Windows host result is claimed from the Linux run",
+    "the seven-fault matrix covers timeout, lost/cut response, cancellation, lock conflict, process exit, disk full and partial write; every write path has request counters and no uncertain write is replayed",
+    "the timeout case uses a threading.Event barrier; the test waits until the facade has entered before releasing it, so a slow runner cannot make the call-count assertion race",
+    "protected-store rotation interruption, pointer-switch failure, ENOSPC, short write and fsync failure keep the previous verified record readable; no temporary file is adopted as a record",
+    "lost upload response keeps upload count at one across repeated result reads; prepare sends zero remote writes; a lost submit is resolved by readback, not resend",
+    "cursor, cache, media reference and dashboard session are bound to account and scope; cross-account and cross-semester use is refused instead of returning old data",
+    "cross-midnight intervals keep their exact start/end and Asia/Shanghai timezone; date-only deadlines stay DATE and never receive midnight; stable ids survive title changes and separate same-title sources",
+    "a failed source produces SOURCE_UNAVAILABLE with historical carry-forward and zero DELETED; a missing page produces SOURCE_INCOMPLETE and suppresses deletion; neither becomes an empty success",
+    "report generator fields: schema, source commit/branch/dirty, product version, contract inventory and set digest, platform/Python/Node/CI identity, scope, totals, Node totals, module buckets, skip reasons, gaps, failures and side-effect source plus counters",
+    "failure records contain only the node id, module, stable error class and a pytest minimal repro; name, file, classname and skip reasons are path/token sanitized; raw exception text, paths, tokens, cookies and account values never enter the report",
+    "skip classification is an explicit registry with platform:/env: prefixes; Pillow/WebP capability gaps are environment, macOS-only reasons are platform, and an unregistered reason fails the gate",
+    "aggregate requires the requested platforms (linux and windows by default), one source commit, matching product versions, matching contract-set digests and a declared platform that agrees with the host and CI runner; dirty or commitless reports fail",
+    "evidence floor: empty, one-case, all-skipped, filtered, node-less, dev-results-less and coverage-incomplete suites do not pass",
+    "release gate requires test evidence, scans source and every candidate archive with privacy_scan, audits the frozen runtime/dev/Node pins from one distribution manifest, checks conservative defaults, verifies the candidate and scans every archive for the exact marker set while skipping only the committed marker definition file",
+    "privacy_scan has a POSIX user-path rule for the home/Users user segment; synthetic test users are allowlisted, real users are not",
+    "CI test jobs emit per-platform JUnit, build and upload only safe regression-report JSON, and the release-gate job downloads all platform reports, builds the candidate, runs the gate with marker_set.json, --expected-commit and --require-python-matrix and uploads release-gate.json",
+    "CI uses fixed Ubuntu 24.04 / Windows 2025, Python 3.12/3.13, Node 24, explicit Chromium installation split by platform, 60/40 minute job timeouts, read-only contents permission, persist-credentials false and no pull_request_target; actions are pinned to 40-character commit SHAs",
+    "docs/MAINTENANCE.md documents report, aggregate and release-gate commands, required markers, evidence floor, commit/platform binding, skip semantics and the Ubuntu-only candidate build"
+  ],
+  "audit": {
+    "p0": 0,
+    "p1": 6,
+    "p2": 10,
+    "all_fixed": true,
+    "findings": [
+      {
+        "id": "P1-1",
+        "state": "fixed",
+        "fix": "Report records host platform.system/python and CI runner.os/arch/run_id; aggregate compares the declared platform with the host and CI runner. Shape reports are rejected by default; the diagnostic allow flag is not available to release-gate.",
+        "verification": [
+          "tests/release_regression/test_report.py::test_shape_report_is_rejected_by_default",
+          "tests/release_regression/test_report.py::test_ci_runner_mismatch_is_rejected",
+          "7.2-audit-probes.py fake_platform -> aggregate FAIL",
+          "tests/release_regression/test_report.py::test_release_gate_requires_the_python_matrix_by_default",
+          "tests/release_regression/test_report.py::test_cli_release_gate_requires_the_python_matrix_by_default"
+        ]
+      },
+      {
+        "id": "P1-2",
+        "state": "fixed",
+        "fix": "aggregate and release-gate accept --expected-commit and compare every report's product version and contract-set digest; missing commit, dirty worktree and version/contract drift fail.",
+        "verification": [
+          "tests/release_regression/test_report.py::test_evidence_must_match_the_expected_commit_product_and_contracts",
+          "tests/release_regression/test_report.py::test_dirty_and_commitless_reports_are_rejected",
+          "tests/release_regression/test_report.py::test_release_gate_rejects_evidence_from_a_foreign_commit"
+        ]
+      },
+      {
+        "id": "P1-3",
+        "state": "fixed",
+        "fix": "evidence_floor.json enforces a minimum pass count, skip ratio, Node evidence, dev-results evidence and coverage-matrix test files; empty, one-case, all-skipped and filtered suites fail.",
+        "verification": [
+          "tests/release_regression/test_report.py::test_empty_one_case_and_all_skipped_suites_do_not_pass",
+          "tests/release_regression/test_report.py::test_node_and_dev_results_are_required_by_the_floor",
+          "tests/release_regression/test_report.py::test_coverage_matrix_files_are_required",
+          "7.2-audit-probes.py evidence_floor -> every synthetic suite FAIL"
+        ]
+      },
+      {
+        "id": "P1-4",
+        "state": "fixed",
+        "fix": "load_markers returns (markers, error); missing, unreadable or empty marker sets fail the release gate; an empty marker set makes the archive scan return NO_MARKERS instead of ok.",
+        "verification": [
+          "tests/release_regression/test_report.py::test_load_markers_returns_a_stable_error_instead_of_failing_open",
+          "tests/release_regression/test_report.py::test_marker_scan_without_markers_does_not_fail_open",
+          "tests/release_regression/test_report.py::test_release_gate_missing_marker_set_does_not_fail_open",
+          "7.2-audit-probes.py marker_failopen -> missing/malformed both ok=False"
+        ]
+      },
+      {
+        "id": "P1-5",
+        "state": "fixed",
+        "fix": "Exact marker scanning covers all .whl/.zip/.tar.gz archives and skips only tests/security_regression/marker_set.json inside the archive. privacy_scan.py has a POSIX user-path rule; synthetic users are allowlisted and real users are not. Per-archive member counts are recorded.",
+        "verification": [
+          "tests/release_regression/test_report.py::test_marker_scan_rejects_an_archive_with_a_private_path_and_token",
+          "tests/release_regression/test_report.py::test_marker_scan_skips_only_the_marker_definition_member",
+          "tests/release_regression/test_report.py::test_posix_privacy_rule_flags_a_real_user_path_and_allows_synthetic_ones",
+          "real candidate: 4 archives, 1767 marker-scanned members, 0 findings"
+        ]
+      },
+      {
+        "id": "P1-6",
+        "state": "fixed",
+        "fix": "parse_junit sanitizes name/file/classname; absolute file attributes become tests/unknown.py; parameter values become [REDACTED].",
+        "verification": [
+          "tests/release_regression/test_report.py::test_parameterised_nodeids_and_absolute_files_are_sanitised",
+          "tests/release_regression/test_report.py::test_failure_message_is_reduced_to_a_class_and_repro",
+          "7.2-audit-probes.py nodeid_leak -> no private path in report JSON"
+        ]
+      },
+      {
+        "id": "P2-1",
+        "state": "fixed",
+        "fix": "JUnit <error> counts into totals.errors and module errors instead of failed.",
+        "verification": [
+          "tests/release_regression/test_report.py::test_errors_are_counted_separately_from_failures",
+          "7.2-audit-probes.py errors_total -> 1 error, 0 failed"
+        ]
+      },
+      {
+        "id": "P2-2",
+        "state": "fixed",
+        "fix": "Skip classification uses an explicit registry plus platform:/env: prefixes; substring guessing was removed.",
+        "verification": [
+          "tests/release_regression/test_report.py::test_explicit_skip_registry_does_not_guess_from_substrings",
+          "tests/release_regression/test_report.py::test_unexplained_skip_fails_and_environment_gap_is_incomplete"
+        ]
+      },
+      {
+        "id": "P2-3",
+        "state": "fixed",
+        "fix": "Report adds side_effect_source dev-results|absent, removes counters with no producer, marks non-integer values as a gap and nonzero counters as failure.",
+        "verification": [
+          "tests/release_regression/test_report.py::test_side_effect_source_and_invalid_values",
+          "tests/release_regression/test_report.py::test_report_includes_commit_contracts_platform_totals_and_side_effects"
+        ]
+      },
+      {
+        "id": "P2-4",
+        "state": "fixed",
+        "fix": "candidate_check preserves ReleaseError.code and lists artifact names; VERIFY_FAILED is distinct from a built-but-invalid candidate.",
+        "verification": [
+          "tests/release_regression/test_report.py::test_candidate_check_reports_not_built_and_a_stable_verify_code",
+          "7.2-audit-probes.py candidate_error_class -> RELEASE_MANIFEST_MISSING / RELEASE_COMMIT_MISMATCH"
+        ]
+      },
+      {
+        "id": "P2-5",
+        "state": "fixed",
+        "fix": "aggregate compares product version and contract-set digest, reports unreadable reports as gaps, dedupes gaps with occurrences and checks the required Python matrix.",
+        "verification": [
+          "tests/release_regression/test_report.py::test_evidence_must_match_the_expected_commit_product_and_contracts",
+          "tests/release_regression/test_report.py::test_unreadable_reports_are_not_silently_dropped",
+          "tests/release_regression/test_report.py::test_required_python_matrix_is_checked",
+          "tests/release_regression/test_report.py::test_duplicate_gaps_are_deduped_with_a_count"
+        ]
+      },
+      {
+        "id": "P2-6",
+        "state": "fixed",
+        "fix": "report exits nonzero when the report is not PASS; --diagnostic is the explicit local-probe exception.",
+        "verification": [
+          "tests/release_regression/test_report.py::test_cli_report_without_diagnostic_does_not_hide_a_one_case_suite",
+          "tests/release_regression/test_report.py::test_cli_gate_returns_non_zero_for_a_failure"
+        ]
+      },
+      {
+        "id": "P2-7",
+        "state": "fixed",
+        "fix": "Node results are added to the 3.1 module bucket so sum(modules) == totals; a failed unmapped case fails the gate.",
+        "verification": [
+          "tests/release_regression/test_report.py::test_node_results_are_added_to_the_gateway_bucket",
+          "tests/release_regression/test_report.py::test_module_attribution_and_unmapped_failure"
+        ]
+      },
+      {
+        "id": "P2-8",
+        "state": "fixed",
+        "fix": "The script no longer carries version constants; dependency_audit uses build_support/distribution.json as the single source and cross-checks pyproject.toml, requirements*.txt, package.json and package-lock.json; tests assert consistency, not copied versions.",
+        "verification": [
+          "tests/release_regression/test_report.py::test_dependency_and_defaults_audits_use_the_distribution_manifest",
+          "dependency_audit().ok == True with source build_support/distribution.json"
+        ]
+      },
+      {
+        "id": "P2-9",
+        "state": "fixed",
+        "fix": "CI has 60/40 minute timeouts, actions pinned to 40-character SHAs, no duplicate dev.py check in release-gate, platform-specific Chromium installs and a documented Ubuntu-only candidate build.",
+        "verification": [
+          "tests/security_regression/test_production_boundary.py::test_ci_workflow_is_reproducible_and_avoids_untrusted_pr_target",
+          "tests/security_regression/test_production_boundary.py::test_ci_gate_runs_privacy_aggregate_and_candidate_checks"
+        ]
+      },
+      {
+        "id": "P2-10",
+        "state": "fixed",
+        "fix": "The timeout test uses a threading.Event barrier and a 0.5 s deadline; it waits for the facade to enter before releasing it while keeping the single-call assertion.",
+        "verification": [
+          "tests/release_regression/test_fault_injection.py::test_local_api_timeout_returns_504_after_one_facade_call"
+        ]
+      }
+    ]
+  },
+  "checks": {
+    "module_tests": {
+      "collected": 100,
+      "passed": 99,
+      "skipped": 1,
+      "failed": 0,
+      "skip_reason": "Windows DPAPI tests are platform-only and run on the Windows CI job",
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/release_regression tests/security_regression"
+    },
+    "module_test_breakdown": {
+      "tests/release_regression/test_clean_environment.py": 4,
+      "tests/release_regression/test_coverage_matrix.py": 8,
+      "tests/release_regression/test_fault_injection.py": 14,
+      "tests/release_regression/test_platform_backends.py": 9,
+      "tests/release_regression/test_report.py": 40,
+      "tests/release_regression/test_scope_integrity.py": 10,
+      "tests/security_regression/test_production_boundary.py": 7,
+      "tests/security_regression/test_secret_markers.py": 8
+    },
+    "regression_report": {
+      "ok": true,
+      "status": "PASS",
+      "totals": {
+        "passed": 1736,
+        "failed": 0,
+        "skipped": 8,
+        "errors": 0,
+        "total": 1744
+      },
+      "python_passed": 1670,
+      "python_skipped": 8,
+      "node_passed": 66,
+      "node_skipped": 0,
+      "modules": 25,
+      "module_bucket_sum": 1736,
+      "gaps": 0,
+      "failures": 0,
+      "commit": "3eeb2d335059f5c41ff4dc08a79242e0c890cb30",
+      "command": "python scripts/regression_report.py gate --junit .local/scratch7.2/audit-final3/junit.xml --dev-results .local/test-results.json --platform linux --commit 3eeb2d3 --output .local/scratch7.2/audit-final3/report.json"
+    },
+    "aggregate": {
+      "shape_report_default": "FAIL",
+      "shape_gaps": [
+        "platform_identity_mismatch",
+        "ci_platform_identity_mismatch"
+      ],
+      "shape_report_diagnostic_only": true,
+      "note": "A Linux report relabeled as Windows is rejected by default; the diagnostic allow flag is not used by release-gate and is not release evidence.",
+      "python_matrix_default": "FAIL when Linux 3.13 or Windows 3.12 is absent; release_gate and the CLI enforce the floor matrix by default"
+    },
+    "release_gate": {
+      "ok": false,
+      "status": "FAIL",
+      "expected": "FAIL because the host only has a real Linux 3.12 report: the Windows report, Linux 3.13 and Windows 3.12 matrix entries are missing",
+      "gaps": [
+        {
+          "kind": "platform_report_missing",
+          "platforms": [
+            "windows"
+          ]
+        },
+        {
+          "kind": "python_matrix_incomplete",
+          "platform": "linux",
+          "missing": [
+            "3.13"
+          ]
+        },
+        {
+          "kind": "python_matrix_incomplete",
+          "platform": "windows",
+          "missing": [
+            "3.12"
+          ]
+        }
+      ],
+      "checks": {
+        "reports": "FAIL (missing windows)",
+        "marker_set": "OK",
+        "privacy_source": "PASS",
+        "privacy_archives": "PASS",
+        "marker_archives": "PASS",
+        "marker_reports": "PASS",
+        "dependencies": "PASS",
+        "defaults": "PASS",
+        "candidate": "VERIFIED"
+      },
+      "marker_count": 7,
+      "marker_archives": [
+        {
+          "name": "Openthu-0.2.0-source.tar.gz",
+          "members": 541,
+          "findings": 0
+        },
+        {
+          "name": "Openthu-0.2.0-source.zip",
+          "members": 541,
+          "findings": 0
+        },
+        {
+          "name": "openthu-0.2.0-py3-none-any.whl",
+          "members": 208,
+          "findings": 0
+        },
+        {
+          "name": "openthu-0.2.0.tar.gz",
+          "members": 477,
+          "findings": 0
+        }
+      ],
+      "command": "python scripts/regression_report.py release-gate --reports .local/scratch7.2/audit-final3/reports --dist dist --markers tests/security_regression/marker_set.json --expected-commit 3eeb2d3 --require-dist --output .local/scratch7.2/audit-final3/release-gate.json"
+    },
+    "candidate": {
+      "ok": true,
+      "commit": "3eeb2d335059f5c41ff4dc08a79242e0c890cb30",
+      "artifacts": 4,
+      "wheel_members": 208,
+      "wheel_bundled_members": 54,
+      "sdist_members": 478,
+      "published": false,
+      "command": "python scripts/package_release.py build"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 1670,
+      "python_skipped": 8,
+      "python_failed": 0,
+      "python_errors": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test"
+    },
+    "dev_check": {
+      "ok": true,
+      "files_checked": 545,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "compatibility_baselines": 1,
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8,
+      "legacy_tools": 29,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "fixtures": 7,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "side_effects": {
+      "source": "dev-results",
+      "live_campus_calls": 0,
+      "model_calls": 0,
+      "business_submissions": 0,
+      "note": "Only counters with a producer are reported; browser/message/background counters were removed instead of asserted as structural zero."
+    }
+  },
+  "verified_cases": [
+    "a secret marker in a public archive fails both privacy_scan and the exact marker gate, and the findings never echo the marker value",
+    "all four candidate archives are marker-scanned (541/541/208/477 members, 0 findings); only the committed marker definition file is skipped",
+    "a Linux report relabeled as Windows fails aggregate by default with platform_identity_mismatch and ci_platform_identity_mismatch",
+    "foreign-commit evidence fails release-gate; missing commit, dirty worktree, product-version drift and contract-set drift each produce a gap",
+    "empty, one-case, all-skipped, node-less and dev-results-less suites do not PASS; a report without coverage-matrix files also fails",
+    "missing, malformed and empty marker sets fail closed; an archive scan without a marker set returns NO_MARKERS, not ok",
+    "parameterised node ids and absolute JUnit file attributes are redacted; the report JSON contains no local user path",
+    "JUnit <error> is counted in errors and is distinct from an assertion failure",
+    "an unregistered skip reason fails; an environment gap is INCOMPLETE; platform-only reasons are explainable",
+    "the production entry cannot enable a synthetic codec: no synthetic_store import or switch exists in src, missing key/DPAPI fails closed, and the default submission transport refuses every read and write",
+    "an upload response that is lost leaves upload count at one; repeated result reads and reconciliation only read and never increase upload, draft or submit counts",
+    "a cursor from another account or another scope raises EVENT_CURSOR_SCOPE_MISMATCH; a cache entry from another account or semester is rejected with CACHE_BINDING_MISMATCH; another media scope is refused; another dashboard instance rejects the cookie",
+    "rotation interruption on the second record, a pointer-switch failure, ENOSPC, a short write and fsync failure all keep the previous verified record readable and healthy",
+    "a failed source produces SOURCE_UNAVAILABLE with two carried-forward events and zero DELETED; a missing page produces SOURCE_INCOMPLETE and no deletion; a failed read is not an empty todo list",
+    "the MCP server starts from an isolated HOME with the 29-tool catalog and static services, and generated paths stay under that HOME without user config or credentials",
+    "with library, sports and learn-submit switches off, the 29-tool catalog and the original mock course/assignment queries still work",
+    "the coverage matrix references only existing nodes and keeps all 45 v0.1 test files present",
+    "Node results are included in the 3.1 bucket so the module buckets sum to totals; an unmapped failure fails the gate",
+    "dependency pins are read from build_support/distribution.json and match pyproject.toml, requirements*.txt, package.json and package-lock.json",
+    "a candidate-directory error preserves its ReleaseError code instead of collapsing to Failure",
+    "report and gate return nonzero for a failing suite; only the explicit diagnostic mode returns zero"
+  ],
+  "limits": [
+    "7.1 is a same-batch module that is not integrated in this worktree. The matrix marks tests/test_web_assets.py as pending_same_batch; 7.2 proves the 6.2 local API protocol and process boundary, not the 7.1 dashboard UI. The matrix state must change to covered after 7.1 reconnection.",
+    "7.3 is documentation-only and 8.1/9.1 are future serial gates; the matrix marks them explicitly and invents no tests for them.",
+    "This host is Linux. Windows DPAPI, Windows ACL and Windows session migration cases are skipped with explicit platform reasons. A real Windows result must come from the windows-2025 CI job at the same commit; a skipped case is not a pass and the release gate correctly fails with platform_report_missing on this host.",
+    "The real local release-gate run has only the Linux report and is therefore FAIL; the other eight checks (source privacy, archive privacy, marker archives, report markers, dependencies, defaults, candidate) pass. This is fail-closed evidence, not a release pass.",
+    "Skip classification is an explicit registry. A new reason outside the registry and outside the platform:/env: prefixes fails the gate until it is explained; a skip ratio over 5% is INCOMPLETE. This is intentional.",
+    "Exact marker scanning covers every candidate archive and skips only tests/security_regression/marker_set.json, the committed marker definition. Source archives still get the generic privacy and POSIX-path rules; real user paths and marker values outside that one definition are found.",
+    "Fault injection uses the 5.3 synthetic submission transport and temporary 2.2 keys. No production upload endpoint, real account or real campus write exists in this module.",
+    "The local API timeout case uses an event barrier and a 0.5 s deadline; the worker thread may outlive the request until the service stops, which is the 6.2 documented process boundary, not a new cancellation capability.",
+    "The report keeps only error classes and repository-relative node ids. Skip reasons and findings are path/token sanitized, but the report is an engineering summary, not a general data-loss-prevention system.",
+    "The real two-platform CI result remains to be observed and recorded by 8.1 at the integration commit. The GitHub workflow was not executed from this session, so the local Linux run is not CI evidence.",
+    "The candidate package is a local candidate build, not a release. No main merge, tag or GitHub Release was created.",
+    "regression_report.py adds no runtime dependency and uses the existing pinned Python/Node runtimes and the explicit Chromium install."
+  ],
+  "rollback": "Revert to c98154d: delete scripts/regression_report.py, tests/release_regression/ and tests/security_regression/, and restore .github/workflows/ci.yml, scripts/privacy_scan.py and docs/MAINTENANCE.md. There is no store or data-format migration. Local dist/, artifacts/ and .local/ are untracked build/runtime output and can be deleted. Per the module plan, a CI-rule rollback must keep the discovered security regression cases instead of restoring a rule that ignores them.",
+  "next": "Batch 7 reconnects 7.1, 7.2 and 7.3. 7.2 implementation, audit fixes and module tests are accepted. 8.1 must run the real two-platform CI at the integration commit, aggregate the actual Linux and Windows reports with --expected-commit and --require-python-matrix, build the candidate and run release-gate with marker_set.json and --require-dist; it must not cite this Linux evidence or the rejected Windows shape report as a Windows run.",
+  "cross_module_requests": [
+    "7.1: after reconnection add tests/test_web_assets.py and change the matrix 7.1 state from pending_same_batch to covered; keep display.state, single-use bootstrap and LOCAL_API_BUSY semantics.",
+    "8.1: run both-platform CI at the integration commit, aggregate the real reports with --expected-commit and --require-python-matrix, build the candidate and run release-gate with marker_set.json and --require-dist; update 验收映射.json evidence for 7.2 and resolve the 7.1 pending state.",
+    "7.3: reference the report, aggregate and release-gate commands, required markers and skip semantics from docs/MAINTENANCE.md in the user-facing manual; this module does not edit the manual body.",
+    "2.1/6.3: no change required. 7.2 reuses scripts/privacy_scan.py and scripts/package_release.py; exact marker scanning is additive inside regression_report.py.",
+    "6.2: no change required. 7.2 reuses its local API timeout, process-instance session and read-only route contract."
+  ],
+  "privacy": {
+    "raw_payload_included": false,
+    "personal_records_included": false,
+    "native_paths_included": false,
+    "credentials_included": false,
+    "synthetic_only": true
+  }
+}

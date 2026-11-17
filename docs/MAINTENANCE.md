@@ -20,6 +20,29 @@ Codex 担任集成与发布维护者：整理需求和 Issue、审查和合并 P
 4. 创建 `vX.Y.Z` 标签与 GitHub Release，上传归档、构建包和 SHA256SUMS。预览版本用 prerelease 标记。
 5. 从公开下载地址读取校验文件并核对上传资产，记录对应提交和测试结果。更新维护资料和交接状态。
 
+## 版本回归门禁与验证报告
+
+7.2 的回归门禁由 `scripts/regression_report.py` 生成机器可读结果，CI 在每个平台运行后上传安全摘要，发布门禁再汇总两个平台并检查候选包：
+
+```text
+python scripts/regression_report.py gate --junit artifacts/junit.xml \
+  --dev-results .local/test-results.json --platform linux \
+  --commit "$(git rev-parse HEAD)" --output artifacts/regression-report.json
+python scripts/regression_report.py aggregate --reports artifacts/reports \
+  --expected-commit "$(git rev-parse HEAD)" \
+  --output artifacts/release-report.json
+python scripts/regression_report.py release-gate --reports artifacts/reports \
+  --dist dist --markers tests/security_regression/marker_set.json \
+  --expected-commit "$(git rev-parse HEAD)" --require-python-matrix \
+  --require-dist --output artifacts/release-gate.json
+```
+
+报告包含源码提交、契约版本、平台、用例范围、通过/失败/跳过、跳过原因、副作用计数，以及按模块归属的失败与最小复现命令。平台专属跳过必须写明原因；跳过原因使用登记表或 `platform:`/`env:` 前缀，未登记的原因按 `unexplained` 阻断。环境缺口记为 `INCOMPLETE`，不能当作该平台全部可用。报告不包含原始异常、Cookie、令牌、账号或本机路径。
+
+聚合会核对报告中的 `platform.name` 与运行宿主 `platform.system`、CI 的 `runner.os`，并要求报告提交、产品版本和契约集与候选提交一致；形状报告、脏工作区、缺少提交或契约的报告都不能通过。证据下限在 `tests/release_regression/evidence_floor.json`：空套件、单条用例、全跳过、缺少 Node 结果或 `--dev-results`、以及未覆盖 `coverage_matrix` 中 `covered` 模块测试文件的报告都不会 PASS。
+
+发布门禁同时扫描源码与全部候选归档、核对固定依赖和保守默认值，并验证候选包；任一隐私标记、未解释跳过、依赖漂移或候选校验失败都会阻断通过。`--markers` 是发布门禁的必填参数，缺失、不可读或为空时 fail-closed，不会静默关闭检查。通用凭据和敏感文件名由 `scripts/privacy_scan.py` 检查全部源码与归档；精确标记集扫描全部归档，只按归档内路径跳过 `tests/security_regression/marker_set.json` 这一个已提交的标记定义文件，因此源码包和 sdist 里的真实本机路径/标记仍会被发现。候选包只在 Ubuntu 上构建（`py3-none-any` wheel 与 sdist），Windows 与 Linux 的测试证据由各自平台作业产生。原始失败材料留在受控环境，公开摘要只保留错误类别和合成复现。
+
 ## 故障与回退
 
 先保留错误证据及未决事务，不自动重复发送模型生成或校园写入。按问题建立修复分支；需要回退时切换已验证标签，保留状态格式兼容性和新用户修改。公开报告不附私有日志。错误的发布资产用修订版替换并说明原因，不删除事故证据后声称未发生。

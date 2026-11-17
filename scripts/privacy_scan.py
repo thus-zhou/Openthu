@@ -11,6 +11,9 @@ import zipfile
 ROOT=Path(__file__).resolve().parents[1]
 EXCLUDED={'.git','.venv','node_modules','__pycache__','.pytest_cache','.local','.state','build','dist','artifacts','logs'}
 FORBIDDEN={'creds.json','credentials.json','cookies.json','session.json','token.json','auth.json','hosts.yml'}
+SYNTHETIC_POSIX_USERS={
+    'synthetic','synthetic-private','synthetic-marker','example','alice','someone','user','web',
+}
 PATTERNS={
     'private-key':re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----'),
     'github-token':re.compile(r'\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b'),
@@ -18,6 +21,7 @@ PATTERNS={
     'aws-access-key':re.compile(r'\bAKIA[A-Z0-9]{16}\b'),
     'jwt':re.compile(r'\beyJ[A-Za-z0-9_-]{18,}\.[A-Za-z0-9_-]{18,}\.[A-Za-z0-9_-]{18,}\b'),
     'windows-user-path':re.compile(r'(?i)[a-z]:[\\/]+Users[\\/]+(?!Public\b|Default\b|example\b|user\b)[^\s"\'<>/\\]+'),
+    'posix-user-path':re.compile(r'(?<![\w.-])/(?:home|Users)/([^/\s"\'<>\[\]]+)'),
     'private-host-ip':re.compile(r'(?<![\d.])(?:10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2})(?![\d.])'),
 }
 
@@ -33,6 +37,8 @@ def findings(name: str,data: bytes):
     except UnicodeDecodeError:return result
     for rule,pattern in PATTERNS.items():
         for match in pattern.finditer(text):
+            if rule=='posix-user-path' and match.group(1).casefold() in SYNTHETIC_POSIX_USERS:
+                continue
             result.append({'file':name,'line':text.count('\n',0,match.start())+1,'rule':rule})
     return result
 
