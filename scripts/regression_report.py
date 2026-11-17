@@ -2,20 +2,26 @@
 
 The report is built from the JUnit XML pytest writes and from ``dev.py test``'s
 Node summary.  It answers, in one machine-readable file, what source commit and
-contracts the evidence belongs to, which platform produced it, how many cases
-ran, passed, failed or skipped, why anything was skipped, which module a
-failure belongs to, and the minimal command that reproduces it.
+contracts the evidence belongs to, which platform and CI runner produced it, how
+many cases ran, passed, failed or skipped, why anything was skipped, which module
+a failure belongs to, and the minimal command that reproduces it.
 
 Safety rules enforced here:
 
 * only a failure class and a repository-relative node id leave the process; raw
-  exception text, absolute paths, tokens, cookies and account values never do;
-* an unexplained skip fails the gate, an environment gap keeps the platform
-  ``INCOMPLETE`` instead of claiming full availability, and platform-only skips
-  stay explainable;
-* the release gate scans the source tree and every candidate archive, audits
-  the pinned dependencies, checks conservative defaults and verifies the
-  candidate package before it can return PASS.
+  exception text, absolute paths, parameter values, tokens, cookies and account
+  values never do;
+* a report must carry its runtime platform and CI identity; a report whose
+  declared platform differs from its host or CI runner is a shape report and
+  cannot be used by the release gate;
+* evidence must belong to the candidate commit, the same product version and the
+  same contract set;
+* there is a minimum evidence floor: empty, one-case, all-skipped, filtered and
+  node-less suites are not a passing version;
+* the release gate scans the source tree and every candidate archive, requires a
+  readable marker set, audits the dependency pins from one manifest, checks
+  conservative defaults and verifies the candidate package before it can return
+  PASS.
 
 Nothing here contacts a campus service, a model endpoint or the internet.
 """
@@ -40,26 +46,15 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-REPORT_SCHEMA = "version-regression-report-v1"
-AGGREGATE_SCHEMA = "version-release-report-v1"
-RELEASE_SCHEMA = "version-release-gate-v1"
-CONTRACT_DIGEST_SCHEMA = "contract-inventory-v1"
+REPORT_SCHEMA = "version-regression-report-v2"
+AGGREGATE_SCHEMA = "version-release-report-v2"
+RELEASE_SCHEMA = "version-release-gate-v2"
 
-EXPECTED_RUNTIME = {
-    "cryptography": "50.0.2",
-    "pillow": "13.0.0",
-    "requests": "2.33.0",
-}
-EXPECTED_DEV = {
-    "playwright": "1.57.0",
-    "pytest": "8.3.4",
-    "build": "1.2.2.post1",
-    "jsonschema": "4.26.0",
-    "wheel": "0.48.0",
-}
-EXPECTED_NODE = {"tough-cookie": "6.0.0"}
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost", "loopback"}
 DEFAULT_REQUIRED_PLATFORMS = ("linux", "windows")
+FLOOR_PATH = ROOT / "tests" / "release_regression" / "evidence_floor.json"
+COVERAGE_MATRIX_PATH = ROOT / "tests" / "release_regression" / "coverage_matrix.json"
+MARKER_DEFINITION_SUFFIX = "tests/security_regression/marker_set.json"
 
 # A test file belongs to exactly one module for failure attribution.  The map is
 # deliberately explicit: a new test file that forgets to register lands in
@@ -142,15 +137,43 @@ _CREDENTIAL_FILES = {
 }
 _MARKER_LABEL = re.compile(r"^[A-Za-z0-9_.-]{1,40}$")
 
-ENVIRONMENT_SKIP_HINTS = (
-    "node is unavailable", "node.js is not installed", "node is not installed",
-    "playwright", "browser", "chromium", "screen", "display",
-)
-PLATFORM_SKIP_HINTS = (
-    "windows", "posix", "non-windows", "platform", "symlink", "symbolic link",
-    "ntfs", "pillow", "webp", "root can read", "descriptor accounting",
-    "/proc", "posix shell", "zip modes",
-)
+# Skip reasons are an explicit registry, not substring guessing.  A new reason
+# must be registered here or it fails as unexplained; platform:/env: prefixes
+# are available for parameterised skips.
+SKIP_CLASSES = {
+    "windows acl only": "platform",
+    "windows dpapi key creation": "platform",
+    "windows dpapi only": "platform",
+    "windows dpapi session migration": "platform",
+    "windows preserves the legacy dpapi path when no new key is configured": "platform",
+    "posix mode bits are not available on windows": "platform",
+    "posix shell fixture": "platform",
+    "non-windows production encryption failure contract": "platform",
+    "posix permission bits": "platform",
+    "posix permission bits are not applicable on windows": "platform",
+    "posix permission bits; windows acls are covered by secure_store": "platform",
+    "symlink creation needs extra privileges": "platform",
+    "posix fifo; windows has no unprivileged equivalent": "platform",
+    "posix mode bits; windows acls are covered by 2.2": "platform",
+    "posix mode bits; ntfs acls are not mode-based": "platform",
+    "descriptor accounting needs /proc": "platform",
+    "posix owner/mode checks": "platform",
+    "posix file-key backend; windows dpapi is covered by the windows job": "platform",
+    "posix chmod semantics": "platform",
+    "symbolic links unavailable on this platform": "platform",
+    "this platform/user cannot create symbolic links": "platform",
+    "symbolic links are not permitted in this environment": "platform",
+    "symlinks are not available on this platform": "platform",
+    "zip modes are not enforced for the windows build tooling": "platform",
+    "macos only behaviour": "platform",
+    "node.js is not installed": "environment",
+    "node.js is not installed on this platform": "environment",
+    "node is unavailable": "environment",
+    "pillow build has no webp support on this platform": "environment",
+    "pillow build cannot write animated webp": "environment",
+    "this pillow build cannot write animated webp": "environment",
+    "root can read any file, so the permission path cannot be exercised": "environment",
+}
 
 
 def utc_now() -> str:
@@ -158,7 +181,7 @@ def utc_now() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Safe text
+# Safe text and evidence classes
 # ---------------------------------------------------------------------------
 
 def sanitize_text(value: object, *, limit: int = 160) -> str:
@@ -186,11 +209,11 @@ def classify_skip(reason: object) -> str:
     text = sanitize_text(reason).casefold()
     if not text:
         return "unexplained"
-    if any(hint in text for hint in ENVIRONMENT_SKIP_HINTS):
-        return "environment"
-    if any(hint in text for hint in PLATFORM_SKIP_HINTS):
+    if text.startswith("platform:"):
         return "platform"
-    return "unexplained"
+    if text.startswith(("environment:", "env:")):
+        return "environment"
+    return SKIP_CLASSES.get(text, "unexplained")
 
 
 def normalise_platform(value: object) -> str:
@@ -204,9 +227,85 @@ def normalise_platform(value: object) -> str:
     return text or "unknown"
 
 
+def normalise_python(value: object) -> str | None:
+    match = re.match(r"^(\d+\.\d+)", str(value or ""))
+    return match.group(1) if match else None
+
+
+def ci_identity(env: dict[str, str] | None = None) -> dict:
+    source = os.environ if env is None else env
+    return {
+        "runner_os": source.get("RUNNER_OS"),
+        "runner_arch": source.get("RUNNER_ARCH"),
+        "run_id": source.get("GITHUB_RUN_ID"),
+        "workflow": source.get("GITHUB_WORKFLOW"),
+    }
+
+
+def _gap(kind: str, severity: str, **details) -> dict:
+    row = {"kind": kind, "severity": severity}
+    for key, value in details.items():
+        if value is not None:
+            row[key] = value
+    return row
+
+
+def _dedupe_gaps(gaps: list[dict]) -> list[dict]:
+    counts: dict[str, int] = {}
+    order: list[str] = []
+    for gap in gaps:
+        key = json.dumps(gap, sort_keys=True, ensure_ascii=False)
+        if key not in counts:
+            counts[key] = 0
+            order.append(key)
+        counts[key] += 1
+    rows = []
+    for key in order:
+        row = json.loads(key)
+        if counts[key] > 1:
+            row["occurrences"] = counts[key]
+        rows.append(row)
+    return rows
+
+
+def _status(gaps: list[dict], failures: list[dict], report_statuses=()) -> str:
+    if "FAIL" in report_statuses or failures:
+        return "FAIL"
+    if any(gap.get("severity") == "fail" for gap in gaps):
+        return "FAIL"
+    if "INCOMPLETE" in report_statuses or gaps:
+        return "INCOMPLETE"
+    return "PASS"
+
+
 # ---------------------------------------------------------------------------
-# Repository evidence
+# Floor, coverage and repository evidence
 # ---------------------------------------------------------------------------
+
+def load_floor(path: Path | str = FLOOR_PATH) -> dict:
+    try:
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def covered_test_files(path: Path | str = COVERAGE_MATRIX_PATH) -> tuple[set[str], str | None]:
+    try:
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set(), "COVERAGE_MATRIX_UNREADABLE"
+    modules = value.get("modules") if isinstance(value, dict) else None
+    if not isinstance(modules, list):
+        return set(), "COVERAGE_MATRIX_INVALID"
+    files = set()
+    for module in modules:
+        if isinstance(module, dict) and module.get("state") == "covered":
+            for name in module.get("test_files") or ():
+                if isinstance(name, str) and name.startswith("tests/"):
+                    files.add(name)
+    return files, None
+
 
 def _git(*args: str) -> str:
     try:
@@ -218,8 +317,8 @@ def _git(*args: str) -> str:
 
 
 def source_identity(commit: str | None = None) -> dict:
-    resolved = commit or _git("rev-parse", "HEAD") or None
-    branch = _git("rev-parse", "--abbrev-ref", "HEAD") or None
+    resolved = commit or _git("rev-parse", "HEAD") or os.environ.get("GITHUB_SHA") or None
+    branch = _git("rev-parse", "--abbrev-ref", "HEAD") or os.environ.get("GITHUB_REF_NAME") or None
     dirty = bool(_git("status", "--porcelain", "--untracked-files=no"))
     return {"commit": resolved, "branch": branch, "dirty": dirty}
 
@@ -275,30 +374,44 @@ def node_version() -> str | None:
 # JUnit
 # ---------------------------------------------------------------------------
 
+def _safe_file(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "tests/unknown.py"
+    candidate = Path(text)
+    if candidate.is_absolute():
+        try:
+            candidate = candidate.relative_to(ROOT)
+        except ValueError:
+            return "tests/unknown.py"
+    normal = candidate.as_posix()
+    if normal.startswith("./"):
+        normal = normal[2:]
+    parts = Path(normal).parts
+    if not normal.startswith("tests/") or ".." in parts:
+        return "tests/unknown.py"
+    cleaned = sanitize_text(normal, limit=240)
+    return cleaned if cleaned.startswith("tests/") else "tests/unknown.py"
+
+
 def _testcase_file(case: ElementTree.Element) -> str:
     value = case.get("file")
     if value:
-        candidate = Path(value)
-        if candidate.is_absolute():
-            try:
-                candidate = candidate.relative_to(ROOT)
-            except ValueError:
-                pass
-        return candidate.as_posix()
-    classname = case.get("classname") or ""
+        return _safe_file(value)
+    classname = sanitize_text(case.get("classname") or "", limit=240)
     parts = classname.split(".")
     if parts and parts[0] == "tests":
-        return "/".join(parts) + ".py"
+        return _safe_file("/".join(parts) + ".py")
     return "tests/unknown.py"
 
 
 def parse_junit(path: Path | str) -> list[dict]:
-    """Read one pytest JUnit file into bounded case records."""
+    """Read one pytest JUnit file into bounded, sanitized case records."""
     document = ElementTree.parse(path)
     cases = []
     for case in document.findall(".//testcase"):
         file_name = _testcase_file(case)
-        name = case.get("name") or "unknown"
+        name = sanitize_text(case.get("name") or "unknown", limit=240) or "unknown"
         record = {
             "file": file_name,
             "name": name,
@@ -315,12 +428,16 @@ def parse_junit(path: Path | str) -> list[dict]:
             record["status"] = "skipped"
             record["skip_reason"] = sanitize_text(
                 skipped.get("message") or skipped.text or "", limit=200)
-        elif failure is not None or error is not None:
-            node = failure if failure is not None else error
-            record["status"] = "failed"
-            declared = node.get("type") or ""
+        elif error is not None:
+            record["status"] = "error"
+            declared = error.get("type") or ""
             record["error_class"] = (declared if _SAFE_CLASS.fullmatch(declared or "")
-                                     else failure_class(node.get("message") or node.text))
+                                     else failure_class(error.get("message") or error.text))
+        elif failure is not None:
+            record["status"] = "failed"
+            declared = failure.get("type") or ""
+            record["error_class"] = (declared if _SAFE_CLASS.fullmatch(declared or "")
+                                     else failure_class(failure.get("message") or failure.text))
         cases.append(record)
     return cases
 
@@ -347,27 +464,35 @@ def minimal_repro(nodeid: str) -> str:
     return f'python -m pytest -o addopts= -q "{nodeid}"'
 
 
-def _dev_results(path: Path | str | None) -> dict:
+def _dev_results(path: Path | str | None) -> tuple[dict, bool]:
     if not path:
-        return {}
+        return {}, False
     try:
         value = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return {}
-    return value if isinstance(value, dict) else {}
+        return {}, False
+    return (value, True) if isinstance(value, dict) else ({}, False)
 
 
-def _side_effects(dev: dict) -> dict:
-    rows = {
-        "live_campus_calls": 0,
-        "model_calls": 0,
-        "business_submissions": 0,
-        "browser_launches": 0,
-        "message_sends": 0,
-        "background_processes": 0,
-    }
+def _side_effects(dev: dict, present: bool) -> tuple[dict, bool]:
+    rows = {"live_campus_calls": 0, "model_calls": 0, "business_submissions": 0}
+    invalid = False
     for key in rows:
-        value = dev.get(key)
+        if key not in dev:
+            continue
+        value = dev[key]
+        if type(value) is not int or value < 0:
+            invalid = True
+            continue
+        rows[key] = value
+    return rows, invalid
+
+
+def _node_totals(dev: dict, present: bool) -> dict:
+    rows = {"passed": 0, "failed": 0, "skipped": 0}
+    keys = {"passed": "node_pass", "failed": "node_fail", "skipped": "node_skipped"}
+    for key, source in keys.items():
+        value = dev.get(source) if present else None
         if type(value) is int and value >= 0:
             rows[key] = value
     return rows
@@ -378,20 +503,29 @@ def _side_effects(dev: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def build_report(cases: list[dict], *, platform: str, commit: str | None = None,
-                 dev_results: Path | str | None = None) -> dict:
+                 dev_results: Path | str | None = None,
+                 enforce_floor: bool = True, floor: dict | None = None,
+                 ci: dict | None = None) -> dict:
     platform_name = normalise_platform(platform)
+    floor_value = floor if floor is not None else load_floor()
+    dev, dev_present = _dev_results(dev_results)
     modules: dict[str, dict] = {}
     skip_counts: dict[str, int] = {}
     skip_class: dict[str, str] = {}
     failures = []
     totals = {"passed": 0, "failed": 0, "skipped": 0, "errors": 0, "total": 0}
     files = set()
+    gaps: list[dict] = []
+
+    def module_row(name: str) -> dict:
+        return modules.setdefault(name, {
+            "id": name, "total": 0, "passed": 0, "failed": 0, "skipped": 0,
+            "errors": 0, "failures": [], "minimal_repro": [],
+        })
+
     for case in cases:
         module = module_for_file(case["file"])
-        row = modules.setdefault(module, {
-            "id": module, "total": 0, "passed": 0, "failed": 0, "skipped": 0,
-            "failures": [], "minimal_repro": [],
-        })
+        row = module_row(module)
         row["total"] += 1
         totals["total"] += 1
         files.add(case["file"])
@@ -406,8 +540,12 @@ def build_report(cases: list[dict], *, platform: str, commit: str | None = None,
             skip_counts[reason] = skip_counts.get(reason, 0) + 1
             skip_class.setdefault(reason, classify_skip(reason))
         else:
-            row["failed"] += 1
-            totals["failed"] += 1
+            if status == "error":
+                row["errors"] += 1
+                totals["errors"] += 1
+            else:
+                row["failed"] += 1
+                totals["failed"] += 1
             entry = {
                 "nodeid": case["nodeid"],
                 "module": module,
@@ -417,40 +555,45 @@ def build_report(cases: list[dict], *, platform: str, commit: str | None = None,
             failures.append(entry)
             row["failures"].append(entry)
             row["minimal_repro"].append(entry["minimal_repro"])
-    dev = _dev_results(dev_results)
-    node_fail = dev.get("node_fail")
-    if type(node_fail) is int and node_fail > 0:
-        totals["failed"] += node_fail
-        failures.append({
+
+    node_totals = _node_totals(dev, dev_present)
+    node_total = sum(node_totals.values())
+    if node_total:
+        row = module_row("3.1")
+        row["node"] = node_totals
+        row["total"] += node_total
+        row["passed"] += node_totals["passed"]
+        row["failed"] += node_totals["failed"]
+        row["skipped"] += node_totals["skipped"]
+        totals["total"] += node_total
+        totals["passed"] += node_totals["passed"]
+        totals["failed"] += node_totals["failed"]
+        totals["skipped"] += node_totals["skipped"]
+    if node_totals["failed"]:
+        entry = {
             "nodeid": "tests/campus-*.test.js",
             "module": "3.1",
             "error_class": "NodeTestFailure",
             "minimal_repro": "node --test tests/campus-*.test.js",
-        })
-    node_passed = dev.get("node_pass")
-    node_skipped = dev.get("node_skipped")
-    node_totals = {
-        "passed": node_passed if type(node_passed) is int else 0,
-        "failed": node_fail if type(node_fail) is int else 0,
-        "skipped": node_skipped if type(node_skipped) is int else 0,
-    }
-    totals["total"] += node_totals["passed"] + node_totals["failed"] + node_totals["skipped"]
-    totals["passed"] += node_totals["passed"]
-    totals["skipped"] += node_totals["skipped"]
+        }
+        failures.append(entry)
+        module_row("3.1")["failures"].append(entry)
+        module_row("3.1")["minimal_repro"].append(entry["minimal_repro"])
 
     skip_reasons = [
         {"reason": reason, "count": count, "class": skip_class.get(reason, "unexplained")}
         for reason, count in sorted(skip_counts.items())
     ]
-    gaps = []
     for row in skip_reasons:
         if row["class"] == "environment":
-            gaps.append({"kind": "environment_skip", "reason": row["reason"],
-                         "count": row["count"]})
+            gaps.append(_gap("environment_skip", "incomplete", reason=row["reason"],
+                             count=row["count"]))
         elif row["class"] == "unexplained":
-            gaps.append({"kind": "unexplained_skip", "reason": row["reason"],
-                         "count": row["count"]})
-    side_effects = _side_effects(dev)
+            gaps.append(_gap("unexplained_skip", "fail", reason=row["reason"],
+                             count=row["count"]))
+    side_effects, invalid_side_effects = _side_effects(dev, dev_present)
+    if invalid_side_effects:
+        gaps.append(_gap("side_effect_value_invalid", "fail"))
     if any(side_effects.values()):
         failures.append({
             "nodeid": "side-effects",
@@ -458,16 +601,18 @@ def build_report(cases: list[dict], *, platform: str, commit: str | None = None,
             "error_class": "UnexpectedSideEffect",
             "minimal_repro": "python scripts/regression_report.py report --help",
         })
-    if any(row["class"] == "unexplained" for row in skip_reasons) or failures:
-        status = "FAIL"
-    elif gaps:
-        status = "INCOMPLETE"
-    elif platform_name == "unknown":
-        status = "INCOMPLETE"
-        gaps.append({"kind": "unknown_platform", "reason": "platform could not be identified"})
-    else:
-        status = "PASS"
+
+    if enforce_floor:
+        _apply_floor(gaps, floor_value, totals, node_totals, dev_present, files)
+    if platform_name == "unknown":
+        gaps.append(_gap("unknown_platform", "fail", reason="platform could not be identified"))
+    if any(entry["module"] == "unmapped" for entry in failures):
+        gaps.append(_gap("unmapped_failure", "fail"))
+
+    status = _status(gaps, failures)
     contracts = contract_inventory()
+    platform_block = {"name": platform_name, **runtime_environment(), "node": node_version(),
+                      "ci": ci if ci is not None else ci_identity()}
     return {
         "schema": REPORT_SCHEMA,
         "generated_at": utc_now(),
@@ -475,21 +620,61 @@ def build_report(cases: list[dict], *, platform: str, commit: str | None = None,
         "product_version": product_version(),
         "contracts": contracts,
         "contract_set_sha256": contract_set_digest(contracts),
-        "platform": {"name": platform_name, **runtime_environment(), "node": node_version()},
+        "platform": platform_block,
         "scope": {
             "source": "pytest-junit+dev-node",
             "test_files": sorted(files),
             "modules": sorted(row["id"] for row in modules.values()),
         },
+        "evidence_floor": {
+            "enforced": bool(enforce_floor),
+            "min_total": floor_value.get("min_total") if isinstance(floor_value, dict) else None,
+            "max_skip_ratio": floor_value.get("max_skip_ratio") if isinstance(floor_value, dict) else None,
+        },
         "totals": totals,
         "node": node_totals,
         "modules": [modules[key] for key in sorted(modules)],
         "skip_reasons": skip_reasons,
-        "gaps": gaps,
+        "gaps": _dedupe_gaps(gaps),
         "failures": failures,
         "side_effects": side_effects,
+        "side_effect_source": "dev-results" if dev_present else "absent",
         "status": status,
     }
+
+
+def _apply_floor(gaps: list[dict], floor: dict, totals: dict, node_totals: dict,
+                 dev_present: bool, files: set[str]) -> None:
+    if not floor:
+        gaps.append(_gap("evidence_floor_missing", "fail"))
+        return
+    min_total = floor.get("min_total")
+    if type(min_total) is not int or min_total < 1:
+        gaps.append(_gap("evidence_floor_invalid", "fail", field="min_total"))
+    elif totals["total"] == 0:
+        gaps.append(_gap("evidence_empty", "fail"))
+    elif totals["passed"] < min_total:
+        gaps.append(_gap("evidence_below_floor", "fail", passed=totals["passed"],
+                         min_total=min_total))
+    max_skip = floor.get("max_skip_ratio")
+    if isinstance(max_skip, (int, float)) and totals["total"]:
+        ratio = totals["skipped"] / totals["total"]
+        if ratio > float(max_skip):
+            gaps.append(_gap("skip_ratio_exceeded", "fail",
+                             skipped=totals["skipped"], total=totals["total"],
+                             ratio=round(ratio, 4), max_ratio=float(max_skip)))
+    if floor.get("require_node", True) and sum(node_totals.values()) == 0:
+        gaps.append(_gap("node_evidence_missing", "incomplete"))
+    if floor.get("require_dev_results", True) and not dev_present:
+        gaps.append(_gap("side_effect_evidence_missing", "incomplete"))
+    expected, error = covered_test_files()
+    if error:
+        gaps.append(_gap(error.lower(), "fail"))
+    else:
+        missing = sorted(expected - files)
+        if missing:
+            gaps.append(_gap("test_file_coverage_incomplete", "fail",
+                             missing_count=len(missing), missing=missing[:10]))
 
 
 def write_report(report: dict, output: Path | str) -> Path:
@@ -501,15 +686,18 @@ def write_report(report: dict, output: Path | str) -> Path:
 
 def report_summary(report: dict) -> dict:
     """A short console summary with no case-level private material."""
+    platform_block = report.get("platform") or {}
     return {
         "schema": report.get("schema"),
         "status": report.get("status"),
-        "platform": (report.get("platform") or {}).get("name"),
+        "platform": platform_block.get("name"),
+        "system": platform_block.get("system"),
+        "ci_runner_os": (platform_block.get("ci") or {}).get("runner_os"),
         "commit": (report.get("source") or {}).get("commit"),
         "totals": report.get("totals"),
         "gaps": len(report.get("gaps") or ()),
         "failures": len(report.get("failures") or ()),
-        "side_effects": report.get("side_effects"),
+        "side_effect_source": report.get("side_effect_source"),
     }
 
 
@@ -517,53 +705,131 @@ def report_summary(report: dict) -> dict:
 # Aggregation
 # ---------------------------------------------------------------------------
 
-def load_reports(directory: Path | str) -> list[dict]:
+def load_reports_detail(directory: Path | str) -> tuple[list[dict], list[dict]]:
     rows = []
+    errors = []
     for path in sorted(Path(directory).rglob("*.json")):
         try:
             value = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
+            errors.append({"file": path.name, "rule": "unreadable"})
             continue
-        if isinstance(value, dict) and value.get("schema") == REPORT_SCHEMA:
-            rows.append(value)
-    return rows
+        if not isinstance(value, dict) or value.get("schema") != REPORT_SCHEMA:
+            errors.append({"file": path.name, "rule": "schema_mismatch"})
+            continue
+        rows.append(value)
+    return rows, errors
+
+
+def load_reports(directory: Path | str) -> list[dict]:
+    return load_reports_detail(directory)[0]
+
+
+def _platform_identity(report: dict) -> tuple[str, str, str | None]:
+    block = report.get("platform") or {}
+    name = normalise_platform(block.get("name"))
+    host = normalise_platform(block.get("system"))
+    ci = block.get("ci") if isinstance(block.get("ci"), dict) else {}
+    runner = normalise_platform(ci.get("runner_os")) if ci.get("runner_os") else None
+    return name, host, runner
 
 
 def aggregate_reports(reports: list[dict], *,
-                      required_platforms=DEFAULT_REQUIRED_PLATFORMS) -> dict:
+                      required_platforms=DEFAULT_REQUIRED_PLATFORMS,
+                      report_errors: list[dict] | None = None,
+                      allow_shape_reports: bool = False,
+                      expected_commit: str | None = None,
+                      expected_product_version: str | None = None,
+                      expected_contracts_digest: str | None = None,
+                      required_python: dict[str, list[str]] | None = None) -> dict:
     by_platform: dict[str, list[dict]] = {}
     commits = set()
-    gaps = []
+    products = set()
+    digests = set()
+    gaps: list[dict] = []
+    statuses = []
     for report in reports:
-        name = normalise_platform((report.get("platform") or {}).get("name"))
+        name, host, runner = _platform_identity(report)
         by_platform.setdefault(name, []).append(report)
-        commit = (report.get("source") or {}).get("commit")
-        if commit:
+        statuses.append(report.get("status"))
+        source = report.get("source") or {}
+        commit = source.get("commit")
+        if not commit:
+            gaps.append(_gap("report_commit_missing", "fail", report=name))
+        else:
             commits.add(commit)
+        if source.get("dirty") is True:
+            gaps.append(_gap("report_worktree_dirty", "fail", report=name))
+        if not allow_shape_reports:
+            if host != name:
+                gaps.append(_gap("platform_identity_mismatch", "fail",
+                                 declared=name, host=host))
+            if runner and runner != name:
+                gaps.append(_gap("ci_platform_identity_mismatch", "fail",
+                                 declared=name, ci_runner_os=runner))
+            if not runner:
+                gaps.append(_gap("platform_identity_unverified", "incomplete",
+                                 platform=name))
+        product = report.get("product_version")
+        if product:
+            products.add(product)
+        else:
+            gaps.append(_gap("report_product_version_missing", "fail", report=name))
+        digest = report.get("contract_set_sha256")
+        if digest:
+            digests.add(digest)
+        else:
+            gaps.append(_gap("report_contracts_missing", "fail", report=name))
         gaps.extend(report.get("gaps") or ())
     missing = [name for name in required_platforms if name not in by_platform]
-    statuses = [report.get("status") for report in reports]
-    if not reports or missing or len(commits) > 1 or "FAIL" in statuses:
-        status = "FAIL"
-    elif "INCOMPLETE" in statuses:
-        status = "INCOMPLETE"
-    else:
-        status = "PASS"
+    if not reports:
+        gaps.append(_gap("test_evidence_missing", "fail"))
     if missing:
-        gaps.append({"kind": "platform_report_missing", "platforms": missing})
+        gaps.append(_gap("platform_report_missing", "fail", platforms=missing))
     if len(commits) > 1:
-        gaps.append({"kind": "report_commit_mismatch", "commits": sorted(commits)})
+        gaps.append(_gap("report_commit_mismatch", "fail", commits=sorted(commits)))
+    if expected_commit and commits and commits != {expected_commit}:
+        gaps.append(_gap("report_commit_mismatch", "fail", expected_commit=expected_commit,
+                         commits=sorted(commits)))
+    if len(products) > 1:
+        gaps.append(_gap("report_product_mismatch", "fail", products=sorted(products)))
+    if expected_product_version and products and products != {expected_product_version}:
+        gaps.append(_gap("report_product_mismatch", "fail",
+                         expected=expected_product_version, products=sorted(products)))
+    if len(digests) > 1:
+        gaps.append(_gap("report_contracts_mismatch", "fail", digests=sorted(digests)))
+    if expected_contracts_digest and digests and digests != {expected_contracts_digest}:
+        gaps.append(_gap("report_contracts_mismatch", "fail",
+                         expected=expected_contracts_digest, digests=sorted(digests)))
+    if required_python:
+        for platform_name, versions in required_python.items():
+            found = {normalise_python((row.get("platform") or {}).get("python"))
+                     for row in by_platform.get(platform_name, [])}
+            absent = [version for version in versions if version not in found]
+            if absent:
+                gaps.append(_gap("python_matrix_incomplete", "fail",
+                                 platform=platform_name, missing=absent))
+    for error in report_errors or ():
+        gaps.append(_gap("report_unreadable", "fail", **error))
+    gaps = _dedupe_gaps(gaps)
+    status = _status(gaps, [], statuses)
+    source_commit = next(iter(commits)) if len(commits) == 1 else None
     return {
         "schema": AGGREGATE_SCHEMA,
         "generated_at": utc_now(),
-        "source_commit": next(iter(commits)) if len(commits) == 1 else None,
+        "source_commit": source_commit,
+        "product_version": next(iter(products)) if len(products) == 1 else None,
         "contracts": reports[0].get("contracts") if reports else {},
+        "contract_set_sha256": next(iter(digests)) if len(digests) == 1 else None,
         "platforms": {
             name: [report_summary(report) for report in rows]
             for name, rows in sorted(by_platform.items())
         },
         "required_platforms": list(required_platforms),
+        "required_python": required_python or {},
         "missing_platforms": missing,
+        "report_errors": list(report_errors or ()),
+        "allow_shape_reports": bool(allow_shape_reports),
         "gaps": gaps,
         "status": status,
     }
@@ -606,17 +872,28 @@ def privacy_scan_archives(paths: list[Path]) -> dict:
     scanner = _load_script("privacy_scan")
     findings = []
     count = 0
+    archives = []
     for path in paths:
+        members = 0
+        local = []
         try:
             for name, data in scanner.archive_files(path):
+                members += 1
                 count += 1
-                findings.extend(scanner.findings(path.name + "/" + name, data))
+                local.extend(scanner.findings(path.name + "/" + name, data))
         except (OSError, ValueError, zipfile.BadZipFile) as error:
-            findings.append({"file": path.name, "line": 0,
-                             "rule": "archive-unreadable:" + failure_class(type(error).__name__)})
+            local.append({"file": path.name, "line": 0,
+                          "rule": "archive-unreadable:" + failure_class(type(error).__name__)})
+        findings.extend(local)
+        archives.append({"name": path.name, "members": members,
+                         "finding_count": len(local), "ok": not local})
     return {"ok": not findings, "files_checked": count,
             "findings": findings[:50], "finding_count": len(findings),
-            "scope": "candidate-archives"}
+            "archives": archives, "scope": "candidate-archives"}
+
+
+def _skip_marker_definition(member: str) -> bool:
+    return member.replace("\\", "/").endswith(MARKER_DEFINITION_SUFFIX)
 
 
 def marker_findings(name: str, data: bytes,
@@ -650,17 +927,27 @@ def marker_scan_archives(paths: list[Path], markers: dict[str, str] | None = Non
     scanner = _load_script("privacy_scan")
     findings = []
     count = 0
+    archives = []
     for path in paths:
+        members = 0
+        local = []
         try:
             for name, data in scanner.archive_files(path):
+                if _skip_marker_definition(name):
+                    continue
+                members += 1
                 count += 1
-                findings.extend(marker_findings(path.name + "/" + name, data, markers))
+                local.extend(marker_findings(path.name + "/" + name, data, markers))
         except (OSError, ValueError, zipfile.BadZipFile) as error:
-            findings.append({"file": path.name, "line": 0,
-                             "rule": "archive-unreadable:" + failure_class(type(error).__name__)})
+            local.append({"file": path.name, "line": 0,
+                          "rule": "archive-unreadable:" + failure_class(type(error).__name__)})
+        findings.extend(local)
+        archives.append({"name": path.name, "members": members,
+                         "finding_count": len(local), "ok": not local})
     return {"ok": not findings, "files_checked": count,
             "findings": findings[:50], "finding_count": len(findings),
-            "marker_count": len(markers or {}), "scope": "public-archives"}
+            "marker_count": len(markers or {}), "archives": archives,
+            "scope": "public-archives"}
 
 
 def marker_scan_files(directory: Path | str, markers: dict[str, str] | None = None) -> dict:
@@ -679,17 +966,29 @@ def marker_scan_files(directory: Path | str, markers: dict[str, str] | None = No
             "marker_count": len(markers or {}), "scope": "public-reports"}
 
 
-def _pins(rows) -> dict[str, str]:
+def _spec_map(rows) -> dict[str, str]:
     values = {}
     for row in rows or ():
-        text = str(row)
-        match = re.match(r"^([A-Za-z0-9_.-]+)==([^\s;]+)$", text)
-        if match:
-            values[match.group(1).casefold()] = match.group(2)
+        text = str(row).strip()
+        match = re.match(r"^([A-Za-z0-9_.-]+)\s*(==|>=)\s*([^\s;]+)$", text)
+        if not match:
+            continue
+        name = match.group(1).casefold()
+        operator = match.group(2)
+        version = match.group(3)
+        values[name] = (">=" + version) if operator == ">=" else version
     return values
 
 
-def _requirements_pins(path: Path) -> dict[str, str]:
+def _manifest_specs(mapping) -> dict[str, str]:
+    values = {}
+    for name, value in (mapping or {}).items():
+        text = str(value).strip()
+        values[str(name).casefold()] = text[2:] if text.startswith("==") else text
+    return values
+
+
+def _requirements_specs(path: Path) -> dict[str, str]:
     rows = []
     try:
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -698,59 +997,83 @@ def _requirements_pins(path: Path) -> dict[str, str]:
                 rows.append(line)
     except OSError:
         return {}
-    return _pins(rows)
+    return _spec_map(rows)
 
 
-def dependency_audit() -> dict:
+def dependency_audit(root: Path | str = ROOT) -> dict:
+    base = Path(root)
     issues = []
     try:
-        spec = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        distribution = json.loads((base / "build_support" / "distribution.json")
+                                  .read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"ok": False, "source": "build_support/distribution.json",
+                "issues": ["DISTRIBUTION_MANIFEST_UNREADABLE"]}
+    dependencies = distribution.get("dependencies") if isinstance(distribution, dict) else {}
+    if not isinstance(dependencies, dict):
+        return {"ok": False, "source": "build_support/distribution.json",
+                "issues": ["DISTRIBUTION_DEPENDENCIES_MISSING"]}
+    runtime = _manifest_specs(dependencies.get("runtime"))
+    dev = _manifest_specs(dependencies.get("development"))
+    node = _manifest_specs(dependencies.get("node"))
+    optional = dependencies.get("optional") if isinstance(dependencies.get("optional"), dict) else {}
+    browser = _manifest_specs((optional.get("browser") or {})) if isinstance(optional, dict) else {}
+    try:
+        spec = tomllib.loads((base / "pyproject.toml").read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError):
-        return {"ok": False, "issues": ["PYPROJECT_UNREADABLE"], "runtime": {}, "dev": {}}
+        return {"ok": False, "source": "build_support/distribution.json",
+                "issues": ["PYPROJECT_UNREADABLE"]}
     project = spec.get("project") or {}
-    runtime = _pins(project.get("dependencies") or ())
-    dev = _pins((project.get("optional-dependencies") or {}).get("dev") or ())
-    if runtime != EXPECTED_RUNTIME:
+    py_runtime = _spec_map(project.get("dependencies") or ())
+    py_dev = _spec_map((project.get("optional-dependencies") or {}).get("dev") or ())
+    py_browser = _spec_map((project.get("optional-dependencies") or {}).get("browser") or ())
+    if py_runtime != runtime:
         issues.append("RUNTIME_DEPENDENCY_PIN_MISMATCH")
-    requirements = _requirements_pins(ROOT / "requirements.txt")
-    if requirements != EXPECTED_RUNTIME:
+    if _requirements_specs(base / "requirements.txt") != runtime:
         issues.append("REQUIREMENTS_RUNTIME_PIN_MISMATCH")
-    for name in EXPECTED_RUNTIME:
-        if dev.get(name):
+    # setuptools is a build requirement in pyproject and a development pin in
+    # the distribution manifest; compare it separately instead of duplicating it
+    # in the optional dev extra.
+    py_dev_compare = {name: value for name, value in py_dev.items() if name != "setuptools"}
+    declared_dev_compare = {name: value for name, value in dev.items() if name != "setuptools"}
+    if py_dev_compare != declared_dev_compare:
+        issues.append("DEV_DEPENDENCY_PIN_MISMATCH")
+    build_requires = _spec_map((spec.get("build-system") or {}).get("requires") or ())
+    if dev.get("setuptools") and build_requires.get("setuptools") != dev["setuptools"]:
+        issues.append("BUILD_DEPENDENCY_PIN_MISMATCH")
+    if _requirements_specs(base / "requirements-dev.txt") != dev:
+        issues.append("REQUIREMENTS_DEV_PIN_MISMATCH")
+    if py_browser != browser:
+        issues.append("BROWSER_DEPENDENCY_PIN_MISMATCH")
+    for name in runtime:
+        if name in dev:
             issues.append("RUNTIME_DEPENDENCY_IN_DEV_EXTRA:" + name)
-    for name, version in EXPECTED_DEV.items():
-        if dev.get(name) != version:
-            issues.append("DEV_DEPENDENCY_PIN_MISMATCH:" + name)
-    dev_lines = (ROOT / "requirements-dev.txt").read_text(encoding="utf-8") \
-        if (ROOT / "requirements-dev.txt").is_file() else ""
-    dev_pins = _pins([line.split("#", 1)[0].strip() for line in dev_lines.splitlines()])
-    for name, version in EXPECTED_DEV.items():
-        if dev_pins.get(name) != version:
-            issues.append("REQUIREMENTS_DEV_PIN_MISMATCH:" + name)
     node_pins = {}
     try:
-        package = json.loads((ROOT / "src" / "thu_assistant" / "package.json").read_text(encoding="utf-8"))
-        node_pins = {str(key).casefold(): str(value)
-                     for key, value in (package.get("dependencies") or {}).items()}
+        package = json.loads((base / "src" / "thu_assistant" / "package.json")
+                             .read_text(encoding="utf-8"))
+        node_pins = _manifest_specs(package.get("dependencies"))
     except (OSError, ValueError):
         issues.append("NODE_PACKAGE_UNREADABLE")
-    if node_pins != EXPECTED_NODE:
+    if node_pins != node:
         issues.append("NODE_DEPENDENCY_PIN_MISMATCH")
     lock_pin = None
     try:
-        lock = json.loads((ROOT / "src" / "thu_assistant" / "package-lock.json").read_text(encoding="utf-8"))
+        lock = json.loads((base / "src" / "thu_assistant" / "package-lock.json")
+                          .read_text(encoding="utf-8"))
         packages = lock.get("packages") or {}
         entry = packages.get("node_modules/tough-cookie") or {}
         lock_pin = entry.get("version")
-        root_deps = (packages.get("") or {}).get("dependencies") or {}
-        if root_deps.get("tough-cookie") != "6.0.0":
+        root_deps = _manifest_specs((packages.get("") or {}).get("dependencies"))
+        if root_deps != node:
             issues.append("NODE_LOCK_ROOT_MISMATCH")
     except (OSError, ValueError):
         issues.append("NODE_LOCK_UNREADABLE")
-    if lock_pin != "6.0.0":
+    if node and lock_pin != node.get("tough-cookie"):
         issues.append("NODE_LOCK_PIN_MISMATCH")
-    return {"ok": not issues, "issues": sorted(set(issues)),
-            "runtime": runtime, "dev": dev, "node": node_pins, "node_locked": lock_pin}
+    return {"ok": not issues, "source": "build_support/distribution.json",
+            "issues": sorted(set(issues)), "runtime": runtime, "dev": dev,
+            "node": node, "node_locked": lock_pin}
 
 
 def defaults_audit(*, platform_name: str | None = None) -> dict:
@@ -773,7 +1096,7 @@ def defaults_audit(*, platform_name: str | None = None) -> dict:
                 issues.append("SECRETS_NOT_ENVIRONMENT_ONLY")
             if config.read_secret("MODEL_API_KEY", env={}) is not None:
                 issues.append("SECRET_LEAKED_FROM_DEFAULT")
-            if public.get("network", {}).get("listen_host") not in LOOPBACK_HOSTS | {"127.0.0.1"}:
+            if public.get("network", {}).get("listen_host") not in LOOPBACK_HOSTS:
                 issues.append("DASHBOARD_NOT_LOOPBACK")
             if public.get("ui", {}).get("page_size") != 50:
                 issues.append("PAGE_SIZE_DEFAULT_NOT_50")
@@ -796,6 +1119,11 @@ def defaults_audit(*, platform_name: str | None = None) -> dict:
     return {"ok": not issues, "issues": sorted(set(issues)), "details": details}
 
 
+def _artifact_names(directory: Path) -> list[str]:
+    return [path.name for path in sorted(directory.iterdir())
+            if path.is_file() and path.suffix in {".whl", ".zip", ".gz"}]
+
+
 def candidate_check(dist: Path | str) -> dict:
     directory = Path(dist)
     if not directory.is_dir():
@@ -804,15 +1132,19 @@ def candidate_check(dist: Path | str) -> dict:
         release = _load_script("package_release")
         result = release.verify(directory)
     except Exception as error:
+        code = getattr(error, "code", None)
+        error_class = code if isinstance(code, str) and _SAFE_CLASS.fullmatch(code) else failure_class(str(error))
         return {"ok": False, "state": "VERIFY_FAILED",
-                "error_class": failure_class(str(error)), "artifacts": []}
+                "error_class": error_class, "artifacts": _artifact_names(directory)}
     artifacts = []
     for path in sorted(directory.iterdir()):
         if path.is_file() and path.suffix in {".whl", ".zip", ".gz"}:
             import hashlib
             artifacts.append({"name": path.name,
                               "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
-    return {"ok": bool(result.get("ok")), "state": "VERIFIED" if result.get("ok") else "INVALID",
+    ok = bool(result.get("ok"))
+    return {"ok": ok, "state": "VERIFIED" if ok else "INVALID",
+            "error_class": None if ok else "CANDIDATE_INVALID",
             "artifacts": artifacts}
 
 
@@ -825,19 +1157,31 @@ def _all_archives(dist: Path) -> list[Path]:
 
 def release_gate(*, reports_dir: Path | str | None = None, dist: Path | str = "dist",
                  require_dist: bool = False, platform_name: str | None = None,
-                 markers: dict[str, str] | None = None) -> dict:
+                 markers: dict[str, str] | None = None,
+                 marker_error: str | None = None,
+                 require_markers: bool | None = None,
+                 expected_commit: str | None = None,
+                 require_python_matrix: bool = False) -> dict:
     checks = {}
-    gaps = []
-    statuses = []
+    gaps: list[dict] = []
+    statuses: list[str] = []
+    current = source_identity()
+    floor = load_floor()
     if reports_dir:
-        reports = load_reports(reports_dir)
-        aggregate = aggregate_reports(reports)
+        reports, report_errors = load_reports_detail(reports_dir)
+        aggregate = aggregate_reports(
+            reports, report_errors=report_errors,
+            expected_commit=expected_commit or current.get("commit"),
+            expected_product_version=product_version(),
+            expected_contracts_digest=contract_set_digest(contract_inventory()),
+            required_python=floor.get("required_python") if require_python_matrix else None)
         checks["reports"] = {
             "ok": aggregate["status"] == "PASS",
             "status": aggregate["status"],
             "platforms": sorted(aggregate["platforms"]),
             "source_commit": aggregate["source_commit"],
             "gaps": aggregate["gaps"],
+            "report_errors": aggregate["report_errors"],
         }
         statuses.append(aggregate["status"])
         gaps.extend(aggregate["gaps"])
@@ -845,32 +1189,47 @@ def release_gate(*, reports_dir: Path | str | None = None, dist: Path | str = "d
         checks["reports"] = {
             "ok": False, "status": "MISSING", "platforms": [],
             "source_commit": None,
-            "gaps": [{"kind": "test_evidence_missing"}],
+            "gaps": [_gap("test_evidence_missing", "fail")],
         }
         statuses.append("FAIL")
-        gaps.append({"kind": "test_evidence_missing"})
+        gaps.append(_gap("test_evidence_missing", "fail"))
+
+    marker_required = require_markers if require_markers is not None else require_dist
+    marker_ok = not marker_error and bool(markers)
+    marker_state = "OK" if marker_ok else (marker_error or "MARKER_SET_EMPTY")
+    checks["marker_set"] = {"ok": marker_ok, "state": marker_state,
+                            "count": len(markers or {})}
+    if not marker_ok:
+        statuses.append("FAIL" if marker_required else "INCOMPLETE")
+        gaps.append(_gap("marker_set_unavailable", "fail" if marker_required else "incomplete",
+                         state=marker_state))
+
     privacy_source = privacy_scan_source()
     checks["privacy_source"] = privacy_source
     statuses.append("PASS" if privacy_source["ok"] else "FAIL")
     archive_paths = _all_archives(Path(dist))
     privacy_archives = privacy_scan_archives(archive_paths) if archive_paths else {
         "ok": True, "files_checked": 0, "findings": [], "finding_count": 0,
-        "scope": "candidate-archives", "state": "NO_ARCHIVES",
+        "archives": [], "scope": "candidate-archives", "state": "NO_ARCHIVES",
     }
     checks["privacy_archives"] = privacy_archives
     statuses.append("PASS" if privacy_archives["ok"] else "FAIL")
-    marker_candidates = [path for path in archive_paths if path.suffix == ".whl"]
-    marker_archives = marker_scan_archives(marker_candidates, markers) if marker_candidates else {
-        "ok": True, "files_checked": 0, "findings": [], "finding_count": 0,
-        "marker_count": len(markers or {}), "scope": "public-archives",
-        "state": "NO_PRODUCT_ARCHIVES",
+    marker_archives = marker_scan_archives(archive_paths, markers) if archive_paths else {
+        "ok": False, "files_checked": 0, "findings": [], "finding_count": 0,
+        "marker_count": len(markers or {}), "archives": [],
+        "scope": "public-archives", "state": "NO_ARCHIVES",
     }
+    if not marker_ok:
+        marker_archives["ok"] = False
+        marker_archives["state"] = marker_state
     checks["marker_archives"] = marker_archives
-    statuses.append("PASS" if marker_archives["ok"] else "FAIL")
+    statuses.append("PASS" if marker_archives["ok"] else
+                    ("FAIL" if marker_required else "INCOMPLETE"))
     if reports_dir:
         marker_reports = marker_scan_files(reports_dir, markers)
         checks["marker_reports"] = marker_reports
-        statuses.append("PASS" if marker_reports["ok"] else "FAIL")
+        statuses.append("PASS" if marker_reports["ok"] else
+                        ("FAIL" if marker_required else "INCOMPLETE"))
     dependencies = dependency_audit()
     checks["dependencies"] = dependencies
     statuses.append("PASS" if dependencies["ok"] else "FAIL")
@@ -882,23 +1241,20 @@ def release_gate(*, reports_dir: Path | str | None = None, dist: Path | str = "d
     if candidate["state"] == "NOT_BUILT":
         if require_dist:
             statuses.append("FAIL")
+            gaps.append(_gap("candidate_not_built", "fail"))
         else:
             statuses.append("INCOMPLETE")
-            gaps.append({"kind": "candidate_not_built"})
+            gaps.append(_gap("candidate_not_built", "incomplete"))
     else:
         statuses.append("PASS" if candidate["ok"] else "FAIL")
-    if "FAIL" in statuses:
-        status = "FAIL"
-    elif "INCOMPLETE" in statuses:
-        status = "INCOMPLETE"
-    else:
-        status = "PASS"
-    source = source_identity()
+    gaps = _dedupe_gaps(gaps)
+    status = _status(gaps, [], statuses)
     contracts = contract_inventory()
     return {
         "schema": RELEASE_SCHEMA,
         "generated_at": utc_now(),
-        "source": source,
+        "source": current,
+        "expected_commit": expected_commit or current.get("commit"),
         "product_version": product_version(),
         "contracts": contracts,
         "contract_set_sha256": contract_set_digest(contracts),
@@ -913,24 +1269,36 @@ def release_gate(*, reports_dir: Path | str | None = None, dist: Path | str = "d
 # CLI
 # ---------------------------------------------------------------------------
 
-def load_markers(path: Path | str | None) -> dict[str, str]:
-    """Read an exact marker set; a malformed file is an empty set, not a crash."""
+def load_markers(path: Path | str | None, *, with_error: bool = False):
+    """Read an exact marker set; with_error also returns a stable error code."""
     if not path:
-        return {}
+        result = ({}, "MARKER_SET_REQUIRED")
+        return result if with_error else result[0]
     try:
         value = json.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        result = ({}, "MARKER_SET_MISSING")
+        return result if with_error else result[0]
     except (OSError, ValueError):
-        return {}
+        result = ({}, "MARKER_SET_UNREADABLE")
+        return result if with_error else result[0]
     if not isinstance(value, dict):
-        return {}
-    return {str(key): str(item) for key, item in value.items()
-            if isinstance(item, str) and item and not str(key).startswith("_")}
+        result = ({}, "MARKER_SET_INVALID")
+        return result if with_error else result[0]
+    markers = {str(key): str(item) for key, item in value.items()
+               if isinstance(item, str) and item and not str(key).startswith("_")}
+    if not markers:
+        result = ({}, "MARKER_SET_EMPTY")
+        return result if with_error else result[0]
+    result = (markers, None)
+    return result if with_error else result[0]
 
 
 def _report_from_args(args) -> dict:
     cases = parse_junit(args.junit)
     return build_report(cases, platform=args.platform, commit=args.commit,
-                        dev_results=args.dev_results)
+                        dev_results=args.dev_results,
+                        enforce_floor=not getattr(args, "diagnostic", False))
 
 
 def main(argv=None) -> int:
@@ -946,6 +1314,8 @@ def main(argv=None) -> int:
     report.add_argument("--platform", default=platform_module.system())
     report.add_argument("--commit")
     report.add_argument("--output", required=True)
+    report.add_argument("--diagnostic", action="store_true",
+                        help="skip the evidence floor for a local probe")
 
     gate = commands.add_parser("gate", help="write one platform report and gate it")
     gate.add_argument("--junit", required=True)
@@ -958,6 +1328,9 @@ def main(argv=None) -> int:
     aggregate.add_argument("--reports", required=True)
     aggregate.add_argument("--output", required=True)
     aggregate.add_argument("--require-platforms", default=",".join(DEFAULT_REQUIRED_PLATFORMS))
+    aggregate.add_argument("--expected-commit")
+    aggregate.add_argument("--allow-shape-reports", action="store_true",
+                           help="diagnostic only; never use for release evidence")
 
     release = commands.add_parser("release-gate", help="privacy, dependency and candidate gate")
     release.add_argument("--reports")
@@ -966,27 +1339,36 @@ def main(argv=None) -> int:
     release.add_argument("--output", required=True)
     release.add_argument("--platform")
     release.add_argument("--markers", help="JSON object of exact injected marker values")
+    release.add_argument("--expected-commit")
+    release.add_argument("--require-python-matrix", action="store_true")
 
     args = parser.parse_args(argv)
     if args.command in ("report", "gate"):
         report_value = _report_from_args(args)
         write_report(report_value, args.output)
         print(json.dumps(report_summary(report_value), ensure_ascii=False))
-        if args.command == "report":
+        if args.command == "report" and getattr(args, "diagnostic", False):
             return 0
         return 0 if report_value["status"] == "PASS" else 1
     if args.command == "aggregate":
         required = tuple(item.strip() for item in args.require_platforms.split(",") if item.strip())
-        value = aggregate_reports(load_reports(args.reports), required_platforms=required)
+        reports, errors = load_reports_detail(args.reports)
+        value = aggregate_reports(reports, required_platforms=required,
+                                  report_errors=errors,
+                                  allow_shape_reports=args.allow_shape_reports,
+                                  expected_commit=args.expected_commit)
         write_report(value, args.output)
         print(json.dumps({"status": value["status"],
                           "platforms": sorted(value["platforms"]),
                           "missing": value["missing_platforms"],
                           "gaps": len(value["gaps"])}, ensure_ascii=False))
         return 0 if value["status"] == "PASS" else 1
+    markers, marker_error = load_markers(args.markers, with_error=True)
     value = release_gate(reports_dir=args.reports, dist=args.dist,
                          require_dist=args.require_dist, platform_name=args.platform,
-                         markers=load_markers(args.markers))
+                         markers=markers, marker_error=marker_error,
+                         expected_commit=args.expected_commit,
+                         require_python_matrix=args.require_python_matrix)
     write_report(value, args.output)
     print(json.dumps({"status": value["status"],
                       "checks": {name: bool(row.get("ok")) for name, row in value["checks"].items()},

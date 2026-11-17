@@ -25,6 +25,7 @@ from pathlib import Path
 import socket
 import subprocess
 import sys
+import threading
 import time
 from types import SimpleNamespace
 
@@ -347,6 +348,8 @@ def test_cancelled_media_registration_writes_nothing(tmp_path):
 class _SlowFacade:
     def __init__(self):
         self.calls = 0
+        self.entered = threading.Event()
+        self.release = threading.Event()
 
     def health(self, *, service_id=None, cancel=None):  # noqa: ARG002
         return {"status": "OK", "checked_at": "2026-11-17T09:00:00+08:00",
@@ -358,13 +361,14 @@ class _SlowFacade:
     def query(self, service_id, operation, parameters, *, cursor=None,
               page_size=50, cancel=None):  # noqa: ARG002
         self.calls += 1
-        time.sleep(0.8)
+        self.entered.set()
+        self.release.wait(5)
         return {"status": "OK", "items": [], "warnings": []}
 
 
 def test_local_api_timeout_returns_504_after_one_facade_call(tmp_path):
     facade = _SlowFacade()
-    limits = local_contract.LocalApiLimits(ui_wait_seconds=0.15)
+    limits = local_contract.LocalApiLimits(ui_wait_seconds=0.5)
     server = LocalApiServer(facade, state_dir=tmp_path / "state", limits=limits)
     server.start()
     try:
@@ -374,8 +378,10 @@ def test_local_api_timeout_returns_504_after_one_facade_call(tmp_path):
                                      {"parameters": "{}"})
         assert status == 504
         assert payload["status"] == "TIMEOUT"
+        assert facade.entered.wait(2), "the facade was never entered"
         assert facade.calls == 1
     finally:
+        facade.release.set()
         server.stop()
 
 

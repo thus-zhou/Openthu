@@ -86,11 +86,18 @@ def test_ci_workflow_is_reproducible_and_avoids_untrusted_pr_target():
     assert "ubuntu-24.04" in text and "windows-2025" in text
     assert "python-version: ['3.12', '3.13']" in text
     assert "node-version: '24'" in text
+    assert "timeout-minutes: 60" in text
+    assert "timeout-minutes: 40" in text
     assert "python -m playwright install --with-deps chromium" in text
+    assert "python -m playwright install chromium" in text
     assert "scripts/regression_report.py" in text
     assert "scripts/package_release.py" in text
     assert "${{ secrets." not in text
     assert "persist-credentials: false" in text
+    action_lines = [line.strip() for line in text.splitlines() if "uses: actions/" in line]
+    assert action_lines
+    for line in action_lines:
+        assert re.search(r"@[0-9a-f]{40}(\s|$)", line), line
 
 
 def test_ci_uploads_only_safe_reports_not_raw_logs():
@@ -112,6 +119,7 @@ def test_ci_gate_runs_privacy_dependency_and_candidate_checks():
     assert "python scripts/package_release.py build" in text
     assert "release-gate" in text
     assert "--require-dist" in text
+    assert "--require-python-matrix" in text
     assert "--markers tests/security_regression/marker_set.json" in text
     assert "download-artifact" in text
 
