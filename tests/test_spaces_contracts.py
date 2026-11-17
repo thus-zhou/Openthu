@@ -208,7 +208,7 @@ def test_unknown_seat_status_keeps_a_digest_and_is_not_free():
         {'id': 9, 'name': '9', 'area': 45, 'status': 99}]}}, '45')
     row = rows[0]
     assert row['state'] == 'UNKNOWN' and row['state_mapping'] == 'UNKNOWN'
-    assert row['source_status_digest'] and row['free'] is False
+    assert row['source_status_digest'] and row['free'] is None
 
 
 def test_space_maintenance_rate_limit_and_login_remain_distinct():
@@ -222,3 +222,90 @@ def test_space_maintenance_rate_limit_and_login_remain_distinct():
         s.check({'status': 0, 'msg': '没有登录或登录已超时'}, 'seat')
     with pytest.raises(CampusError, match='SPACE_READ_FAILED'):
         s.check({'status': 0, 'msg': 'timeout'}, 'seat')
+    with pytest.raises(CampusError, match='SPACE_RESPONSE_INVALID'):
+        s.check({'status': 200, 'msg': 'parsererror'}, 'seat')
+
+
+def test_empty_or_unmapped_seat_rows_are_unknown_not_full():
+    raw = s.result([], s.SEAT + '/web/area',
+                   resource={'area_id': '45', 'name': 'A', 'path': ['馆'], 'capacity': 100},
+                   date='2026-11-06', start_time='09:00', end_time='10:00',
+                   segment_id='7', free_count=0, complete=True)
+    block = precheck.build('library', 'seat_availability', raw, [],
+                           {'area_id': '45'}, CHECKED)['summary']
+    assert block['availability']['state'] == 'UNKNOWN'
+    assert block['availability']['reason'] == 'NO_SEAT_ROWS'
+    assert block['preparation_state'] == 'UNKNOWN'
+    assert 'SEAT_MAP_ROWS' in block['unknowns']
+
+    seat = {'seat_id': '9', 'name': '9', 'area_id': '45', 'state': 'UNKNOWN',
+            'state_mapping': 'UNKNOWN', 'platform_status': 99, 'free': None,
+            'source_status_digest': 'abc123'}
+    raw2 = s.result([seat], s.SEAT + '/web/area',
+                    resource={'area_id': '45', 'name': 'A', 'path': ['馆'], 'capacity': 100},
+                    date='2026-11-06', start_time='09:00', end_time='10:00',
+                    segment_id='7', free_count=0, complete=True)
+    block = precheck.build('library', 'seat_availability', raw2, [seat],
+                           {'area_id': '45'}, CHECKED)
+    assert block['summary']['availability']['state'] == 'PARTIAL'
+    assert block['summary']['availability']['unknown_seat_count'] == 1
+    assert seat['precheck']['availability']['state'] == 'UNKNOWN'
+    assert seat['precheck']['preparation_state'] == 'UNKNOWN'
+    assert 'SEAT_STATUS_MAPPING' in block['summary']['unknowns']
+
+
+def test_seat_and_room_item_windows_are_inherited_from_the_summary():
+    seat = {'seat_id': '1', 'name': '1', 'area_id': '45', 'state': 'FREE',
+            'state_mapping': 'MAPPED', 'platform_status': 1, 'free': True}
+    raw = s.result([seat], s.SEAT + '/web/area',
+                   resource={'area_id': '45', 'name': 'A', 'path': ['馆'], 'capacity': 10},
+                   date='2026-11-06', start_time='09:00', end_time='10:00',
+                   segment_id='7', free_count=1, complete=True)
+    precheck.build('library', 'seat_availability', raw, [seat], {'area_id': '45'}, CHECKED)
+    assert seat['precheck']['window'] == {
+        'date': '2026-11-06', 'start_time': '09:00', 'end_time': '10:00',
+        'timezone': 'Asia/Shanghai', 'precision': 'MINUTE'}
+    date_only = s.result([seat], s.SEAT + '/web/area',
+                         resource={'area_id': '45', 'name': 'A', 'path': ['馆'],
+                                   'capacity': 10}, date='2026-11-06', complete=True)
+    precheck.build('library', 'seat_availability', date_only, [seat],
+                   {'area_id': '45'}, CHECKED)
+    assert seat['precheck']['window']['precision'] == 'DATE'
+
+
+def test_ambiguous_room_selection_summary_needs_user_action():
+    raw = s.result([], s.ROOM + '/ic-web/roomMenu', status='NEEDS_USER_ACTION',
+                   candidates=[{'kind_id': '1', 'name': '研讨间'}])
+    block = precheck.build('library', 'room_availability', raw, [],
+                           {'name': '研讨间'}, CHECKED)['summary']
+    assert block['selection']['state'] == 'AMBIGUOUS'
+    assert block['preparation_state'] == 'NEEDS_USER_ACTION'
+    assert block['selection']['candidate_count'] == 1
+
+
+def test_candidate_truncation_reports_the_real_total():
+    candidates = [{'area_id': str(i), 'name': 'A'} for i in range(30)]
+    raw = s.result([], s.SEAT, status='NEEDS_USER_ACTION', candidates=candidates)
+    selection = precheck.build('library', 'seat_availability', raw, [],
+                               {'name': 'A'}, CHECKED)['summary']['selection']
+    assert selection['candidate_count'] == 30
+    assert selection['candidate_total'] == 30
+    assert selection['candidates_truncated'] is True
+    assert len(selection['candidates']) == 20
+
+
+def test_cursor_page_updates_top_level_freshness(monkeypatch):
+    from types import SimpleNamespace
+    from thu_assistant.queries import QueryEngine
+    from thu_assistant import source_state
+    account = {'account_id': 'one'}
+    engine = QueryEngine(SimpleNamespace(bridge=lambda *a: account, browsers=None))
+    monkeypatch.setattr(s, 'query', lambda *args: s.result(
+        [{'id': '1'}, {'id': '2'}], s.SEAT))
+    first = engine.query('library', 'seat_availability', {'area_id': '1'}, page_size=1)
+    second = engine.query('library', 'seat_availability', {'area_id': '1'},
+                          cursor=first['next_cursor'], page_size=1)
+    assert first['freshness'] == 'LIVE_AT_CHECKED_AT'
+    assert second['freshness'] == 'SNAPSHOT_ONLY_NOT_LIVE'
+    assert second['retrieval']['freshness'] == 'SNAPSHOT_ONLY_NOT_LIVE'
+    assert source_state.public_error('ROOM_RULE_UNVERIFIED')['category'] == 'UPSTREAM_CONTRACT'

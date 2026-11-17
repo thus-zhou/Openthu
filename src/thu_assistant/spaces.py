@@ -6,7 +6,7 @@ import re
 from urllib.parse import urlencode, urlsplit
 from .bridge import CampusError
 from .library import plain
-from . import domain_models
+from . import domain_models, precheck
 
 VERSION = 'space-read-v1'
 SEAT = 'https://seat.lib.tsinghua.edu.cn'
@@ -67,6 +67,10 @@ def check(payload,system):
     message=str(payload.get('msg' if system=='seat' else 'message',''))
     if status in (401,403) or re.search('未登录|没有登录|登录.*(?:超时|过期|失效)|未登陆|未认证',message):
         raise CampusError('FORBIDDEN' if status==403 else 'AUTH_REQUIRED')
+    if system=='seat' and status==200 and message in ('parsererror','success'):
+        # jQuery reports a parse failure as HTTP 200 plus statusText. Treat it
+        # as a changed response so read_seat can fall back to the official page.
+        raise CampusError('SPACE_RESPONSE_INVALID')
     if status==429:
         raise CampusError('RATE_LIMITED')
     if system=='seat' and status==0:
@@ -241,7 +245,8 @@ def seat_states(payload,area):
                             'state':mapped['status'],'state_mapping':mapped['mapping_state'],
                             'source_status_digest':mapped['source_status_digest'],
                             'platform_status':r['status'],
-                            'platform_label':plain(r.get('status_name')),'free':r['status']==1})
+                            'platform_label':plain(r.get('status_name')),
+                            'free':(r['status']==1) if mapped['mapping_state']=='MAPPED' else None})
     return result_rows
 
 def read_seat(reader,op,params):
@@ -292,7 +297,9 @@ def read_seat(reader,op,params):
                       start_time=a,end_time=b,warnings=['SEAT_MAP_CONTRACT_UNAVAILABLE'],
                       official_page_url=SEAT+'/web/area?'+urlencode(request))
     return result(seats,SEAT+'/web/area',**info,start_time=a,end_time=b,segment_id=slot['segment_id'],
-                  free_count=sum(x['free'] for x in seats),slot_free_count=sum(x['free'] for x in seats),
+                  free_count=sum(1 for x in seats if x['free'] is True),
+                  slot_free_count=sum(1 for x in seats if x['free'] is True),
+                  unknown_seat_count=sum(1 for x in seats if x['free'] is None),
                   area_capacity=chosen.get('capacity'),capacity_scope='AREA_TOTAL_SEATS_NOT_SLOT',
                   capacity_is_slot_availability=False,eligibility='UNVERIFIED',
                   official_page_url=SEAT+'/web/area?'+urlencode(request),
@@ -365,9 +372,7 @@ def room_row(row,requested,party,wanted):
             'platform_open_state':row.get('openState'),'platform_device_status':row.get('devStatus'),
             'opening_intervals':opening_rows,'occupied_intervals':occupied,'interval_state':interval_state,
             'duration_rule_state':'DECLARED' if duration_declared else 'MISSING',
-            'occupancy_public':{'state':'REDACTED','items':occupied,
-                                'removed':['identity','subject','notes'],
-                                'basis':'PUBLIC_PREVIEW_TIME_AND_PLATFORM_STATUS_ONLY'},
+            'occupancy_public':precheck.public_occupancy(occupied),
             'eligibility':'UNVERIFIED','only_view':row.get('onlyView'),
             'rules':{k:plain(rule[k]) if isinstance(rule[k],str) else rule[k] for k in RULE_KEYS if rule and k in rule},
             'reservation_notice':plain(row.get('resvMemo'))}

@@ -5,10 +5,12 @@ import pytest
 
 from thu_assistant import library as lib
 from thu_assistant import precheck
+from thu_assistant import sports as sp
 from thu_assistant.bridge import CampusError
-from thu_assistant.queries import QueryEngine, describe
+from thu_assistant.queries import QueryEngine, SNAPSHOT_VERSION, describe, read_scope_for
 
 CHECKED = '2026-11-17T12:00:00+08:00'
+SPORTS_DAY = '2099-02-03'
 
 
 def wrap(value):
@@ -169,3 +171,144 @@ def test_disabling_library_writes_keeps_every_read_operation(monkeypatch):
     assert {'scenes', 'availability', 'orders', 'order_detail'} <= sports_ops
     assert not any(row['enabled'] for row in describe('library')['actions'])
     assert not any(row['enabled'] for row in describe('sports')['actions'])
+
+
+def test_query_engine_precheck_keeps_the_actual_source_url(monkeypatch):
+    slot = {'uuid': 'slot', 'beginDate': 20990203, 'endDate': 20990203,
+            'beginTime': '09:00', 'endTime': '10:00', 'sceneUseType': 'SPORT_GROUP',
+            'reserveStatus': {'reserveStatus': 'Y'},
+            'userFeeDetails': {'chargingUnitPrice': 300, 'payableAmount': 300},
+            'allowUserNum': 6, 'resvUserNum': 1}
+    site = sp.field_row({'uuid': 'court', 'sceneUuid': 'scene', 'siteName': '场地',
+                         'sessionVo': [slot],
+                         'reserveRule': {'cancelBeforeStart': 10}}, 'scene',
+                        'SPORT_GROUP', SPORTS_DAY, 'room')
+    raw = sp.result([site], sp.HOME, date=SPORTS_DAY,
+                    scene={'scene_id': 'scene', 'name': '项目'},
+                    room={'room_id': 'room', 'name': '房间'}, complete=True)
+    monkeypatch.setattr(sp, 'query', lambda *args: raw)
+    engine = QueryEngine(SimpleNamespace(bridge=lambda *args: {'account_id': 'one'},
+                                        browsers=None))
+    out = engine.query('sports', 'availability', {'scene_id': 'scene', 'date': SPORTS_DAY})
+    session = out['items'][0]['sessions'][0]
+    assert session['precheck']['fees']['items'][0]['source'] == out['source']['url']
+    assert session['precheck']['rules']['items'][0]['source'] == out['source']['url']
+    assert out['items'][0]['precheck']['rules']['items'][0]['source'] == out['source']['url']
+
+
+def test_selection_marks_id_bound_single_records_unique():
+    item = {'record_id': 'rec1', 'title': 't'}
+    search = precheck.build('library', 'catalog_search', {'complete': True}, [item],
+                            {'query': 't'}, CHECKED)['summary']
+    assert search['selection']['by'] == 'NONE'
+    assert search['selection']['state'] == 'ALL'
+
+    detail = {'items': [{'record_id': 'rec1', 'title': 't', 'holdings': []}],
+              'complete': True}
+    summary = precheck.build('library', 'catalog_detail', detail, detail['items'],
+                             {'record_id': 'rec1'}, CHECKED)['summary']
+    assert summary['selection']['state'] == 'UNIQUE'
+    assert summary['selection']['by'] == 'ID'
+
+    database = {'items': [{'database_id': '123', 'name': '库'}], 'complete': True}
+    summary = precheck.build('library', 'database_links', database, database['items'],
+                             {'database_id': '123'}, CHECKED)['summary']
+    assert summary['selection']['state'] == 'UNIQUE'
+    assert summary['selection']['by'] == 'ID'
+
+    summary = precheck.build('library', 'seat_areas', {'complete': True}, [],
+                             {'parent_id': '45'}, CHECKED)['summary']
+    assert summary['selection']['by'] == 'ID'
+
+    order = {'reservation_id': 'rec', 'scene_name': '项目',
+             'start_at': SPORTS_DAY + 'T09:00:00+08:00',
+             'end_at': SPORTS_DAY + 'T10:00:00+08:00', 'status_axes': {}}
+    summary = precheck.build('sports', 'order_detail',
+                             {'complete': True}, [order], {'record_id': 'rec'}, CHECKED)['summary']
+    assert summary['selection']['state'] == 'UNIQUE'
+    assert summary['selection']['by'] == 'ID'
+
+
+def test_order_status_axes_missing_unknown_and_string_enums_are_consistent():
+    base = {'resvUuid': 'rec', 'sceneUuid': 'scene', 'sceneName': 'x',
+            'resvTime': {'startTime': SPORTS_DAY + ' 09:00:00',
+                         'endTime': SPORTS_DAY + ' 10:00:00'},
+            'siteVoList': [{'uuid': 'court'}], 'resvStatus': 'RESV_EFFECT',
+            'resvExtendStatus': 1, 'resvCheckStatus': 'RESV_APPROVE_PASS',
+            'orderStatus': 4, 'paidAmount': 0, 'totalAmount': 100}
+    missing = sp.normalize_order(base)
+    assert missing['status'] == 'UNKNOWN' and missing['state_confirmed'] is False
+    assert missing['status_axes']['refund']['mapping_state'] == 'MISSING'
+    summary = precheck.build('sports', 'orders', sp.result([missing], sp.PERSONAL),
+                             [missing], {}, CHECKED)['summary']
+    assert summary['status_axes_state'] == 'PARTIAL'
+    assert 'REFUND_STATUS' in summary['unknowns']
+
+    cancelled = sp.normalize_order({**base, 'resvExtendStatus': 3, 'orderRefundStatus': 999})
+    assert cancelled['status'] == 'UNKNOWN' and cancelled['state_confirmed'] is False
+
+    stringy = sp.normalize_order({**base, 'orderStatus': '4', 'orderRefundStatus': '0'})
+    assert stringy['payment_status'] == 'PAID'
+    assert stringy['status_axes']['payment']['status'] == 'PAID'
+    assert stringy['refund_status'] == 'NONE'
+
+
+def test_loan_renewal_rule_and_ambiguous_rules_are_partial():
+    payload = wrap({'data': {'loans': {'loan': [
+        {'loanid': '1', 'title': '书', 'duedate': '20991231', 'renew': 'Y',
+         'renewstatuses': {'renewstatus': ['可续借']}}], 'showmore': ['N']}}})
+    rows, _ = lib.parse_loans(payload)
+    precheck.build('library', 'loans', lib.result(rows, lib.PRIMO + 'loans'), rows, {}, CHECKED)
+    eligibility = rows[0]['precheck']['eligibility']
+    rules = {item['raw_field']: item for item in rows[0]['precheck']['rules']['items']}
+    assert eligibility['state'] == 'ELIGIBLE'
+    assert rules['renew']['unit'] == 'FLAG' and rules['renew']['value'] is True
+    assert rules['renew']['state'] == 'DECLARED'
+    assert precheck._rules(precheck.SPORTS_RULE_UNITS, {'cancelTime': 30},
+                           source=None, checked_at=CHECKED)['state'] == 'PARTIAL'
+
+
+def test_retrieval_policy_distinguishes_live_reads_and_static_entries():
+    catalog = precheck.retrieval('library', 'catalog_search', checked_at=CHECKED)
+    assert catalog['policy'] == 'LIVE_READ_ONLY'
+    assert catalog['current_source_read'] is True
+    assert catalog['snapshot_version'] == SNAPSHOT_VERSION
+    static = precheck.retrieval('library', 'database_links', checked_at=CHECKED)
+    assert static['policy'] == 'STATIC_ENTRY_LIST'
+    assert static['freshness'] == 'STATIC_ENTRY_LIST'
+    assert static['current_source_read'] is False
+    detail = precheck.retrieval('sports', 'order_detail', checked_at=CHECKED,
+                                parameters={'record_id': 'x'})
+    assert detail['policy'] == 'LIVE_ONLY'
+    assert detail['current_source_read'] is True
+    scenes = precheck.retrieval('sports', 'scenes', checked_at=CHECKED)
+    assert scenes['policy'] == 'LIVE_READ_ONLY'
+
+
+def test_read_scope_uses_adapter_pagination_windows():
+    loans = read_scope_for('library', 'loans', {},
+                           [{'loan_id': str(i)} for i in range(7)],
+                           {'complete': True, 'pagination': {'pages_read': 3}}, CHECKED)
+    assert loans['kind'] == 'FULL_LIST' and loans['pages_read'] == 3
+    reservations = read_scope_for('library', 'reservations', {'system': 'seat', 'page': 2}, [],
+                                  {'complete': False, 'upstream_total': 40,
+                                   'pagination': {'upstream_page': 2,
+                                                  'upstream_page_size': 20,
+                                                  'upstream_total': 40}}, CHECKED)
+    assert reservations['offset'] == 20 and reservations['limit'] == 20
+    assert reservations['expected_pages'] == 2
+
+
+def test_resource_uids_are_stable_across_search_and_detail():
+    item = {'record_id': 'rec1', 'title': 't'}
+    precheck.build('library', 'catalog_search', {'complete': True}, [item],
+                   {'query': 't'}, CHECKED)
+    assert item['precheck']['resource']['uid'] == 'library.catalog:RESOURCE:rec1'
+    detail = {'items': [{'record_id': 'rec1', 'title': 't', 'holdings': []}], 'complete': True}
+    summary = precheck.build('library', 'catalog_detail', detail, detail['items'],
+                             {'record_id': 'rec1'}, CHECKED)['summary']
+    assert summary['resource']['uid'] == item['precheck']['resource']['uid']
+    loan = {'loan_id': '1', 'title': '书', 'renewal_state': 'UNKNOWN'}
+    precheck.build('library', 'loans', lib.result([loan], lib.PRIMO + 'loans'), [loan],
+                   {}, CHECKED)
+    assert loan['precheck']['resource']['uid'] == 'library.loans:RENEWAL:1'

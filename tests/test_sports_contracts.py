@@ -251,3 +251,74 @@ def test_known_status_axes_remain_separate_and_confirmed():
     assert row['status_axes']['payment']['status'] == 'PAID'
     assert row['status_axes']['refund']['status'] == 'REFUNDING'
     assert row['payment_receipt_verified'] is False
+
+
+def test_sports_summary_and_items_agree_on_full_and_missing_sessions():
+    slot = {**SLOT, 'reserveStatus': {'reserveStatus': 'N'}, 'userFeeDetails': {}}
+    site = s.field_row({**SITE, 'sessionVo': [slot]}, 'scene', 'SPORT_GROUP', DAY, 'room')
+    raw = s.result([site], s.HOME, complete=True, date=DAY,
+                   scene={'scene_id': 'scene'}, room={'room_id': 'room'})
+    block = precheck.build('sports', 'availability', raw, [site],
+                           {'scene_id': 'scene'}, CHECKED)
+    assert block['summary']['preparation_state'] == 'NOT_PREPARABLE'
+    assert site['precheck']['preparation_state'] == 'NOT_PREPARABLE'
+
+    empty = s.field_row({**SITE, 'sessionVo': []}, 'scene', 'SPORT_GROUP', DAY, 'room')
+    raw = s.result([empty], s.HOME, complete=True, date=DAY,
+                   scene={'scene_id': 'scene'}, room={'room_id': 'room'})
+    block = precheck.build('sports', 'availability', raw, [empty],
+                           {'scene_id': 'scene'}, CHECKED)
+    assert block['summary']['preparation_state'] == 'UNKNOWN'
+    assert empty['precheck']['preparation_state'] == 'UNKNOWN'
+
+
+def test_session_window_is_filled_and_capacity_string_fails_closed():
+    site, _ = site_block()
+    session = site['sessions'][0]
+    assert session['precheck']['window'] == {
+        'date': DAY, 'start_time': '09:00', 'end_time': '10:00',
+        'timezone': 'Asia/Shanghai', 'precision': 'MINUTE'}
+    with pytest.raises(CampusError, match='SPORTS_RESPONSE_INVALID'):
+        s.field_row({**SITE, 'sessionVo': [{**SLOT, 'allowUserNum': '6'}]},
+                    'scene', 'SPORT_GROUP', DAY, 'room')
+
+
+def test_short_availability_page_is_partial_not_an_exception():
+    class Reader:
+        def __init__(self):
+            self.calls = 0
+
+        def call(self, path, params=None):
+            if path == s.SCENE:
+                return {'data': [{'uuid': 'scene', 'sceneName': '项目',
+                                  'sceneUseType': 'SPORT_GROUP', 'relatedType': 'DEV'}]}
+            if path == s.LOCATION:
+                return {'data': [{'uuid': params['siteType'].lower(),
+                                  'siteType': params['siteType'],
+                                  'siteName': '地点'}]}
+            if path == s.PAGE:
+                self.calls += 1
+                return {'count': 2, 'data': [SITE]}
+            raise AssertionError(path)
+
+    out = s.availability(Reader(), {'scene_id': 'scene', 'date': DAY})
+    assert out['complete'] is False
+    assert 'UPSTREAM_PAGE_COUNT_MISMATCH' in out['warnings']
+    assert len(out['items']) == 1
+
+
+def test_rooms_not_verified_keeps_needs_user_action_selection():
+    class Reader:
+        def call(self, path, params=None):
+            if path == s.SCENE:
+                return {'data': [{'uuid': 'scene', 'sceneName': '羽毛球',
+                                  'relatedType': 'DEV'}]}
+            if path == s.LOCATION:
+                return {'data': []}
+            raise AssertionError(path)
+
+    out = s.availability(Reader(), {'scene_id': 'scene', 'date': DAY})
+    summary = precheck.build('sports', 'availability', out, [], {'scene_id': 'scene'},
+                             CHECKED)['summary']
+    assert summary['selection']['state'] == 'NEEDS_USER_ACTION'
+    assert summary['resource']['room_id'] is None

@@ -343,6 +343,7 @@ def parse_loans(payload):
                         'due_precision':('minute' if hour else 'date') if due else None,
                         'timezone':'Asia/Shanghai','overdue':overdue(due,hour),
                         'renewable':{'Y':True,'N':False}.get(renew_raw),
+                        'renew_flag':renew_raw if renew_raw in ('Y','N') else None,
                         'renewal_state':{'Y':'ELIGIBLE','N':'NOT_ELIGIBLE'}.get(renew_raw,'UNKNOWN'),
                         'renewal':{'state':'HINT_ONLY','source_field':'renew',
                                    'does_not_change_due_date':True,'execution_attempted':False},

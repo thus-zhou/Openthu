@@ -379,9 +379,11 @@
       "title": "图书馆体育查询一致性与规则读取",
       "batch": 4,
       "code_paths": [
+        "src/thu_assistant/precheck.py",
         "src/thu_assistant/library.py",
         "src/thu_assistant/spaces.py",
         "src/thu_assistant/sports.py",
+        "src/thu_assistant/queries.py",
         "tests/test_library_contracts.py",
         "tests/test_spaces_contracts.py",
         "tests/test_sports_contracts.py"

@@ -402,6 +402,7 @@
       "owner": "Hermes",
       "integration_branch": "hermes/1-install-diagnostics",
       "exclusive_paths": [
+        "src/thu_assistant/precheck.py",
         "src/thu_assistant/library.py",
         "src/thu_assistant/spaces.py",
         "src/thu_assistant/sports.py",
@@ -430,7 +431,7 @@
         "图书馆/体育查询一致性、规则读取和部分结果语义"
       ],
       "integration_order": 10,
-      "status": "pending"
+      "status": "accepted"
     },
     {
       "id": "4.4",

@@ -45,17 +45,29 @@ SPORTS_RULE_UNITS = {
     'cancelTime': None,
     'deadlineTime': None,
 }
-SEAT_RULE_UNITS = {'ska.bookRule': 'TEXT'}
-LOAN_RULE_UNITS = {'renew': 'FLAG', 'renewstatuses.renewstatus': 'TEXT'}
-LIVE_OPERATIONS = {'seat_availability', 'room_availability', 'availability'}
-HISTORY_OPERATIONS = {'loans', 'reservations', 'orders', 'order_detail'}
+
+# Stable service-level source ids for UIDs.  Operation names are deliberately
+# not used: the same record must have the same UID in search, detail and
+# precheck output.
+SOURCE_IDS = {
+    'catalog': 'library.catalog',
+    'spaces': 'library.spaces',
+    'loans': 'library.loans',
+    'sports': 'sports.venue',
+    'orders': 'sports.orders',
+}
+LIVE_OPERATIONS = {'seat_availability', 'room_availability', 'availability', 'order_detail'}
+HISTORY_OPERATIONS = {'loans', 'reservations', 'orders'}
+READ_ONLY_OPERATIONS = {'catalog_search', 'catalog_detail', 'database_links',
+                        'scenes', 'room_types'}
 
 
 def _checked(value):
+    """Return a normalized check time or None; never silently say "now"."""
     parsed = domain_models.canonical_time(value)
     if parsed['valid'] and parsed['date_precision'] != 'date':
         return parsed['value']
-    return source_state.now_iso()
+    return None
 
 
 def _source(url):
@@ -96,9 +108,9 @@ def rule_value(value, unit, *, raw_field, source=None, checked_at=None, note='')
             value = bool(value)
     elif unit == 'DAY':
         try:
-            date.fromisoformat(value) if isinstance(value, str) else None
-            valid = isinstance(value, str) and len(value) == 10
-        except ValueError:
+            date.fromisoformat(value)
+            valid = isinstance(value, str)
+        except (TypeError, ValueError):
             valid = False
     else:
         valid = isinstance(value, str) and bool(value.strip())
@@ -113,6 +125,7 @@ def rule_value(value, unit, *, raw_field, source=None, checked_at=None, note='')
 
 def _rules(mapping, raw, *, source, checked_at):
     items = []
+    raw = raw or {}
     for field, unit in mapping.items():
         if unit is None:
             if field in raw and raw[field] is not None:
@@ -124,11 +137,18 @@ def _rules(mapping, raw, *, source, checked_at):
                                    checked_at=checked_at)
             items.append(entry)
             continue
-        items.append(rule_value((raw or {}).get(field), unit, raw_field=field,
+        items.append(rule_value(raw.get(field), unit, raw_field=field,
                                 source=source, checked_at=checked_at))
     declared = sum(item['state'] == 'DECLARED' for item in items)
-    return {'state': 'READ' if declared == len(items) else 'PARTIAL' if declared else 'MISSING',
-            'items': items}
+    unusual = any(item['state'] in ('UNIT_AMBIGUOUS', 'UNIT_UNREGISTERED', 'TYPE_MISMATCH')
+                  for item in items)
+    if items and declared == len(items):
+        state = 'READ'
+    elif declared or unusual:
+        state = 'PARTIAL'
+    else:
+        state = 'MISSING'
+    return {'state': state, 'items': items}
 
 
 def _text_rules(values, *, raw_field='rules', source=None, checked_at=None):
@@ -143,39 +163,52 @@ def _fees_unknown(reason):
 
 
 def _candidate(row):
-    keys = ('area_id', 'kind_id', 'room_id', 'scene_id', 'name', 'path', 'capacity',
-            'class_kind', 'min_people', 'max_people')
+    keys = ('area_id', 'kind_id', 'room_id', 'scene_id', 'database_id', 'name', 'path',
+            'capacity', 'class_kind', 'min_people', 'max_people')
     return {key: row[key] for key in keys if key in row}
 
 
-def _selection(raw, parameters, limit=20):
-    candidates = [_candidate(row) for row in (raw.get('candidates') or [])[:limit]]
+def _selection(raw, parameters, *, selected=False, limit=20):
+    candidates = [_candidate(row) for row in (raw.get('candidates') or [])]
+    total = len(candidates)
+    shown = candidates[:limit]
     by = 'NONE'
-    if any(parameters.get(key) for key in ('area_id', 'kind_id', 'room_id', 'scene_id', 'record_id')):
+    if any(parameters.get(key) for key in
+           ('area_id', 'kind_id', 'room_id', 'scene_id', 'record_id', 'database_id', 'parent_id')):
         by = 'ID'
-    elif any(parameters.get(key) for key in ('name', 'query')):
+    elif parameters.get('name'):
         by = 'NAME'
-    if raw.get('resource'):
+    if selected or raw.get('resource'):
         state = 'UNIQUE'
-    elif raw.get('status') == 'NEEDS_USER_ACTION' and candidates:
-        state = 'AMBIGUOUS'
     elif raw.get('status') == 'NOT_FOUND':
         state = 'NOT_FOUND'
-    elif candidates:
-        state = 'CANDIDATES'
+    elif raw.get('status') == 'NEEDS_USER_ACTION' or shown:
+        state = 'AMBIGUOUS' if shown else 'NEEDS_USER_ACTION'
     else:
         state = 'ALL'
-    return {'state': state, 'by': by, 'candidate_count': len(candidates),
-            'candidates': candidates}
+    return {'state': state, 'by': by, 'candidate_count': total,
+            'candidate_total': total, 'candidates_truncated': total > limit,
+            'candidates': shown}
+
+
+def _window(date_value=None, start=None, end=None):
+    if start and end:
+        precision = 'MINUTE'
+    elif date_value:
+        precision = 'DATE'
+    else:
+        precision = 'UNKNOWN'
+    return {'date': date_value, 'start_time': start, 'end_time': end,
+            'timezone': TIMEZONE_NAME, 'precision': precision}
 
 
 def _base(operation, checked_at):
     return {'version': VERSION, 'operation': operation, 'checked_at': checked_at,
             'selection': {'state': 'NOT_APPLICABLE', 'by': 'NONE',
-                          'candidate_count': 0, 'candidates': []},
+                          'candidate_count': 0, 'candidate_total': 0,
+                          'candidates_truncated': False, 'candidates': []},
             'resource': None,
-            'window': {'date': None, 'start_time': None, 'end_time': None,
-                       'timezone': TIMEZONE_NAME, 'precision': 'MINUTE'},
+            'window': _window(),
             'availability': {'state': 'NOT_APPLICABLE', 'free_count': None,
                              'capacity': None, 'capacity_scope': None,
                              'capacity_is_slot_availability': False,
@@ -187,7 +220,7 @@ def _base(operation, checked_at):
             'preparation_state': 'NOT_APPLICABLE'}
 
 
-def _seat_availability(raw, parameters, checked_at):
+def _seat_availability(raw, items, parameters, checked_at):
     block = _base('seat_availability', checked_at)
     resource = raw.get('resource') or {}
     free = raw.get('free_count')
@@ -197,20 +230,22 @@ def _seat_availability(raw, parameters, checked_at):
         'resource_id': resource.get('area_id'),
         'name': resource.get('name'),
         'path': resource.get('path'),
-        **_identity('library.seat_availability', 'RESOURCE', resource.get('area_id')),
+        **_identity(SOURCE_IDS['spaces'], 'RESOURCE', resource.get('area_id')),
         'capacity': ({'value': capacity, 'unit': 'COUNT', 'scope': 'AREA_TOTAL_SEATS',
                       'source_field': 'seatinfo.TotalCount', 'is_slot_availability': False}
                      if type(capacity) is int and capacity >= 0 else None),
     }
-    block['window'] = {'date': raw.get('date'), 'start_time': raw.get('start_time'),
-                       'end_time': raw.get('end_time'), 'timezone': TIMEZONE_NAME,
-                       'precision': 'MINUTE'}
+    block['window'] = _window(raw.get('date'), raw.get('start_time'), raw.get('end_time'))
     complete = raw.get('complete') is True
+    mapped = sum(1 for item in items if item.get('state_mapping') == 'MAPPED')
+    unknown = len(items) - mapped
     if raw.get('status') in ('NOT_OPEN', 'NOT_FOUND', 'NEEDS_USER_ACTION', 'BROWSER_REQUIRED'):
         state = 'UNKNOWN'
-    elif type(free) is not int:
+    elif not items or type(free) is not int:
         state = 'UNKNOWN'
     elif not complete:
+        state = 'PARTIAL'
+    elif unknown:
         state = 'PARTIAL'
     elif free > 0:
         state = 'FREE'
@@ -220,7 +255,9 @@ def _seat_availability(raw, parameters, checked_at):
         'state': state, 'free_count': free if type(free) is int else None,
         'capacity': capacity if type(capacity) is int else None,
         'capacity_scope': 'AREA_TOTAL_SEATS', 'capacity_is_slot_availability': False,
-        'source_complete': complete, 'reason': raw.get('reason'),
+        'source_complete': complete, 'reason': raw.get('reason') or
+        ('NO_SEAT_ROWS' if not items else 'UNKNOWN_SEAT_STATUS' if unknown else None),
+        'row_count': len(items), 'mapped_seat_count': mapped, 'unknown_seat_count': unknown,
         'slot': ({'segment_id': raw.get('segment_id'), 'start_time': raw.get('start_time'),
                   'end_time': raw.get('end_time')} if raw.get('segment_id') else None),
     }
@@ -230,6 +267,10 @@ def _seat_availability(raw, parameters, checked_at):
                                  source=raw.get('rule_source'), checked_at=checked_at)
     block['unknowns'] = ['ACCOUNT_ELIGIBILITY', 'FEE_STATE',
                          'CANCELLATION_AND_NO_SHOW_TERMS']
+    if not items:
+        block['unknowns'].append('SEAT_MAP_ROWS')
+    if unknown:
+        block['unknowns'].append('SEAT_STATUS_MAPPING')
     if raw.get('status') in ('NEEDS_USER_ACTION', 'NOT_FOUND'):
         block['preparation_state'] = 'NEEDS_USER_ACTION'
     elif raw.get('status') == 'BROWSER_REQUIRED':
@@ -245,40 +286,46 @@ def _seat_availability(raw, parameters, checked_at):
     return block
 
 
-def _seat_item(item, checked_at):
+def _seat_item(item, raw, checked_at):
     block = _base('seat_availability', checked_at)
+    mapped = item.get('state_mapping') == 'MAPPED'
+    free = item.get('free') if mapped else None
     block['resource'] = {
         'resource_id': item.get('seat_id'), 'name': item.get('name'),
         'area_id': item.get('area_id'),
-        **_identity('library.seat_availability', 'RESOURCE', item.get('seat_id')),
+        **_identity(SOURCE_IDS['spaces'], 'RESOURCE', item.get('seat_id')),
+        'source_status_digest': item.get('source_status_digest'),
     }
-    free = item.get('free')
+    block['window'] = _window(raw.get('date'), raw.get('start_time'), raw.get('end_time'))
     block['availability'] = {
         'state': 'FREE' if free is True else 'FULL' if free is False else 'UNKNOWN',
         'free_count': 1 if free is True else 0 if free is False else None,
-        'capacity': 1 if free is not None else None, 'capacity_scope': 'SEAT_UNIT',
+        'capacity': 1 if mapped else None, 'capacity_scope': 'SEAT_UNIT',
         'capacity_is_slot_availability': True, 'source_complete': None,
-        'reason': item.get('state') if item.get('state') == 'UNKNOWN' else None,
+        'reason': None if mapped else 'UNKNOWN_SEAT_STATUS',
     }
     block['eligibility'] = {'state': 'UNVERIFIED', 'reasons': ['ACCOUNT_NOT_CHECKED']}
     block['fees'] = _fees_unknown('SEAT_FEE_STATE_NOT_REPORTED')
     block['rules'] = {'state': 'MISSING', 'items': []}
     block['unknowns'] = ['ACCOUNT_ELIGIBILITY', 'FEE_STATE']
+    if not mapped:
+        block['unknowns'].append('SEAT_STATUS_MAPPING')
     block['preparation_state'] = ('NEEDS_ELIGIBILITY_CHECK' if free is True
                                   else 'NOT_PREPARABLE' if free is False else 'UNKNOWN')
     return block
 
 
-def _room_item(item, restrictions, checked_at):
+def _room_item(item, restrictions, raw, checked_at):
     block = _base('room_availability', checked_at)
     block['resource'] = {
         'resource_id': item.get('room_id'), 'kind_id': item.get('kind_id'),
         'name': item.get('name'), 'room_name': item.get('room_name'),
         'location': item.get('location'),
-        **_identity('library.room_availability', 'RESOURCE', item.get('room_id')),
+        **_identity(SOURCE_IDS['spaces'], 'RESOURCE', item.get('room_id')),
         'people_limit': {'min': item.get('min_people'), 'max': item.get('max_people'),
                          'unit': 'PERSON', 'source_fields': ['minUser', 'maxUser']},
     }
+    block['window'] = _window(raw.get('date'), raw.get('start_time'), raw.get('end_time'))
     interval = item.get('interval_state')
     availability_state = {'FREE_TIME_ONLY': 'FREE', 'BUSY': 'BUSY', 'NOT_OPEN': 'NOT_OPEN',
                           'NOT_SELECTED': 'NOT_SELECTED',
@@ -308,7 +355,8 @@ def _room_item(item, restrictions, checked_at):
     block['eligibility'] = {'state': eligibility, 'reasons': reasons}
     block['fees'] = _fees_unknown('ROOM_FEE_STATE_NOT_REPORTED')
     block['rules'] = _rules(ROOM_RULE_UNITS, item.get('rules') or {},
-                            source=item.get('rule_source'), checked_at=checked_at)
+                            source=item.get('rule_source') or raw.get('rule_source'),
+                            checked_at=checked_at)
     block['unknowns'] = ['ACCOUNT_ELIGIBILITY', 'FEE_STATE',
                          'APPROVAL_OR_OFFICIAL_FORM_REQUIREMENT']
     if eligibility == 'INELIGIBLE':
@@ -343,11 +391,9 @@ def _room_availability(raw, items, parameters, checked_at):
     block['resource'] = {
         'resource_id': resource.get('kind_id'), 'name': resource.get('name'),
         'kind_id': resource.get('kind_id'),
-        **_identity('library.room_availability', 'RESOURCE', resource.get('kind_id')),
+        **_identity(SOURCE_IDS['spaces'], 'RESOURCE', resource.get('kind_id')),
     }
-    block['window'] = {'date': raw.get('date'), 'start_time': raw.get('start_time'),
-                       'end_time': raw.get('end_time'), 'timezone': TIMEZONE_NAME,
-                       'precision': 'MINUTE'}
+    block['window'] = _window(raw.get('date'), raw.get('start_time'), raw.get('end_time'))
     restrictions = (raw.get('account_restrictions') or {}).get('active_records')
     block['availability'] = {
         'state': 'LISTED' if items else 'UNKNOWN', 'free_count': None, 'capacity': None,
@@ -363,29 +409,32 @@ def _room_availability(raw, items, parameters, checked_at):
     block['rules'] = {'state': 'PER_ROOM', 'items': []}
     block['unknowns'] = ['ACCOUNT_ELIGIBILITY', 'FEE_STATE',
                          'APPROVAL_OR_OFFICIAL_FORM_REQUIREMENT']
-    block['preparation_state'] = 'SEE_ITEMS'
+    if raw.get('status') in ('NEEDS_USER_ACTION', 'NOT_FOUND'):
+        block['preparation_state'] = 'NEEDS_USER_ACTION'
+    elif not items:
+        block['preparation_state'] = 'UNKNOWN'
+    else:
+        block['preparation_state'] = 'SEE_ITEMS'
     return block
 
 
 def _sports_site(raw, items, parameters, checked_at):
     block = _base('availability', checked_at)
-    block['selection'] = _selection(raw, parameters)
-    if raw.get('scene') and not raw.get('candidates'):
-        block['selection']['state'] = 'UNIQUE'
-    if parameters.get('name') and not parameters.get('scene_id'):
-        block['selection']['by'] = 'NAME'
-    elif parameters.get('scene_id'):
+    selected = bool(raw.get('scene') and raw.get('room') and not raw.get('candidates'))
+    block['selection'] = _selection(raw, parameters, selected=selected)
+    if parameters.get('scene_id') or parameters.get('room_id'):
         block['selection']['by'] = 'ID'
+    elif parameters.get('name'):
+        block['selection']['by'] = 'NAME'
     scene = raw.get('scene') or {}
     room = raw.get('room') or {}
     block['resource'] = {
         'resource_id': room.get('room_id'), 'name': room.get('name'),
         'scene_id': scene.get('scene_id'), 'scene_name': scene.get('name'),
         'room_id': room.get('room_id'),
-        **_identity('sports.availability', 'RESOURCE', room.get('room_id')),
+        **_identity(SOURCE_IDS['sports'], 'RESOURCE', room.get('room_id')),
     }
-    block['window'] = {'date': raw.get('date'), 'start_time': None, 'end_time': None,
-                       'timezone': TIMEZONE_NAME, 'precision': 'MINUTE'}
+    block['window'] = _window(raw.get('date'))
     sessions = [session for item in items for session in (item.get('sessions') or [])]
     states = [session.get('available') for session in sessions]
     if not sessions:
@@ -409,7 +458,8 @@ def _sports_site(raw, items, parameters, checked_at):
     fees = []
     for item in items:
         for session in item.get('sessions') or []:
-            fees.append(money(session.get('unit_fee_fen'), raw_field='sessionVo.userFeeDetails.chargingUnitPrice',
+            fees.append(money(session.get('unit_fee_fen'),
+                              raw_field='sessionVo.userFeeDetails.chargingUnitPrice',
                               source=raw.get('url'), checked_at=checked_at))
     block['fees'] = ({'state': 'QUOTED' if any(f['state'] == 'QUOTED' for f in fees) else 'UNKNOWN',
                       'items': fees, 'reason': None if fees else 'SESSION_FEE_NOT_REPORTED'})
@@ -417,9 +467,11 @@ def _sports_site(raw, items, parameters, checked_at):
     block['unknowns'] = ['ACCOUNT_ELIGIBILITY', 'PAYMENT_AND_REFUND_TERMS']
     if raw.get('status') in ('NEEDS_USER_ACTION', 'NOT_FOUND'):
         block['preparation_state'] = 'NEEDS_USER_ACTION'
+    elif not sessions:
+        block['preparation_state'] = 'UNKNOWN'
     elif state == 'FREE':
         block['preparation_state'] = 'NEEDS_ELIGIBILITY_CHECK'
-    elif not sessions:
+    elif state == 'FULL':
         block['preparation_state'] = 'NOT_PREPARABLE'
     else:
         block['preparation_state'] = 'UNKNOWN'
@@ -428,10 +480,11 @@ def _sports_site(raw, items, parameters, checked_at):
 
 def _sports_site_item(item, raw, checked_at):
     block = _base('availability', checked_at)
+    block['window'] = _window(raw.get('date'))
     block['resource'] = {
         'resource_id': item.get('site_id'), 'name': item.get('name'),
         'scene_id': item.get('scene_id'), 'room_id': item.get('room_id'),
-        **_identity('sports.availability', 'RESOURCE', item.get('site_id')),
+        **_identity(SOURCE_IDS['sports'], 'RESOURCE', item.get('site_id')),
     }
     sessions = item.get('sessions') or []
     states = [session.get('available') for session in sessions]
@@ -445,7 +498,7 @@ def _sports_site_item(item, raw, checked_at):
         'session_count': len(sessions), 'available_session_count': sum(value is True for value in states),
     }
     block['eligibility'] = {'state': 'UNVERIFIED', 'reasons': ['ACCOUNT_NOT_CHECKED']}
-    block['fees'] = {'state': 'PER_SESSION', 'items': [], 'reason': None}
+    block['fees'] = {'state': 'SEE_SESSIONS', 'items': [], 'reason': None}
     block['rules'] = _rules(SPORTS_RULE_UNITS, item.get('cancel_rule') or {},
                             source=raw.get('url'), checked_at=checked_at)
     block['unknowns'] = ['ACCOUNT_ELIGIBILITY', 'PAYMENT_AND_REFUND_TERMS']
@@ -456,33 +509,35 @@ def _sports_site_item(item, raw, checked_at):
 
 def _sports_session(session, site, raw, checked_at):
     block = _base('availability', checked_at)
+    capacity = session.get('capacity') if type(session.get('capacity')) is int else None
     block['resource'] = {
         'resource_id': session.get('session_id'), 'site_id': site.get('site_id'),
         'scene_id': site.get('scene_id'), 'room_id': site.get('room_id'),
-        **_identity('sports.availability', 'RESOURCE', session.get('session_id')),
-        'capacity': ({'value': session.get('capacity'), 'unit': 'PERSON',
+        **_identity(SOURCE_IDS['sports'], 'RESOURCE', session.get('session_id')),
+        'capacity': ({'value': capacity, 'unit': 'PERSON',
                       'scope': 'SESSION_ALLOW_USER_NUM',
                       'source_field': 'sessionVo.allowUserNum',
                       'is_slot_availability': True}
-                     if type(session.get('capacity')) is int else None),
+                     if capacity is not None else None),
         'reserved_count': session.get('reserved_count'),
     }
-    block['window'] = {'date': (session.get('start_at') or '')[:10],
-                       'start_time': (session.get('start_at') or '')[11:16],
-                       'end_time': (session.get('end_at') or '')[11:16],
-                       'timezone': TIMEZONE_NAME, 'precision': 'MINUTE'}
+    block['window'] = _window((session.get('start_at') or '')[:10],
+                              (session.get('start_at') or '')[11:16],
+                              (session.get('end_at') or '')[11:16])
     available = session.get('available')
     block['availability'] = {
         'state': 'FREE' if available is True else 'FULL' if available is False else 'UNKNOWN',
-        'free_count': None, 'capacity': session.get('capacity'),
+        'free_count': None, 'capacity': capacity,
         'capacity_scope': 'SESSION_ALLOW_USER_NUM', 'capacity_is_slot_availability': True,
         'source_complete': raw.get('complete') is True,
         'reason': session.get('reason') if available is None else None,
     }
     block['eligibility'] = {'state': 'UNVERIFIED', 'reasons': ['ACCOUNT_NOT_CHECKED']}
-    fees = [money(session.get('unit_fee_fen'), raw_field='sessionVo.userFeeDetails.chargingUnitPrice',
+    fees = [money(session.get('unit_fee_fen'),
+                  raw_field='sessionVo.userFeeDetails.chargingUnitPrice',
                   source=raw.get('url'), checked_at=checked_at),
-            money(session.get('quoted_total_fen'), raw_field='sessionVo.userFeeDetails.payableAmount',
+            money(session.get('quoted_total_fen'),
+                  raw_field='sessionVo.userFeeDetails.payableAmount',
                   source=raw.get('url'), checked_at=checked_at)]
     block['fees'] = {'state': 'QUOTED' if any(f['state'] == 'QUOTED' for f in fees) else 'UNKNOWN',
                      'items': fees, 'reason': None}
@@ -503,8 +558,11 @@ def _order_block(item, raw, checked_at, operation):
     block['resource'] = {
         'resource_id': item.get('reservation_id'), 'name': item.get('scene_name'),
         'scene_id': item.get('scene_id'),
-        **_identity('sports.orders', 'ORDER', item.get('reservation_id')),
+        **_identity(SOURCE_IDS['orders'], 'ORDER', item.get('reservation_id')),
     }
+    block['window'] = _window((item.get('start_at') or '')[:10],
+                              (item.get('start_at') or '')[11:16],
+                              (item.get('end_at') or '')[11:16])
     block['availability'] = {'state': 'NOT_APPLICABLE', 'free_count': None,
                              'capacity': None, 'capacity_scope': None,
                              'capacity_is_slot_availability': False,
@@ -522,6 +580,7 @@ def _order_block(item, raw, checked_at, operation):
     block['unknowns'] = ['PAYMENT_RECEIPT', 'REFUND_SETTLEMENT']
     block['preparation_state'] = 'NOT_APPLICABLE'
     block['status_axes'] = item.get('status_axes')
+    block['state_confirmed'] = item.get('state_confirmed')
     return block
 
 
@@ -529,8 +588,9 @@ def _loan_item(item, raw, checked_at):
     block = _base('loans', checked_at)
     block['resource'] = {
         'resource_id': item.get('loan_id'), 'name': item.get('title'),
-        **_identity('library.loans', 'ORDER', item.get('loan_id')),
+        **_identity(SOURCE_IDS['loans'], 'RENEWAL', item.get('loan_id')),
     }
+    block['window'] = _window((item.get('due_at') or '')[:10] or item.get('due_date'))
     state = {'ELIGIBLE': 'ELIGIBLE', 'NOT_ELIGIBLE': 'NOT_ELIGIBLE'}.get(
         item.get('renewal_state'), 'UNKNOWN')
     block['eligibility'] = {
@@ -540,9 +600,14 @@ def _loan_item(item, raw, checked_at):
                     'does_not_change_due_date': True, 'execution_attempted': False},
     }
     block['fees'] = _fees_unknown('OVERDUE_FEE_STATE_NOT_REPORTED')
-    block['rules'] = _text_rules(item.get('renewal_hints'),
-                                 raw_field='renewstatuses.renewstatus',
-                                 source=raw.get('url'), checked_at=checked_at)
+    renew_flag = {'Y': True, 'N': False}.get(item.get('renew_flag'))
+    rules = [rule_value(renew_flag, 'FLAG', raw_field='renew',
+                        source=raw.get('url'), checked_at=checked_at)]
+    rules.extend(rule_value(value, 'TEXT', raw_field='renewstatuses.renewstatus',
+                            source=raw.get('url'), checked_at=checked_at)
+                 for value in (item.get('renewal_hints') or []))
+    block['rules'] = {'state': 'READ' if any(r['state'] == 'DECLARED' for r in rules)
+                      else 'MISSING', 'items': rules}
     block['unknowns'] = ['RENEWAL_EXECUTION', 'OVERDUE_FEE_STATE']
     return block
 
@@ -554,7 +619,7 @@ def _copy_item(copy, holding, book, checked_at):
     block['resource'] = {
         'resource_id': copy.get('item_id'), 'name': book.get('title'),
         'holding_id': holding.get('holding_id'), 'record_id': book.get('record_id'),
-        **_identity('library.catalog_detail', 'RESOURCE', copy.get('item_id')),
+        **_identity(SOURCE_IDS['catalog'], 'RESOURCE', copy.get('item_id')),
     }
     block['availability'] = {
         'state': 'NOT_BORROWABLE' if state == 'NOT_BORROWABLE' else 'COPY_VISIBLE',
@@ -579,15 +644,15 @@ def build(service, operation, raw, items, parameters, checked_at):
     items = items or []
     per_item = []
     if service == 'library' and operation == 'seat_availability':
-        summary = _seat_availability(raw, parameters, checked)
-        per_item = [_seat_item(item, checked) for item in items]
+        summary = _seat_availability(raw, items, parameters, checked)
+        per_item = [_seat_item(item, raw, checked) for item in items]
         for item, block in zip(items, per_item):
             item['precheck'] = block
     elif service == 'library' and operation == 'room_availability':
         summary = _room_availability(raw, items, parameters, checked)
         restrictions = (raw.get('account_restrictions') or {}).get('active_records')
-        per_item = [_room_item(item, type(restrictions) is int and restrictions > 0, checked)
-                    for item in items]
+        per_item = [_room_item(item, type(restrictions) is int and restrictions > 0,
+                               raw, checked) for item in items]
         for item, block in zip(items, per_item):
             item['precheck'] = block
     elif service == 'sports' and operation == 'availability':
@@ -627,7 +692,7 @@ def build(service, operation, raw, items, parameters, checked_at):
         for item in items:
             block = _base('catalog_search', checked)
             block['resource'] = {'resource_id': item.get('record_id'), 'name': item.get('title'),
-                                 **_identity('library.catalog_search', 'RESOURCE',
+                                 **_identity(SOURCE_IDS['catalog'], 'RESOURCE',
                                              item.get('record_id'))}
             block['availability'] = {'state': 'UNKNOWN', 'free_count': None, 'capacity': None,
                                      'capacity_scope': 'SEARCH_RESULT_NOT_HOLDINGS',
@@ -643,6 +708,8 @@ def build(service, operation, raw, items, parameters, checked_at):
     elif service == 'library' and operation == 'database_links':
         summary = _collection_summary('database_links', checked, raw, parameters,
                                       ['INSTITUTIONAL_AUTHORIZATION', 'OFF_CAMPUS_ACCESS'])
+        if parameters.get('database_id') and len(items) == 1:
+            summary['selection'] = {**summary['selection'], 'state': 'UNIQUE', 'by': 'ID'}
         summary['electronic_access'] = {
             'state': 'OFFICIAL_GUIDE_ONLY', 'institutional_authorization': 'UNVERIFIED',
             'off_campus_access': 'UNVERIFIED', 'third_party_terms': 'NOT_CHECKED',
@@ -662,6 +729,8 @@ def _catalog_summary(raw, items, parameters, checked):
     summary = _collection_summary('catalog_detail', checked, raw, parameters,
                                   ['ACCOUNT_BORROW_ELIGIBILITY', 'FEE_STATE',
                                    'OFF_CAMPUS_AUTHORIZATION'])
+    summary['selection'] = _selection(raw, parameters,
+                                      selected=bool(parameters.get('record_id') and items))
     summary['kind'] = 'PHYSICAL_AND_ELECTRONIC_SEPARATE'
     summary['electronic_access'] = {
         'state': 'LISTED' if any(book.get('electronic_links') for book in items)
@@ -690,7 +759,7 @@ def _catalog_summary(raw, items, parameters, checked):
                                         else 'NOT_PREPARABLE')
     summary['resource'] = ({'resource_id': items[0].get('record_id'),
                             'name': items[0].get('title'),
-                            **_identity('library.catalog_detail', 'RESOURCE',
+                            **_identity(SOURCE_IDS['catalog'], 'RESOURCE',
                                         items[0].get('record_id'))} if items else None)
     return summary
 
@@ -711,13 +780,18 @@ def _catalog_search_summary(raw, parameters, checked):
 def _order_summary(raw, items, parameters, checked, operation):
     summary = _collection_summary(operation, checked, raw, parameters,
                                   ['PAYMENT_RECEIPT', 'REFUND_SETTLEMENT'])
+    summary['selection'] = _selection(raw, parameters,
+                                      selected=bool(parameters.get('record_id') and items))
     axes = [item.get('status_axes') or {} for item in items]
     unknown = [axis for row in axes for axis, value in row.items()
-               if isinstance(value, dict) and value.get('mapping_state') == 'UNKNOWN']
+               if isinstance(value, dict) and value.get('mapping_state') != 'MAPPED']
     if unknown:
         summary['unknowns'] = sorted(set(summary['unknowns']) | {axis.upper() + '_STATUS'
                                                                  for axis in unknown})
     summary['status_axes_state'] = 'PARTIAL' if unknown else 'READ'
+    summary['status_axes_unknown'] = sorted({axis for row in axes for axis, value in row.items()
+                                             if isinstance(value, dict)
+                                             and value.get('mapping_state') != 'MAPPED'})
     return summary
 
 
@@ -732,24 +806,41 @@ def _collection_summary(operation, checked, raw, parameters, unknowns):
     return summary
 
 
+def _snapshot_version():
+    # Import lazily so precheck has no module-import cycle with queries.
+    try:
+        from .queries import SNAPSHOT_VERSION
+        return SNAPSHOT_VERSION
+    except Exception:
+        return 'snapshot-v2'
+
+
 def retrieval(service, operation, *, checked_at, parameters=None, reused_snapshot=False):
     """Declare whether this result is a fresh source read or an old snapshot."""
     parameters = parameters or {}
-    key = f'{service}.{operation}'
-    if operation in LIVE_OPERATIONS:
-        policy = cache_policy.policy(key) or cache_policy.policy('availability')
+    static_entry = (operation == 'database_links' and not parameters.get('query')
+                    and not parameters.get('database_id'))
+    if operation == 'order_detail':
+        policy_label = 'LIVE_ONLY'
+    elif operation in READ_ONLY_OPERATIONS:
+        policy_label = 'STATIC_ENTRY_LIST' if static_entry else 'LIVE_READ_ONLY'
+    elif operation in LIVE_OPERATIONS:
+        policy = cache_policy.policy(f'{service}.{operation}') or cache_policy.policy('availability')
+        policy_label = policy['label'] if policy else 'LIVE_ONLY'
     elif operation in HISTORY_OPERATIONS:
-        policy = cache_policy.policy(key) or cache_policy.policy('history')
+        policy = cache_policy.policy(f'{service}.{operation}') or cache_policy.policy('history')
+        policy_label = policy['label'] if policy else 'HISTORY_FALLBACK_ALLOWED'
     else:
-        policy = cache_policy.policy(key)
+        policy_label = 'NOT_REGISTERED'
     if reused_snapshot:
         freshness = 'SNAPSHOT_ONLY_NOT_LIVE'
-    elif operation == 'database_links' and not parameters.get('query') and not parameters.get('database_id'):
+    elif static_entry:
         freshness = 'STATIC_ENTRY_LIST'
     else:
         freshness = 'LIVE_AT_CHECKED_AT'
-    return {'policy': policy['label'] if policy else 'NOT_REGISTERED',
-            'freshness': freshness, 'current_source_read': not reused_snapshot,
+    return {'policy': policy_label,
+            'freshness': freshness,
+            'current_source_read': not reused_snapshot and not static_entry,
             'reused_snapshot': reused_snapshot, 'checked_at': _checked(checked_at),
-            'snapshot_version': 'snapshot-v2', 'reusable_for_booking': False,
+            'snapshot_version': _snapshot_version(), 'reusable_for_booking': False,
             'proves_authentication': False}

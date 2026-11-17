@@ -220,14 +220,20 @@ def field_row(row, scene_id, mode, day, room_id):
         total = fee.get('payableAmount')
         require(total is None or type(total) is int and total >= 0, 'SPORTS_FEE_FORMAT_CHANGED')
         available = {'Y':True,'N':False}.get(status.get('reserveStatus'))
+        capacity = entry.get('allowUserNum')
+        reserved = entry.get('resvUserNum')
+        require(capacity is None or type(capacity) is int and capacity >= 0,
+                'SPORTS_RESPONSE_INVALID')
+        require(reserved is None or type(reserved) is int and reserved >= 0,
+                'SPORTS_RESPONSE_INVALID')
         sessions.append({'session_id':ident(entry.get('uuid')), 'start_at':start, 'end_at':end,
                          'available':available, 'reason':label(status.get('reserveStatusReason')),
                          'unit_fee_fen':cents, 'unit_fee_display':fen_display(cents),
                          'quoted_total_fen':total, 'quoted_total_display':fen_display(total),
                          'fee_unit':'FEN', 'currency':'CNY','charging_mode':fee.get('chargingMode'),
-                         'payment_hint':fee.get('payType'),'capacity':entry.get('allowUserNum'),
+                         'payment_hint':fee.get('payType'),'capacity':capacity,
                          'capacity_unit':'PERSON','capacity_scope':'SESSION_ALLOW_USER_NUM',
-                         'reserved_count':entry.get('resvUserNum')})
+                         'reserved_count':reserved})
     require(len({s['session_id'] for s in sessions}) == len(sessions), 'SPORTS_DUPLICATE_SESSION')
     rule = row.get('reserveRule') or {}
     form = row.get('formRuleVo') or {}
@@ -260,7 +266,7 @@ def availability(reader, params):
                    'classTypeUuid':room['room_id'],'reserveDate':day,'sceneUseType':mode,'resvKind':'CURRENT_RESERVE',
                    'searchValue':'','siteKindId':'','pageNum':number,'pageSize':size}
         raw = reader.call(PAGE, payload)
-        rows, scope = page_rows(raw,number,size,'uuid')
+        rows, scope = page_rows(raw,number,size,'uuid',strict=False)
         page_complete = scope.pop('complete', True)
         page_warnings = scope.pop('warnings', [])
         if rows or scope['upstream_total'] > 0:
@@ -292,19 +298,20 @@ def normalize_order(row):
     require(isinstance(sites,list) and start and end and end > start,'SPORTS_ORDER_FORMAT_CHANGED')
     extended = row.get('resvExtendStatus')
     approval, phase = row.get('resvCheckStatus'), row.get('resvStatus')
-    payment = PAYMENT.get(row.get('orderStatus'),'UNKNOWN')
-    refund = REFUND.get(row.get('orderRefundStatus'),'UNKNOWN')
     axes = {'reservation': axis(phase, RESERVATION),
             'approval': axis(approval, APPROVAL),
             'payment': axis(row.get('orderStatus'), PAYMENT),
             'refund': axis(row.get('orderRefundStatus'), REFUND)}
     axes_confirmed = all(value['mapping_state'] == 'MAPPED' for value in axes.values())
-    if type(extended) is int and extended & 2:
-        state = 'CANCELLED'
-    elif not axes_confirmed:
-        # An unfamiliar status axis cannot support an overall success-like
-        # state, even when another axis still looks effective.
+    payment = axes['payment']['status'] if axes['payment']['mapping_state'] == 'MAPPED' else 'UNKNOWN'
+    refund = axes['refund']['status'] if axes['refund']['mapping_state'] == 'MAPPED' else 'UNKNOWN'
+    if not axes_confirmed:
+        # A missing or unfamiliar status axis cannot support an overall
+        # success-like state, and it also cannot prove a cancellation is fully
+        # reconciled.  Keep UNKNOWN until the official record can be checked.
         state = 'UNKNOWN'
+    elif type(extended) is int and extended & 2:
+        state = 'CANCELLED'
     elif phase == 'RESV_END':
         state = 'COMPLETED'
     elif approval in ('RESV_WAIT_APPROVE','RESV_APPROVING'):

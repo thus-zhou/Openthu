@@ -35,12 +35,12 @@
 
 | 字段 | 含义 |
 |---|---|
-| `selection` | `state`（`UNIQUE`/`AMBIGUOUS`/`NOT_FOUND`/`CANDIDATES`/`ALL`）、`by`（`ID`/`NAME`/`NONE`）、候选摘要 |
-| `resource` | 平台稳定编号、名称、路径；订单/资源 UID 和 `identity_state`；容量对象 |
-| `window` | 日期、开始/结束时刻、时区；日期级值不补午夜 |
-| `availability` | `state`、`free_count`、`capacity`、`capacity_scope`、`capacity_is_slot_availability`、`source_complete` |
-| `eligibility` | `state`（`VERIFIED`/`UNVERIFIED`/`INELIGIBLE`/`UNKNOWN`）、原因；续借时另含 `renewal` |
-| `fees` | `state` 与 `items`（分、展示值、币种、原字段、来源、检查时间） |
+| `selection` | `state`（`UNIQUE`/`AMBIGUOUS`/`NEEDS_USER_ACTION`/`NOT_FOUND`/`CANDIDATES`/`ALL`）、`by`（`ID`/`NAME`/`NONE`）、`candidate_count`/`candidate_total`/`candidates_truncated` 和候选摘要；按稳定 ID 读取的单记录为 `UNIQUE` |
+| `resource` | 平台稳定编号、名称、路径；服务级稳定 UID（`library.catalog`/`library.spaces`/`library.loans`/`sports.venue`/`sports.orders`）和 `identity_state`；容量对象 |
+| `window` | 日期、开始/结束时刻、时区；`precision` 为 `MINUTE`/`DATE`/`UNKNOWN`，日期级值不补午夜；条目预检继承摘要窗口 |
+| `availability` | `state`、`free_count`、`capacity`、`capacity_scope`、`capacity_is_slot_availability`、`source_complete`；座位另含 `row_count`/`mapped_seat_count`/`unknown_seat_count` |
+| `eligibility` | `state`（`VERIFIED`/`UNVERIFIED`/`INELIGIBLE`/`UNKNOWN`；借阅续借为 `ELIGIBLE`/`NOT_ELIGIBLE`/`UNKNOWN`）、原因；续借时另含 `renewal` |
+| `fees` | `state`（`UNKNOWN`/`QUOTED`/`PAID`/`SEE_SESSIONS`/`NOT_APPLICABLE`）与 `items`（分、展示值、币种、原字段、来源、检查时间） |
 | `rules` | `state` 与逐字段规则项（原字段、值、单位、来源、检查时间） |
 | `unknowns` | 后续准备仍需补查的项目，例如 `ACCOUNT_ELIGIBILITY`、`FEE_STATE` |
 | `preparation_state` | `READY_FOR_CONFIRMATION`/`NEEDS_ELIGIBILITY_CHECK`/`NEEDS_RULE_CHECK`/`NEEDS_USER_ACTION`/`NEEDS_OFFICIAL_PAGE`/`NOT_PREPARABLE`/`UNKNOWN`/`NOT_APPLICABLE`/`SEE_ITEMS` |
@@ -48,8 +48,10 @@
 `availability.capacity_is_slot_availability` 明确区分两种数值：
 
 - 座位区域 `capacity` 来自 `seatinfo.TotalCount`，是区域总座位数，`capacity_scope=AREA_TOTAL_SEATS`；
-  `free_count` 只统计本次时段的座位状态。区域有 300 个座位而目标时段全满时，结果是
-  `capacity=300, free_count=0, state=FULL`，不能读成“还有 300 个可用”。
+  `free_count` 只统计本次时段中**已映射为可用**的座位。区域有 300 个座位而目标时段全满时，结果是
+  `capacity=300, free_count=0, state=FULL`，不能读成“还有 300 个可用”。座位列表为空时是
+  `state=UNKNOWN`/`reason=NO_SEAT_ROWS`，未知状态码时是 `PARTIAL`/`UNKNOWN_SEAT_STATUS`，
+  都不会被报成 `FULL` 或 `NOT_PREPARABLE`。
 - 体育场馆没有场次级容量时，顶层容量是 `null`，`capacity_scope=SITE_SESSION_LIST_NOT_VENUE_CAPACITY`；
   只有场次对象的 `capacity`（`allowUserNum`，单位 `PERSON`）才可能表示该场次人数上限。
 - 研讨间的 `people_limit` 是平台 `minUser`/`maxUser` 的规则值，不是空闲容量；空闲与人数不符
@@ -77,13 +79,16 @@
 
 ## 4. 分页与完整性
 
-- 新查询每次都读取当前来源；`retrieval.freshness=LIVE_AT_CHECKED_AT`。游标续页只返回原快照，
-  `freshness=SNAPSHOT_ONLY_NOT_LIVE`、`current_source_read=false`、`reused_snapshot=true`，
-  `checked_at` 不变。
+- 新查询每次都读取当前来源；`retrieval.freshness=LIVE_AT_CHECKED_AT`，`policy` 为
+  `LIVE_ONLY`/`LIVE_READ_ONLY`/`HISTORY_FALLBACK_ALLOWED`。游标续页只返回原快照，
+  顶层和 `retrieval` 的 `freshness` 都是 `SNAPSHOT_ONLY_NOT_LIVE`，`current_source_read=false`、
+  `reused_snapshot=true`，`checked_at` 不变。无选择器的数据库入口是 `STATIC_ENTRY_LIST`，
+  `current_source_read=false`；`order_detail` 是实时逐页读取，策略为 `LIVE_ONLY`。
 - 体育订单和本人记录逐页核对 `upstream_total`。重复页、缺页或总数变化时保留已读行，
   `complete=false`，并在 `next_page` 给出应继续（或重读）的页号；不会把部分结果当成完整列表。
+  体育余量页也使用同一宽松分页，短页/重复页返回部分结果而不是直接报错。
 - 座位历史固定 20 条/页；研讨间默认 `needStatus=6`（待审核/生效）；体育订单页大小最大 50。
-  这些窗口都写入结果的 `pagination`，调用方不需要猜。
+  这些窗口都写入结果的 `pagination`，并同步到 `read_scope` 的 `offset`/`limit`/`pages_read`。
 - 真实空结果只在 `status=EMPTY` 且 `source_complete=true`、`complete=true` 时成立。登录页、
   维护、限流、缺页、重复页和未知业务状态都不会变成空数组。
 
@@ -95,6 +100,8 @@
 | 429 | `RATE_LIMITED`，有 `Retry-After` 时附 `retry_after_ms` |
 | 503 或明确的维护文案 | `MAINTENANCE`，与解析失败区分 |
 | 结构改版/字段缺失 | 对应的 `*_RESPONSE_INVALID`/`*_PAGINATION_CHANGED`，不猜字段 |
+| 座位 jQuery `parsererror` | `SPACE_RESPONSE_INVALID`，保留 `BROWSER_REQUIRED` 官方页面降级 |
+| 研讨间时长规则缺失 | `interval_state=RULE_UNVERIFIED`，准备阶段得到 `ROOM_RULE_UNVERIFIED`（已登记为 `UPSTREAM_CONTRACT`），不当作无限制或未开放 |
 | 同名资源 | `NEEDS_USER_ACTION` + 候选，不自动选择 |
 | 规则缺失/单位含糊 | 预检 `MISSING`/`UNKNOWN`，准备状态要求补查 |
 | 本人记录部分读取 | 保留已读行、`complete=false`、续页信息 |
