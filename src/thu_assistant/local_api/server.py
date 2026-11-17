@@ -536,7 +536,12 @@ class LocalApiServer:
 
     def _call(self, name: str, *args: Any, request_id: str,
               priority: bool = False, **kwargs: Any) -> Any:
-        method = getattr(self._facade, name)
+        try:
+            method = getattr(self._facade, name)
+        except AttributeError:
+            raise contract.LocalApiError(
+                'LOCAL_API_FACADE_UNAVAILABLE', http_status=501,
+                message='业务门面未提供该读取能力。') from None
         token = facade_module.CancelToken()
         executor = self._priority_executor if priority else self._read_executor
         if executor is None:

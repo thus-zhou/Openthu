@@ -1660,3 +1660,25 @@ def test_serve_helper_maps_localhost_and_stops(monkeypatch) -> None:
     assert events['kwargs']['bind'] == '127.0.0.1'
     assert events['served'] and events['stopped']
     assert result['status'] == 'STOPPED'
+
+
+def test_a_facade_without_a_method_is_a_capability_gap_not_a_500(tmp_path) -> None:
+    class Minimal:
+        def health(self, *, service_id=None):
+            return {'status': 'OK', 'checked_at': '2026-11-17T12:00:00+08:00',
+                    'services': [{'service_id': 'learn', 'status': 'OK',
+                                  'checked_at': '2026-11-17T12:00:00+08:00',
+                                  'complete': True}], 'warnings': []}
+
+    instance = make_server(facade=Minimal(), state_dir=tmp_path)
+    try:
+        client = LocalApiClient.from_bootstrap(instance.bootstrap_file, clock=FakeWallClock())
+        client.bootstrap()
+        status, _headers, payload = json_request(
+            instance, 'GET', '/api/v1/services', headers=auth_headers(client))
+        assert status == 501
+        assert payload['error']['code'] == 'LOCAL_API_FACADE_UNAVAILABLE'
+        assert payload['display']['state'] == 'UNKNOWN'
+        assert status != 500
+    finally:
+        instance.stop()
