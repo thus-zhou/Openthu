@@ -1,0 +1,147 @@
+{
+  "module": "4.1",
+  "title": "个人课表、考试与成绩只读适配",
+  "batch": 4,
+  "owner": "Hermes",
+  "status": "implemented",
+  "baseline_commit": "323a98b",
+  "delivery_commit": "b6677a6",
+  "record_commit": "the commit containing this record",
+  "branch": "hermes/4.1",
+  "worktree": "/home/ubuntu/projects/Openthu/.local/worktrees/4.1",
+  "batch_state": "4.1 implemented on its module branch; batch 4 has no integration commit yet",
+  "paths": [
+    "src/thu_assistant/academics/__init__.py",
+    "src/thu_assistant/academics/errors.py",
+    "src/thu_assistant/academics/rules.py",
+    "src/thu_assistant/academics/models.py",
+    "src/thu_assistant/academics/sensitivity.py",
+    "src/thu_assistant/academics/events.py",
+    "src/thu_assistant/academics/reader.py",
+    "src/thu_assistant/academics/README.md",
+    "tests/test_academics.py",
+    "tests/fixtures/academics/"
+  ],
+  "contracts": [
+    "course-v1",
+    "grade-v1",
+    "calendar-event-v1",
+    "result-envelope-v1",
+    "source-evidence-v1",
+    "error-classification-v1"
+  ],
+  "enablement": {
+    "timetable": {
+      "source_id": "academics.timetable",
+      "start_conclusion": "BLOCKED_SOURCE_EVIDENCE",
+      "implementation_state": "BLOCKED",
+      "runtime_availability": "UNAVAILABLE",
+      "evidence_level": "NONE"
+    },
+    "exams": {
+      "source_id": "academics.exams",
+      "start_conclusion": "BLOCKED_SOURCE_EVIDENCE",
+      "implementation_state": "BLOCKED",
+      "runtime_availability": "UNAVAILABLE",
+      "evidence_level": "NONE"
+    },
+    "grades": {
+      "source_id": "academics.grades",
+      "start_conclusion": "BLOCKED_SOURCE_EVIDENCE",
+      "implementation_state": "BLOCKED",
+      "runtime_availability": "UNAVAILABLE",
+      "evidence_level": "NONE"
+    }
+  },
+  "outputs": [
+    "academics-read-v1: three read-only capabilities, blocked production entry (UNKNOWN + ADAPTER_REQUIRED + zero items) and a synthetic-only rehearsal path",
+    "semester selection by source id; equal titles with different ids stay separate; no near-title merge",
+    "course association by source course id or teaching class; title-only association returns candidates but never a course_uid",
+    "timetable entry model retains weeks, parity, weekday, periods, date range, room, platform time, teaching class and attempt",
+    "week-expansion-v1: explicit school calendar and period table only; holidays, makeup days, replacement dates and out-of-term weeks are explicit; missing inputs keep the raw cycle",
+    "exam model retains id, course association, date, start/end, room, seat, time precision, state, release state and coverage",
+    "grade-v1 output distinguishes GRADED, UNGRADED, WITHHELD and UNKNOWN; zero is GRADED; level and pass/fail grades stay textual; no GPA or rank",
+    "exam-event-v1 and timetable-event-v1 converters to calendar-event-v1; grades are refused",
+    "academics-grade-privacy-v1: counts-only audit, dashboard exclusion, explicit model context, encrypted-cache requirement",
+    "operation_schemas and capability report for the future 6.1 registration"
+  ],
+  "checks": {
+    "module_tests_linux": {
+      "passed": 74,
+      "failed": 0,
+      "command": "/home/ubuntu/projects/Openthu/.venv/bin/python -m pytest -o addopts='' -q tests/test_academics.py"
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "compatibility_baselines": 1,
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "fixtures": 7,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "privacy_check": {
+      "ok": true,
+      "files_checked": 420,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 722,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test",
+      "worktree": "clean tree at b6677a6"
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0
+  },
+  "accepted_cases": [
+    "same-title courses in different semesters and different teaching classes keep distinct course and entry identities; no title-based merge",
+    "odd, even, holiday, makeup-day and out-of-term weeks follow the explicit calendar; a missing period table leaves clock times null",
+    "missing calendar keeps the raw week pattern and produces no dates",
+    "date-only exams keep TIME DATE and no midnight; cancelled, rescheduled, makeup and deferred exams keep separate states",
+    "ungraded, withheld and zero grades remain distinct and are never converted into each other",
+    "a failed second page keeps the first-page rows and reduces source completeness; a failure is never EMPTY",
+    "grade audit, public summary and default model context never contain grade values; an explicit request and purpose are required",
+    "a blocked capability returns UNKNOWN with ADAPTER_REQUIRED, no items and no simulated record; non-synthetic transports are refused"
+  ],
+  "limits": [
+    "All three production adapters remain blocked by missing source evidence; no real timetable, exam or grade read was performed.",
+    "Timetable entries and exams are module-local shapes because no frozen schema exists; their identity rule is documented and must be registered by 2.3 before becoming a public model.",
+    "grade-v1 has additionalProperties=false, so a check time or derivation marker cannot be stored on a grade record; the envelope carries checked_at and the record keeps source_evidence_id.",
+    "Source coverage must be declared by the transport; undeclared coverage keeps complete=false and, for exams, adds EXAM_COVERAGE_NOT_DECLARED.",
+    "calendar-event-v1 has no ACADEMICS service domain, so converted events use service_domain=UNKNOWN; 5.4 may map it when consuming.",
+    "The privacy module defines policy; no encrypted cache backend is wired here. Callers must use the encrypted store and must call the audit/dashboard helpers.",
+    "No query registry, MCP tool, todos.py, source registry or batch gate was modified; 6.1 and the integration owner own those steps.",
+    "Offline synthetic evidence only; no live campus login, read, booking, payment or submission."
+  ],
+  "rollback": "Delete src/thu_assistant/academics/, tests/test_academics.py and tests/fixtures/academics/. No frozen contract, query registry, MCP tool or batch record changes, so old clients and the previous batches are unaffected. Pending cursors or caches do not exist for this module.",
+  "cross_module_requests": [
+    "6.1: register timetable, exams and grades read operations from operation_schemas(), keep the explicit-request gate for grades and enrich the MCP error boundary with the classified shape.",
+    "5.4: consume calendar_events('exams'|'timetable'); respect DATE vs DATE_TIME, TENTATIVE/CONFIRMED derivation and the excluded list; grades are never events.",
+    "6.2/7.1: public dashboard summaries must call sensitivity.dashboard_summary and must not read grade values.",
+    "2.3/integration: only after sanitized source evidence arrives, update source-registry.json and adapter-readiness.json, then change CAPABILITIES to IMPLEMENTED and wire a production transport.",
+    "4.2/4.3: reuse domain_models and source_state instead of re-deriving identity or completeness."
+  ],
+  "next": "Batch 4 integration: reconnect 4.1 with 4.2-4.5, run the joint offline suite and two-platform CI, and only then mark batch 4 accepted. This module creates no PR and does not merge main."
+}
