@@ -4,16 +4,17 @@
   "batch": 7,
   "owner": "Hermes",
   "status": "implemented",
-  "status_note": "Implementation, static assets and 63 module tests are complete and verified. The record stays implemented, not accepted: the repair/acceptance phase writes accepted. Two integration seams are recorded for 6.1/8.1 (the CLI must pass static_dir) and 6.3/8.1 (wheel/sdist package data); until they land, an installed `openthu dashboard` serves the JSON API but `/` returns LOCAL_API_UI_NOT_INSTALLED. The module opens no PR, merges nothing and publishes nothing.",
+  "status_note": "Audit repair is complete for 7.1-owned findings: 63 module tests grew to 77, P1-3 and all 14 P2 items are fixed and covered by regression tests, and the audit probes were rerun. The record stays implemented, not accepted: P1-1 (6.1/8.1 must pass static_dir) and P1-2 (6.3/8.1 must add web_assets package data) are still open cross-module seams, so an installed `openthu dashboard` serves the JSON API but `/` returns LOCAL_API_UI_NOT_INSTALLED. This module opens no PR, merges nothing and publishes nothing.",
   "target_version": "0.2.0",
   "baseline_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
   "integration_parent_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
   "branch_base_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
-  "delivery_commit": "1c5eb774b36eca41092579c0a26ce247fbc51eec",
+  "delivery_commit": "2f8d87cf517c7827ed37032f85ae81bab19a9ec7",
   "implementation_commits": [
     "21b4d7d37d1ebcda5a6676ef8bb040ef833e2c8e",
     "181216cda0eba7d68b70f0012db200ca3d09c315",
-    "1c5eb774b36eca41092579c0a26ce247fbc51eec"
+    "1c5eb774b36eca41092579c0a26ce247fbc51eec",
+    "2f8d87cf517c7827ed37032f85ae81bab19a9ec7"
   ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/7.1",
@@ -120,7 +121,7 @@
     "every card shows display.state/display.message/display.next_step plus source time, live/snapshot/history freshness and completeness; EMPTY, LOGIN_REQUIRED, LIMITED, ERROR, NEEDS_INPUT and NOT_ENABLED use distinct labels and tones",
     "overview loads each card independently: one failed, cancelled or timed-out source does not blank the other cards; a page-level cancel button aborts the in-flight read",
     "courses filters semester, role/type and keyword locally after one registered read; a course row can open the resource page with its course_id",
-    "resources filters semester, course_id, type and keyword; selection is keyed by stable_resource_uid and survives page appends; changing any filter clears selection, items and the old cursor; export scope is visible and no download/export is performed",
+    "resources filters semester, course_id, type and keyword; selection is keyed by stable_resource_uid and survives page appends and ordinary navigation; changing any filter invalidates the old generation, selection, items and cursor, and an in-flight older page can never populate the new filter; export scope is visible and no download/export is performed",
     "calendar switches timeline/list without a second request; date-level, exact time, overdue, conflicts, undated and completed are separate; a missing school calendar/period table shows the original cycle and an explicit limitation, never a fabricated time",
     "library/appointment pages show existing loans, library reservations and sports orders with official HTTPS entries; no booking, cancel, renew, payment or submit control exists",
     "health page shows implementation_state, runtime_availability, evidence_level and checked_at, and states that local reads do not prove campus availability",
@@ -128,11 +129,11 @@
     "CSP-compatible static shell: no inline script/style/event handler; relative asset URLs with crossorigin=anonymous so same-origin subresources use the CORS mode the 6.2 server allows",
     "only GET requests to /api/v1 routes; no localStorage, sessionStorage, IndexedDB, service worker or bootstrap token in a URL; a 401 or unreachable service wipes all in-memory cards, source lists and selections before showing the notice",
     "a read repeated within the frozen 10-second refresh window reuses the in-memory result and says so; refresh is disabled while a read is pending; no background polling or model request",
-    "63 module tests: static asset contract, pure model functions in Chromium, real LocalApiServer + synthetic facade browser flows, CSP, no external network, no write calls, fault injection, keyboard, narrow screen and session expiry"
+    "77 module tests: static asset contract, pure model functions in Chromium, real LocalApiServer + synthetic facade browser flows, CSP, no external network, no write calls, fault injection, keyboard, narrow screen, session expiry, concurrent filter/load-more, navigation state, failure retry, timeout, timezone and encoded-ticket regressions"
   ],
   "checks": {
     "module_tests": {
-      "passed": 63,
+      "passed": 77,
       "failed": 0,
       "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_web_assets.py"
     },
@@ -148,7 +149,7 @@
       ]
     },
     "full_offline": {
-      "python_passed": 1634,
+      "python_passed": 1648,
       "python_skipped": 7,
       "python_failed": 0,
       "node_passed": 66,
@@ -201,8 +202,8 @@
     }
   },
   "boundaries": [
-    "CLI wiring is still a batch integration step: `openthu dashboard` constructs LocalApiServer without static_dir, so `/` returns LOCAL_API_UI_NOT_INSTALLED until 6.1/8.1 passes `static_dir=thu_assistant.web_assets.static_dir()` at both construction sites. The JSON API keeps working. This module did not edit 6.1's public CLI file.",
-    "Wheel/sdist package data is still 6.3's scope: pyproject package-data currently collects only top-level `*.js`, and MANIFEST.in does not recurse `.html`/`.css`; a source checkout works, but an installed wheel would miss the UI until `web_assets/*.html`, `web_assets/assets/*.css` and `web_assets/assets/*.js` are declared.",
+    "CLI wiring is still a batch integration step: `openthu dashboard` constructs LocalApiServer without static_dir, so `/` returns LOCAL_API_UI_NOT_INSTALLED until 6.1/8.1 passes `static_dir=thu_assistant.web_assets.static_dir()` at both construction sites. The JSON API keeps working. This module did not edit 6.1s public CLI file; the audit P1-1 reproduction was rerun on 2f8d87c.",
+    "Wheel/sdist package data is still 6.3s scope: pyproject package-data currently collects only top-level `*.js`, and MANIFEST.in does not recurse `.html`/`.css`; a source checkout works, but an installed wheel misses index.html and app.css until `web_assets/*.html`, `web_assets/assets/*.css` and `web_assets/assets/*.js` are declared. The audit P1-2 wheel probe was rerun on 2f8d87c.",
     "The 6.2 server allows Sec-Fetch-Mode navigate/cors/same-origin and rejects no-cors; Chromium sends cors for <script crossorigin>/<link crossorigin>, which makes the shell work. Firefox/Safari must be checked by 7.2; if they still send no-cors for same-origin static assets, 6.2 must allow same-origin no-cors on the static route without weakening the cross-site refusal.",
     "/resources requires a semester and the 4.2 index has no default; the dashboard asks the user (or offers manual entry when the semester list is unavailable) and never returns an empty success for a missing semester.",
     "Calendar buckets are computed from the loaded items; `conflicts` comes from the API. The API's `views` lists are not used to replace the current page, and a next_cursor adds a 'more pages' limitation instead of pretending the first page is the whole agenda.",
@@ -238,6 +239,11 @@
       "to": "1.1/8.1",
       "request": "Revise local-read-api-v1 to declare the request-side `cursor` on /todos, /calendar and /resources, or remove the next_cursor declarations.",
       "why": "Inherited from 6.2; the dashboard consumes next_cursor/cursor and must not guess a paging contract."
+    },
+    {
+      "to": "6.2/8.1",
+      "request": "Preserve the facade-specific exception code (ADAPTER_REQUIRED, FACADE_CAPABILITY_UNAVAILABLE, etc.) in the 502 error body instead of collapsing every facade exception to LOCAL_API_FACADE_UNAVAILABLE, so the dashboard can distinguish a capability gap from a transient failure without treating a generic 502 as NOT_ENABLED.",
+      "why": "7.1 now uses HTTP 501 for a missing facade operation and only treats that as NOT_ENABLED; a 502 is shown as a real error. A specific code would let the UI keep the capability-gap text for genuinely unimplemented operations."
     }
   ],
   "rollback": "Stop the dashboard entry and remove src/thu_assistant/web_assets/ plus tests/test_web_assets.py. There is no storage, data-structure or package-metadata migration; MCP/CLI and existing authentication data are untouched. After rollback 6.2's JSON API remains and `/` returns LOCAL_API_UI_NOT_INSTALLED.",
