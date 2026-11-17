@@ -31,7 +31,8 @@ python scripts/regression_report.py gate --junit artifacts/junit.xml \
 python scripts/regression_report.py aggregate --reports artifacts/reports \
   --output artifacts/release-report.json
 python scripts/regression_report.py release-gate --reports artifacts/reports \
-  --dist dist --require-dist --output artifacts/release-gate.json
+  --dist dist --markers tests/security_regression/marker_set.json \
+  --require-dist --output artifacts/release-gate.json
 ```
 
 报告包含源码提交、契约版本、平台、用例范围、通过/失败/跳过、跳过原因、副作用计数，以及按模块归属的失败与最小复现命令。平台专属跳过必须写明原因；环境缺口记为 `INCOMPLETE`，不能当作该平台全部可用。报告不包含原始异常、Cookie、令牌、账号或本机路径。发布门禁同时扫描源码与候选归档、核对固定依赖和保守默认值，并验证候选包；任一隐私标记、未解释跳过、依赖漂移或候选校验失败都会阻断通过。通用凭据和敏感文件名由 `scripts/privacy_scan.py` 检查全部源码与归档；`--markers` 的精确标记集只扫描安装产品 wheel，源码包和 sdist 因按设计包含测试而由通用隐私扫描覆盖，这样既能验证“标记进入公共产品必须失败”，也不会把已提交的合成标记定义本身误报为泄露。原始失败材料留在受控环境，公开摘要只保留错误类别和合成复现。
