@@ -65,8 +65,13 @@ class ActionStore:
                 else:fcntl.flock(file,fcntl.LOCK_UN)
             file.close()
     def read(self,oid):
-        try:blob=self.path(oid).read_bytes()
-        except FileNotFoundError:raise CampusError('ACTION_NOT_FOUND') from None
+        path=self.path(oid)
+        try:blob=path.read_bytes()
+        except FileNotFoundError:
+            # Windows reports a path below a file as FileNotFoundError; only a
+            # missing record inside an existing journal directory is NOT_FOUND.
+            if path.parent.exists() and not path.parent.is_dir():raise CampusError('STATE_READ_FAILED') from None
+            raise CampusError('ACTION_NOT_FOUND') from None
         except OSError:raise CampusError('STATE_READ_FAILED') from None
         if not blob.startswith(b'THU-ACTION-1\0'):raise CampusError('ACTION_LOG_CORRUPT')
         try:raw=self.unprotect(blob[len(b'THU-ACTION-1\0'):])
