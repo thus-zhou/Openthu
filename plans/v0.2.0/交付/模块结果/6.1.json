@@ -1,0 +1,224 @@
+{
+  "module": "6.1",
+  "title": "公共业务门面与 MCP CLI 集成",
+  "batch": 6,
+  "owner": "Hermes",
+  "status": "implemented",
+  "status_note": "Implementation and module tests are complete. Auditing and batch reconnection have not run, so this record deliberately does not say accepted.",
+  "baseline_commit": "bb1f963",
+  "integration_parent_commit": "bb1f963",
+  "batch5_integration_commit": "0779fff",
+  "delivery_commit": "e136421",
+  "implementation_commits": [
+    "e136421"
+  ],
+  "record_commit": "the commit containing this record file",
+  "branch": "hermes/6.1",
+  "worktree": "~/projects/Openthu/.local/worktrees/6.1",
+  "version_pr": null,
+  "paths": [
+    "src/thu_assistant/facade/__init__.py",
+    "src/thu_assistant/facade/core.py",
+    "src/thu_assistant/facade/registry.py",
+    "src/thu_assistant/facade/requests.py",
+    "src/thu_assistant/facade/errors.py",
+    "src/thu_assistant/local_ops.py",
+    "src/thu_assistant/queries.py",
+    "src/thu_assistant/mcp_stdio.py",
+    "src/thu_assistant/__main__.py",
+    "src/thu_assistant/source_state.py",
+    "contracts/v0.2/error-classification.json",
+    "tests/test_facade.py",
+    "tests/test_cli.py"
+  ],
+  "contracts": [
+    "business-facade-v1",
+    "result-envelope-v1",
+    "error-classification-v1",
+    "compatibility-baseline-v1",
+    "source-evidence-v1",
+    "media-reference-v1",
+    "calendar-event-v1",
+    "local-read-api-v1"
+  ],
+  "outputs": [
+    "the frozen six-method business facade: query, health, prepare, execute, result and cancel",
+    "a capability registration built from each module's own report; a module file existing is never evidence of availability",
+    "registration states AVAILABLE/DISABLED/BLOCKED/MISSING with reason, owner, adapter version, authorization class, side effects, evidence level, prepare_allowed and executable",
+    "one registration list for describe_service state, the prepare/execute gates and the health report",
+    "agenda, agenda_changes and resources registered as local reads inside the existing query_service entry; the 29 legacy MCP tools and their arguments stay unchanged",
+    "agenda pages a materialised window with a process-local snapshot cursor; agenda_changes keeps the incremental change_cursor separate from the paging next_cursor",
+    "resources reads an injected local index and reports a capped read as not complete with RESOURCE_SEARCH_LIMIT_APPLIED",
+    "read entries refuse write operation names and method/headers/token/cookie proxy fields, including nested ones",
+    "blocked campus writes are refused before any preflight, adapter call or browser page is touched",
+    "legacy framework operations without an adapter keep their ADAPTER_REQUIRED plan shape and error code",
+    "health is a static capability report (live_probe=false); one failing service becomes UNKNOWN without stopping the others",
+    "request ids bound to queue state, transport cancellation, media cleanup and the result envelope",
+    "queued cancel takes effect immediately, running cancel is recorded as CANCELLATION_REQUESTED and cleanup runs exactly once; a finished request is never replayed",
+    "CLI subcommands describe/health/query/agenda/dashboard beside the unchanged legacy commands and flags; agenda can export a local calendar file",
+    "openthu dashboard fixes host/port/facade as its provider contract and fails closed with LOCAL_DASHBOARD_UNAVAILABLE until 6.2 supplies local_api",
+    "every MCP error carries the classified fields and a sanitised capability block when a registered capability is unavailable",
+    "13 new error codes registered in contracts/v0.2/error-classification.json and mirrored in source_state.ERROR_CODES"
+  ],
+  "capability_registry": {
+    "total_entries": 80,
+    "services": 19,
+    "available_reads": "every registered read operation of info, learn, library, sports and campus",
+    "available_local_reads": [
+      "agenda",
+      "agenda_changes"
+    ],
+    "available_writes": [
+      "library.create_seat_reservation",
+      "library.create_room_reservation",
+      "library.cancel_reservation",
+      "sports.create_reservation",
+      "sports.cancel_reservation"
+    ],
+    "blocked": {
+      "library.renew_loan": "SOURCE_CONTRACT_UNVERIFIED (prepare allowed, execute refused)",
+      "learn.submit_assignment": "BLOCKED_SOURCE_EVIDENCE (write switch THU_LEARN_SUBMIT off by default)",
+      "academics.exams": "BLOCKED_SOURCE_EVIDENCE",
+      "academics.timetable": "BLOCKED_SOURCE_EVIDENCE",
+      "academics.grades": "BLOCKED_SOURCE_EVIDENCE",
+      "local.model_image_input": "MODEL_IMAGE_INPUT_UNAVAILABLE"
+    },
+    "missing": {
+      "local.resources": "RESOURCE_PROVIDER_UNAVAILABLE",
+      "local.resources_export": "RESOURCE_PROVIDER_UNAVAILABLE",
+      "local.media_prepare": "MEDIA_PROVIDER_UNAVAILABLE",
+      "legacy framework create/cancel": "ADAPTER_REQUIRED"
+    }
+  },
+  "checks": {
+    "module_tests": {
+      "passed": 46,
+      "failed": 0,
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_facade.py tests/test_cli.py",
+      "breakdown": "tests/test_facade.py 38, tests/test_cli.py 8"
+    },
+    "related_regression": {
+      "passed": 370,
+      "skipped": 1,
+      "failed": 0,
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_queries.py tests/test_query_contracts.py tests/test_actions.py tests/test_library_contracts.py tests/test_sports_actions.py tests/test_submissions.py tests/test_events.py tests/test_calendar_export.py tests/test_todos.py"
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "compatibility_baselines": 1,
+      "legacy_tools": 29,
+      "registered_error_codes": 327,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "fixtures": 7,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "dev_check": {
+      "ok": true,
+      "files_checked": 503,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check",
+      "note": "record tree: delivery commit e136421 plus this record"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 1314,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test",
+      "evidence_tree": "clean checkout of e136421 after `python scripts/dev.py setup-node`"
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0,
+    "message_sends": 0,
+    "background_processes": 0
+  },
+  "verified_cases": [
+    "the facade exposes exactly the six frozen methods and 29 legacy tools",
+    "a module file existing never marks a capability available: submissions and academics are BLOCKED, resources and media are MISSING",
+    "renewal may prepare an official handoff but execute is refused with SOURCE_CONTRACT_UNVERIFIED and zero adapter calls",
+    "a blocked submission prepare is refused with its blocked scope and write switch, and the engine is never called",
+    "describe_service keeps every legacy operation field and adds a facade capability block",
+    "local registers exactly agenda, agenda_changes and resources; no generic page/status fallback",
+    "agenda pages a three-event window 2+1 with views over the whole window and a cursor bound to the parameters",
+    "agenda_changes keeps change_cursor (evc1) distinct from the paging next_cursor (c1) and forwards the previous change cursor",
+    "resources without a provider returns RESOURCE_PROVIDER_UNAVAILABLE with the capability block",
+    "a capped resource search is not complete and carries RESOURCE_SEARCH_LIMIT_APPLIED",
+    "query refuses write operation names and top-level or nested method/headers/token/cookie fields",
+    "an unregistered operation keeps the legacy UNREGISTERED_QUERY_OPERATION code",
+    "prepare rejects read and unknown operations without touching the engine",
+    "execute refuses an unknown plan and never creates one",
+    "execute routes a learn plan to the submission engine and a sports plan to the shared action engine",
+    "result reads the owning engine and never dispatches",
+    "prepare -> execute without host confirmation is refused (0 dispatches); after confirmation exactly one dispatch happens and a repeat only reads back",
+    "legacy framework create keeps its ADAPTER_REQUIRED plan shape and error code",
+    "queued cancel runs cleanup once and reports sent_before_cancel=false",
+    "running cancel reports CANCELLATION_REQUESTED and defers cleanup until finish",
+    "an unknown or finished request cancel is not a success and never replays",
+    "the request registry refuses work beyond its active limit",
+    "cancel binds media cleanup and reports remote_effect NONE",
+    "a query result carries the bound request id",
+    "export_agenda passes an explicit absolute target to the local writer and is typed LOCAL_WRITE",
+    "health is static, covers every known service and survives one failing service without leaking its text",
+    "every known service can be described without a live probe",
+    "a registered learn read keeps its legacy envelope fields and reports service_domain LEARN",
+    "the MCP error result carries category/retryable/automatic_replay_allowed/user_action and the capability block without paths or account data",
+    "the CLI keeps the six legacy commands and flags and adds describe/health/query/agenda/dashboard",
+    "CLI malformed, non-object and missing parameters are structured errors with an empty stderr",
+    "openthu dashboard refuses a public bind and reports LOCAL_DASHBOARD_UNAVAILABLE",
+    "the MCP stdio process answers initialize/tools/list/describe_service/query_service and an unknown cancel notification as clean JSON lines",
+    "every facade error code is registered in the contract and mirrored in source_state with the same category"
+  ],
+  "limits": [
+    "thu_assistant.local_api (6.2) is absent, so openthu dashboard returns LOCAL_DASHBOARD_UNAVAILABLE; host/port/facade are already fixed as its provider contract.",
+    "The 4.2 resource centre needs an injected index store; 6.1 does not create a production index, so resources and resources_export are RESOURCE_PROVIDER_UNAVAILABLE until a provider is supplied.",
+    "The 3.3/4.5 media pipeline needs an injected MediaAssets and MediaBinding; without them image calls keep MODEL_IMAGE_INPUT_UNAVAILABLE and the shipped protocol registry stays empty.",
+    "Renewal can prepare an official handoff and read a result only; execute is refused before preflight with SOURCE_CONTRACT_UNVERIFIED and no renewal request is dispatched.",
+    "Assignment submission, personal timetable, exams and grades remain blocked on source evidence; this module only records the gap and never fabricates an empty success.",
+    "health is a static capability registration, not proof of login, source readability or business availability; every query still reads its source.",
+    "agenda, agenda_changes and resources use process-local snapshots with a 600-second TTL; change_cursor and next_cursor have different meanings and cannot be exchanged.",
+    "gateway.js was not changed: no new gateway command was needed, and the existing queue/cancel/progress wiring is reused.",
+    "The module is implemented, not audited or reconnected; batch 6 stays ready and a single module does not make the batch pass."
+  ],
+  "rollback": "Restore mcp_stdio.py, queries.py, __main__.py, source_state.py and contracts/v0.2/error-classification.json to bb1f963, then delete src/thu_assistant/facade/, src/thu_assistant/local_ops.py, tests/test_facade.py and tests/test_cli.py. The public tool list stays at 29 and there is no data migration. Writes can be suspended without a code rollback through THU_LIBRARY_WRITE=0, THU_SPORTS_WRITE=0, THU_LIBRARY_RENEW=0 and THU_LEARN_SUBMIT=0.",
+  "next": "Audit this module, then reconnect batch 6 with 6.2 and 6.3. 6.2 consumes facade.query/health/describe_service and supplies local_api; 6.3 packages the new package directory. Batch reconnection reruns python scripts/dev.py check and python scripts/dev.py test. This module opens no PR, does not merge main and does not publish a release.",
+  "cross_module_requests": [
+    "6.2: consume facade.query, facade.health and facade.describe_service; expose serve/run/main(host, port, facade) so openthu dashboard can start the board without further facade changes.",
+    "6.3: src/thu_assistant/facade/ is picked up by setuptools.packages.find; if the package list becomes explicit, register the directory and local_ops.py.",
+    "Batch integrator: 6.1 exclusively owns mcp_stdio.py, queries.py, __main__.py, facade/ and local_ops.py; review the 13 new error codes in error-classification.json and source_state.py.",
+    "8.1: the renewal request contract, assignment submission endpoint, academic sources and model image protocol remain external blockers; re-run check and the full offline suite after reconnection.",
+    "7.3: document that health is static, local reads never poll or message, and renewal/submission remain blocked."
+  ],
+  "error_codes_added": [
+    "FACADE_CAPABILITY_UNAVAILABLE",
+    "FACADE_WRITE_NOT_REGISTERED",
+    "FACADE_QUERY_CANNOT_PROXY",
+    "FACADE_OPERATION_NOT_REGISTERED",
+    "FACADE_SERVICE_UNKNOWN",
+    "FACADE_REQUEST_LIMIT",
+    "FACADE_RESULT_INVALID",
+    "ACTION_ENGINE_UNAVAILABLE",
+    "AGENDA_PROVIDER_UNAVAILABLE",
+    "MEDIA_PROVIDER_UNAVAILABLE",
+    "RESOURCE_PROVIDER_UNAVAILABLE",
+    "SUBMISSION_PROVIDER_UNAVAILABLE",
+    "LOCAL_DASHBOARD_UNAVAILABLE"
+  ],
+  "worktree_note": "Recorded relative to the user home because the contract privacy validator rejects absolute home-directory paths; the absolute path stays in the execution session."
+}

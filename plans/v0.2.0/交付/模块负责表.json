@@ -808,8 +808,10 @@
         "src/thu_assistant/queries.py",
         "src/thu_assistant/gateway.js",
         "src/thu_assistant/__main__.py",
-        "src/thu_assistant/facade.py",
-        "tests/test_facade.py"
+        "src/thu_assistant/facade/",
+        "src/thu_assistant/local_ops.py",
+        "tests/test_facade.py",
+        "tests/test_cli.py"
       ],
       "input_contracts": [
         "result-envelope-v1",
@@ -837,7 +839,9 @@
         "公共业务门面、MCP/CLI 接线、29 工具兼容和启用条件"
       ],
       "integration_order": 17,
-      "status": "pending"
+      "status": "pending",
+      "implementation_commit": "e136421",
+      "status_note": "Implemented and module-tested; ownership status stays pending until the audit/batch phase records acceptance."
     },
     {
       "id": "6.2",
