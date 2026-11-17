@@ -662,8 +662,8 @@
         "src/thu_assistant/queries.py",
         "src/thu_assistant/gateway.js",
         "src/thu_assistant/__main__.py",
-        "src/thu_assistant/facade.py",
-        "tests/test_facade.py"
+        "src/thu_assistant/facade/",
+        "src/thu_assistant/local_ops.py"
       ],
       "contracts": [
         "result-envelope-v1",
@@ -677,14 +677,16 @@
         "compatibility-baseline-v1"
       ],
       "tests": [
-        "tests/test_facade.py"
+        "tests/test_facade.py",
+        "tests/test_cli.py"
       ],
       "docs": [
         "docs/CAPABILITIES.md",
         "docs/HANDOVER.md"
       ],
       "install_assets": [
-        "src/thu_assistant/facade.py"
+        "src/thu_assistant/facade/",
+        "src/thu_assistant/local_ops.py"
       ],
       "acceptance_commands": [
         "python scripts/dev.py check",

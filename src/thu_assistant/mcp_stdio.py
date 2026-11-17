@@ -20,7 +20,7 @@ from .browser import BrowserManager
 from .actions import ActionEngine
 from .facade import BusinessFacade, FacadeError
 from .facade.requests import scope as request_scope
-from .queries import QueryEngine, describe, legacy_metadata, metadata
+from .queries import QueryEngine, legacy_metadata, metadata
 from . import models
 from . import todos
 
