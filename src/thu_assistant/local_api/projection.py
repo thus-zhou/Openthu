@@ -118,7 +118,39 @@ def safe_link(value: Any) -> tuple[str | None, str | None]:
     return sanitized, None
 
 
-def _walk(value: Any, *, depth: int, warnings: set[str], key: str | None = None) -> Any:
+def _withheld(warnings: set[str], path: str) -> None:
+    warnings.add('LOCAL_API_LINK_WITHHELD')
+    detail = 'LOCAL_API_LINK_WITHHELD_AT:' + contract.key_path(path)
+    if sum(1 for item in warnings if item.startswith('LOCAL_API_LINK_WITHHELD_AT:')) < 8:
+        warnings.add(detail)
+
+
+def _link_value(value: Any, *, path: str, depth: int, warnings: set[str]) -> Any:
+    """Filter every container shape: string, array, mapping or null.
+
+    A facade can describe a link as ``links: [...]`` or ``entry_url: [...]``;
+    leaving those arrays untouched would hand the dashboard an unfiltered
+    phishing URL.  Arrays keep their length and disallowed entries become null.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        url, warning = safe_link(value)
+        if warning:
+            _withheld(warnings, path)
+        return url
+    if isinstance(value, (list, tuple)):
+        return [_link_value(item, path=f'{path}[{index}]', depth=depth + 1,
+                            warnings=warnings)
+                for index, item in enumerate(value)]
+    if isinstance(value, Mapping):
+        return _walk(value, depth=depth + 1, warnings=warnings, path=path)
+    _withheld(warnings, path)
+    return None
+
+
+def _walk(value: Any, *, depth: int, warnings: set[str], key: str | None = None,
+          path: str = 'response') -> Any:
     if depth > MAX_DEPTH:
         warnings.add('LOCAL_API_DEPTH_LIMIT')
         return None
@@ -127,41 +159,43 @@ def _walk(value: Any, *, depth: int, warnings: set[str], key: str | None = None)
         for raw_key, item in value.items():
             name = str(raw_key)
             folded = name.casefold()
-            if folded in contract.DENY_KEYS:
+            child_path = f'{path}.{name}'
+            if contract.is_sensitive_key(name):
                 warnings.add('LOCAL_API_SENSITIVE_FIELD_DROPPED')
                 continue
-            if folded in ('links', 'link') and isinstance(item, Mapping):
-                links: dict[str, Any] = {}
-                for label, target in item.items():
-                    if isinstance(target, str):
-                        url, warning = safe_link(target)
-                        if warning:
-                            warnings.add(warning)
-                        if url:
-                            links[str(label)] = url
-                    elif isinstance(target, Mapping):
-                        links[str(label)] = _walk(target, depth=depth + 1,
-                                                  warnings=warnings, key=str(label))
-                result[name] = links
+            if folded in ('links', 'link'):
+                if isinstance(item, Mapping):
+                    links: dict[str, Any] = {}
+                    for label, target in item.items():
+                        label_path = f'{child_path}.{label}'
+                        filtered = _link_value(target, path=label_path,
+                                               depth=depth + 1, warnings=warnings)
+                        if filtered is not None:
+                            links[str(label)] = filtered
+                    result[name] = links
+                elif isinstance(item, (list, tuple)):
+                    result[name] = _link_value(item, path=child_path,
+                                               depth=depth + 1, warnings=warnings)
+                elif item is None:
+                    result[name] = None
+                else:
+                    result[name] = _link_value(item, path=child_path,
+                                               depth=depth + 1, warnings=warnings)
                 continue
             if folded in LINK_KEYS or folded.endswith(('_url', '_link', '_href')):
-                if item is None:
-                    result[name] = None
-                elif isinstance(item, str):
-                    url, warning = safe_link(item)
-                    if warning:
-                        warnings.add(warning)
-                    result[name] = url
-                else:
-                    result[name] = _walk(item, depth=depth + 1, warnings=warnings, key=name)
+                result[name] = _link_value(item, path=child_path,
+                                           depth=depth + 1, warnings=warnings)
                 continue
-            result[name] = _walk(item, depth=depth + 1, warnings=warnings, key=name)
+            result[name] = _walk(item, depth=depth + 1, warnings=warnings,
+                                 key=name, path=child_path)
         return result
     if isinstance(value, (list, tuple)):
         if len(value) > contract.LIMITS['max_page_items']:
             raise contract.LocalApiError('LOCAL_API_RESPONSE_TOO_LARGE', http_status=502,
                                          message='结果超出本地显示上限，请缩小范围。')
-        return [_walk(item, depth=depth + 1, warnings=warnings) for item in value]
+        return [_walk(item, depth=depth + 1, warnings=warnings,
+                      path=f'{path}[{index}]')
+                for index, item in enumerate(value)]
     if isinstance(value, str):
         return _clear(value, warnings)
     if isinstance(value, float) and not math.isfinite(value):
@@ -255,6 +289,8 @@ def error_body(code: str, *, request_id: str, http_status: int = 400,
                service_id: str = 'local', operation: str = 'local_api') -> dict[str, Any]:
     """A result-envelope-shaped error body with no implementation detail."""
     category = contract.category_for(code)
+    if message is None:
+        message = contract.CODE_MESSAGES.get(code)
     error = source_state.public_error(code, category=category, message=message,
                                       retry_after_ms=retry_after_ms)
     status = contract.envelope_status_for_http(http_status)

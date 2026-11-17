@@ -13,6 +13,8 @@ Nothing here reads a campus source, starts a browser or writes business state.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from .client import LocalApiClient
 from .contract import (
     CONTRACT_VERSION,
@@ -29,9 +31,31 @@ from .samples import describe_api
 from .security import BOOTSTRAP_SCHEMA, COOKIE_NAME, read_bootstrap
 from .server import LocalApiServer
 
+
+def serve(*, host: str = contract.DEFAULT_BIND, port: int = 0, facade: Any = None,
+          static_dir: Any = None, state_dir: Any = None) -> dict[str, Any]:
+    """Start the local dashboard API and block until it is stopped.
+
+    The 6.1 CLI looks for ``serve``/``run``/``main`` and passes the business
+    facade here.  ``localhost`` is mapped to the only loopback form the bind
+    allowlist accepts; no other alias is invented.
+    """
+    bind = '127.0.0.1' if host == 'localhost' else host
+    server = LocalApiServer(facade, bind=bind, port=port, static_dir=static_dir,
+                            state_dir=state_dir).start()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.stop()
+    return {'status': 'STOPPED', 'url': server.base_url, 'port': server.port,
+            'instance_id': server.instance_id}
+
 __all__ = [
     'LocalApiServer',
     'LocalApiClient',
+    'serve',
     'BusinessFacade',
     'CancelToken',
     'UnavailableFacade',

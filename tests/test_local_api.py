@@ -16,7 +16,7 @@ import sys
 import threading
 import time
 from copy import deepcopy
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import jsonschema
 import pytest
@@ -727,11 +727,10 @@ def test_cursor_reuse_with_different_parameters_is_rejected(server, client) -> N
 def test_cursor_is_bound_to_the_session(server, client) -> None:
     _status, _headers, first = json_request(
         server, 'GET', '/api/v1/todos?page_size=2', headers=auth_headers(client))
-    second = LocalApiClient.from_bootstrap(server.bootstrap_file, clock=FakeWallClock())
-    second.bootstrap()
+    second_sid = server._sessions.issue()
     status, _headers, payload = json_request(
         server, 'GET', '/api/v1/todos?page_size=2&cursor=' + first['next_cursor'],
-        headers=auth_headers(second))
+        headers={'Cookie': f'{security.COOKIE_NAME}={second_sid}'})
     assert status == 400
     assert payload['error']['code'] == 'CURSOR_QUERY_MISMATCH'
 
@@ -1145,15 +1144,16 @@ def test_static_shell_requires_installation_and_serves_assets_safely(tmp_path, f
         with_ui.stop()
 
 
-def test_cross_site_navigation_does_not_establish_a_session(tmp_path, facade) -> None:
+def test_cross_site_navigation_is_refused_before_the_static_shell(tmp_path, facade) -> None:
     static = tmp_path / 'ui'
     (static / 'assets').mkdir(parents=True)
     (static / 'index.html').write_text('<!doctype html>', encoding='utf-8')
     instance = make_server(facade=facade, state_dir=tmp_path / 'state', static_dir=static)
     try:
-        status, headers, _body = raw_request(
+        status, headers, payload = json_request(
             instance, 'GET', '/', headers={'Sec-Fetch-Site': 'cross-site'})
-        assert status == 200
+        assert status == 403
+        assert payload['error']['code'] == 'LOCAL_API_ORIGIN_NOT_ALLOWED'
         assert 'Set-Cookie' not in headers
         assert instance.session_count == 0
     finally:
@@ -1181,14 +1181,15 @@ def test_no_account_record_is_written_to_the_state_directory(tmp_path, facade) -
     state = tmp_path / 'state'
     instance = make_server(facade=facade, state_dir=state)
     try:
-        client = LocalApiClient.from_bootstrap(instance.bootstrap_file, clock=FakeWallClock())
-        client.bootstrap()
-        client.get('/api/v1/query/learn/courses', {'parameters': '{}'})
-        files = sorted(path for path in state.rglob('*') if path.is_file())
-        assert files == [instance.bootstrap_file]
         text = instance.bootstrap_file.read_text(encoding='utf-8')
         for marker in ('SYNTHETIC-COURSE', 'Cookie', 'account', '学号'):
             assert marker not in text
+        client = LocalApiClient.from_bootstrap(instance.bootstrap_file, clock=FakeWallClock())
+        client.bootstrap()
+        client.get('/api/v1/query/learn/courses', {'parameters': '{}'})
+        # The single-use token file is gone; the request wrote nothing else.
+        files = sorted(path for path in state.rglob('*') if path.is_file())
+        assert files == []
     finally:
         instance.stop()
 
@@ -1250,10 +1251,12 @@ def test_request_rate_limit_returns_429_with_retry_after(tmp_path, facade) -> No
         status, headers, payload = json_request(instance, 'GET', '/api/v1/health',
                                                 headers=auth_headers(client))
         assert status == 429
-        assert payload['error']['code'] == 'RATE_LIMITED'
+        assert payload['error']['code'] == 'LOCAL_API_RATE_LIMITED'
         assert payload['error']['retry_after_ms'] >= 1
         assert headers['Retry-After']
         assert payload['display']['state'] == 'LIMITED'
+        assert '学校' not in payload['display']['message']
+        assert '来源' not in payload['error']['message']
     finally:
         instance.stop()
 
@@ -1296,8 +1299,364 @@ def test_safe_link_rules() -> None:
     assert projection.safe_link('https://learn.tsinghua.edu.cn/x?ticket=synthetic')[0] is None
 
 
-def test_sensitive_field_denylist_is_exact_not_substring() -> None:
+def test_sensitive_key_patterns_drop_credentials_without_dropping_ordinary_keys() -> None:
     warnings: set[str] = set()
     value = projection._walk({'auth_state': 'READABLE_AUTH_UNKNOWN', 'token': 'x',
-                              'pathology': 'keep'}, depth=0, warnings=warnings)
-    assert value == {'auth_state': 'READABLE_AUTH_UNKNOWN', 'pathology': 'keep'}
+                              'cookie_header': 'synthetic', 'csrf_token_value': 'synthetic',
+                              'pathology': 'keep', 'sort_key': 'keep'}, depth=0,
+                             warnings=warnings)
+    assert value == {'pathology': 'keep', 'sort_key': 'keep'}
+    assert 'LOCAL_API_SENSITIVE_FIELD_DROPPED' in warnings
+
+
+# ---------------------------------------------------------------------------
+# Audit regressions (6.2 audit: P1-1..P1-3, P2-1..P2-15)
+# ---------------------------------------------------------------------------
+
+def _mutate_envelope(name: str):
+    def apply(envelope: dict) -> None:
+        if name == 'items_not_array':
+            envelope['items'] = {'not': 'a list'}
+        elif name == 'verification_level_unknown':
+            envelope['verification_level'] = 'MADE_UP'
+        elif name == 'snapshot_complete_not_bool':
+            envelope['snapshot_complete'] = 'yes'
+        elif name == 'implementation_state_bad':
+            envelope['implementation_state'] = 'MAYBE'
+        elif name == 'adapter_version_too_long':
+            envelope['source']['adapter_version'] = 'v' * 200
+        elif name == 'warnings_not_strings':
+            envelope['warnings'] = [{'not': 'text'}]
+        elif name == 'missing_pages_bad':
+            envelope['missing_pages'] = [0]
+        elif name == 'non_finite':
+            envelope['items'] = [{'value': float('nan')}]
+        else:  # pragma: no cover - guard for a typo in the parametrisation
+            raise AssertionError(name)
+    return apply
+
+
+@pytest.mark.parametrize('name', [
+    'items_not_array', 'verification_level_unknown', 'snapshot_complete_not_bool',
+    'implementation_state_bad', 'adapter_version_too_long', 'warnings_not_strings',
+    'missing_pages_bad', 'non_finite',
+])
+def test_optional_envelope_fields_are_validated_before_a_200(server, facade, client, name) -> None:
+    envelope = valid_envelope('learn', 'courses', items=[])
+    _mutate_envelope(name)(envelope)
+    facade.responses['query'] = envelope
+    status, _headers, payload = json_request(
+        server, 'GET', query_path(), headers=auth_headers(client))
+    assert status == 502, name
+    assert payload['error']['code'] == 'LOCAL_API_FACADE_INVALID_RESPONSE', name
+    assert payload['display']['state'] != 'READY'
+    validate_envelope(payload)
+
+
+def test_list_shaped_link_fields_are_filtered_item_by_item(server, facade, client) -> None:
+    envelope = valid_envelope('learn', 'courses', items=[{
+        'course_id': 'C1',
+        'links': ['https://evil.example/phish', 'http://learn.tsinghua.edu.cn/x',
+                  'https://learn.tsinghua.edu.cn/ok'],
+        'link': ['https://evil.example/two'],
+        'entry_url': ['https://evil.example/three'],
+        'attachments': [{'name': 'a', 'href': 'https://evil.example/four'}],
+        'official_url': 'https://evil.example/five',
+    }])
+    facade.responses['query'] = envelope
+    status, _headers, payload = json_request(
+        server, 'GET', query_path(), headers=auth_headers(client))
+    assert status == 200
+    item = payload['items'][0]
+    assert item['links'] == [None, None, 'https://learn.tsinghua.edu.cn/ok']
+    assert item['link'] == [None]
+    assert item['entry_url'] == [None]
+    assert item['attachments'][0]['href'] is None
+    assert item['official_url'] is None
+    assert 'LOCAL_API_LINK_WITHHELD' in payload['warnings']
+    assert any(warning.startswith('LOCAL_API_LINK_WITHHELD_AT:')
+               for warning in payload['warnings'])
+
+
+def test_non_cooperative_adapter_cannot_starve_health_or_stop(tmp_path) -> None:
+    class Stubborn(FixtureFacade):
+        def __init__(self) -> None:
+            super().__init__()
+            self.started = 0
+            self._started_lock = threading.Lock()
+
+        def todos(self, *, start_date=None, end_date=None, cursor=None,
+                  page_size=50, cancel=None):
+            with self._started_lock:
+                self.started += 1
+            time.sleep(2.0)  # deliberately ignores cancel
+            return valid_envelope('agenda', 'todos', items=[])
+
+    facade = Stubborn()
+    limits = contract.LocalApiLimits(ui_wait_seconds=0.2, refresh_min_seconds=0)
+    instance = make_server(facade=facade, state_dir=tmp_path, limits=limits)
+    try:
+        client = LocalApiClient.from_bootstrap(instance.bootstrap_file, clock=FakeWallClock())
+        client.bootstrap()
+        results = []
+        threads = [threading.Thread(
+            target=lambda index=index: results.append(json_request(
+                instance, 'GET', f'/api/v1/todos?page_size={index + 1}',
+                headers=auth_headers(client), timeout=10)),
+            daemon=True) for index in range(instance._executor_workers)]
+        for thread in threads:
+            thread.start()
+        deadline = time.monotonic() + 3
+        while facade.started < instance._executor_workers and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert facade.started == instance._executor_workers
+        started = time.monotonic()
+        status, _headers, payload = json_request(
+            instance, 'GET', '/api/v1/health', headers=auth_headers(client))
+        assert status == 200
+        assert payload['status'] == 'OK'
+        assert time.monotonic() - started < 1.0
+        status, _headers, payload = json_request(
+            instance, 'GET', '/api/v1/todos?page_size=99', headers=auth_headers(client))
+        assert status == 503
+        assert payload['error']['code'] == 'LOCAL_API_BUSY'
+        before = time.monotonic()
+        instance.stop()
+        assert time.monotonic() - before < 2.0
+        for thread in threads:
+            thread.join(timeout=3)
+    finally:
+        instance.stop()
+
+
+@pytest.mark.parametrize('page_size', ['\u00b2', '\u0661\u0662\u0663', '\u4e00'])
+def test_page_size_accepts_ascii_digits_only(server, client, page_size) -> None:
+    status, _headers, payload = json_request(
+        server, 'GET', '/api/v1/query/learn/courses?page_size=' + quote(page_size),
+        headers=auth_headers(client))
+    assert status == 400
+    assert payload['error']['code'] == 'INVALID_ARGUMENT_TYPE'
+
+
+@pytest.mark.parametrize('literal', ['NaN', 'Infinity', '-Infinity'])
+def test_json_non_finite_constants_are_rejected_before_the_facade(server, facade,
+                                                                  client, literal) -> None:
+    status, _headers, payload = json_request(
+        server, 'GET', '/api/v1/query/learn/courses?' + urlencode(
+            {'parameters': '{"n": ' + literal + '}'}), headers=auth_headers(client))
+    assert status == 400
+    assert payload['error']['code'] == 'LOCAL_API_QUERY_INVALID'
+    assert facade.calls == []
+
+
+def test_failed_read_does_not_consume_the_refresh_slot(server, facade, client) -> None:
+    facade.errors['query'] = RuntimeError('synthetic failure')
+    first = json_request(server, 'GET', query_path(), headers=auth_headers(client))
+    assert first[0] == 502
+    facade.errors.pop('query')
+    retry = json_request(server, 'GET', query_path(), headers=auth_headers(client))
+    assert retry[0] == 200
+    assert retry[2]['status'] == 'OK'
+
+
+def test_head_does_not_consume_the_refresh_slot(server, client) -> None:
+    status, _headers, _body = raw_request(
+        server, 'HEAD', '/api/v1/query/learn/courses?parameters=%7B%7D',
+        headers=auth_headers(client))
+    assert status == 200
+    status, _headers, payload = json_request(
+        server, 'GET', '/api/v1/query/learn/courses?parameters=%7B%7D',
+        headers=auth_headers(client))
+    assert status == 200
+    assert payload['status'] == 'OK'
+
+
+def test_credential_shaped_keys_are_dropped(server, facade, client) -> None:
+    facade.responses['query'] = valid_envelope('learn', 'courses', items=[{
+        'course_id': 'C1', 'auth': 'synthetic', 'cookie_header': 'synthetic',
+        'csrf_token_value': 'synthetic', 'text': 'kept'}])
+    status, _headers, payload = json_request(
+        server, 'GET', query_path(), headers=auth_headers(client))
+    assert status == 200
+    assert payload['items'] == [{'course_id': 'C1', 'text': 'kept'}]
+    assert 'LOCAL_API_SENSITIVE_FIELD_DROPPED' in payload['warnings']
+
+
+def test_response_size_ceiling_is_enforced(server, facade, client) -> None:
+    envelope = valid_envelope('learn', 'courses', items=[{'course_id': 'C1'}])
+    envelope['data'] = {'blob': ['x' * 2000 for _ in range(5000)]}
+    facade.responses['query'] = envelope
+    status, _headers, body = raw_request(
+        server, 'GET', query_path(), headers=auth_headers(client))
+    assert status == 502
+    assert len(body) <= contract.LIMITS['max_response_bytes']
+    payload = json.loads(body.decode('utf-8'))
+    assert payload['error']['code'] == 'LOCAL_API_RESPONSE_TOO_LARGE'
+
+
+def test_bootstrap_token_is_single_use(tmp_path, facade) -> None:
+    instance = make_server(facade=facade, state_dir=tmp_path)
+    try:
+        record = json.loads(instance.bootstrap_file.read_text(encoding='utf-8'))
+        first = json_request(instance, 'GET', '/api/v1/health',
+                             headers={'X-Openthu-Bootstrap': record['token']})
+        assert first[0] == 200
+        assert 'Set-Cookie' in first[1]
+        second = json_request(instance, 'GET', '/api/v1/health',
+                              headers={'X-Openthu-Bootstrap': record['token']})
+        assert second[0] == 401
+        assert second[2]['error']['code'] == 'LOCAL_API_BOOTSTRAP_USED'
+        assert instance.session_count == 1
+        assert not instance.bootstrap_file.exists()
+    finally:
+        instance.stop()
+
+
+def test_session_cap_does_not_evict_an_active_browser_session(tmp_path, facade) -> None:
+    static = tmp_path / 'ui'
+    (static / 'assets').mkdir(parents=True)
+    (static / 'index.html').write_text('<!doctype html>', encoding='utf-8')
+    limits = contract.LocalApiLimits(max_sessions=1, refresh_min_seconds=0)
+    instance = make_server(facade=facade, state_dir=tmp_path / 'state',
+                           static_dir=static, limits=limits)
+    try:
+        status, headers, _body = raw_request(
+            instance, 'GET', '/', headers={'Sec-Fetch-Site': 'none'})
+        assert status == 200
+        cookie = headers['Set-Cookie']
+        sid = cookie.split(';', 1)[0].split('=', 1)[1]
+        token = json.loads(instance.bootstrap_file.read_text(encoding='utf-8'))['token']
+        status, _headers, payload = json_request(
+            instance, 'GET', '/api/v1/health',
+            headers={'X-Openthu-Bootstrap': token})
+        assert status == 429
+        assert payload['error']['code'] == 'LOCAL_API_SESSION_LIMIT'
+        status, _headers, payload = json_request(
+            instance, 'GET', '/api/v1/health',
+            headers={'Cookie': f'{security.COOKIE_NAME}={sid}'})
+        assert status == 200
+        assert payload['status'] == 'OK'
+    finally:
+        instance.stop()
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='symlink creation needs extra privileges')
+def test_bootstrap_symlink_is_rejected(tmp_path, facade) -> None:
+    instance = make_server(facade=facade, state_dir=tmp_path)
+    try:
+        link = tmp_path / 'bootstrap-link.json'
+        link.symlink_to(instance.bootstrap_file)
+        with pytest.raises(local_api.LocalApiError) as error:
+            security.read_bootstrap(link, clock=FakeWallClock())
+        assert error.value.code == 'LOCAL_API_BOOTSTRAP_INVALID'
+    finally:
+        instance.stop()
+
+
+def test_duplicate_cookie_values_are_all_verified(server, client) -> None:
+    valid = f'{security.COOKIE_NAME}={client.cookie}'
+    attacker = f'{security.COOKIE_NAME}=attacker-value'
+    for header in (valid, f'{attacker}; {valid}', f'{valid}; {attacker}'):
+        status, _headers, payload = json_request(
+            server, 'GET', '/api/v1/health', headers={'Cookie': header})
+        assert status == 200
+        assert payload['status'] == 'OK'
+
+
+def test_envelope_source_must_match_the_requested_route(server, facade, client) -> None:
+    facade.responses['query'] = valid_envelope('library', 'loans', items=[])
+    status, _headers, payload = json_request(
+        server, 'GET', query_path('learn', 'courses'), headers=auth_headers(client))
+    assert status == 502
+    assert payload['error']['code'] == 'LOCAL_API_FACADE_INVALID_RESPONSE'
+
+
+def test_call_with_token_never_invokes_a_method_twice() -> None:
+    from thu_assistant.local_api import facade as facade_module
+    calls = []
+
+    class Flaky:
+        def read(self, *, cancel=None):
+            calls.append(cancel is not None)
+            raise TypeError('cannot cancel the upstream read')
+
+    with pytest.raises(TypeError):
+        facade_module.call_with_token(Flaky().read, cancel=object())
+    assert calls == [True]
+
+
+@pytest.mark.parametrize('key', ['endpoint', 'target', 'destination', 'source',
+                                 'origin', 'address', 'return_url'])
+def test_url_bearing_parameter_keys_are_rejected(server, facade, client, key) -> None:
+    status, _headers, payload = json_request(
+        server, 'GET', '/api/v1/query/learn/courses?' + urlencode(
+            {'parameters': json.dumps({key: 'https://evil.example/x'})}),
+        headers=auth_headers(client))
+    assert status == 400
+    assert payload['error']['code'] == 'LOCAL_API_PARAMETER_FORBIDDEN'
+    assert facade.calls == []
+
+
+def test_shared_stores_tolerate_concurrent_access() -> None:
+    clock = FakeClock()
+    sessions = security.SessionStore(instance_id='synthetic', clock=clock,
+                                     max_sessions=10000)
+    limiter = security.RateLimiter(limit=1000, window=10, refresh_min=10, clock=clock)
+    pages = paging.PageStore(clock=clock, max_entries=32)
+    items = [{'index': index} for index in range(20)]
+    envelope = valid_envelope('learn', 'courses', items=items)
+    errors = []
+
+    def work(worker: int) -> None:
+        try:
+            for index in range(40):
+                sid = sessions.issue()
+                sessions.validate(sid)
+                sessions.snapshot()
+                limiter.check_request(f'k{worker}')
+                limiter.peek_refresh('shared')
+                limiter.record_refresh('shared')
+                key = f'{worker}-{index}'
+                first = pages.start(key, envelope, items, 5)
+                if first.get('next_cursor'):
+                    pages.resume(first['next_cursor'], key)
+        except contract.LocalApiError as error:
+            if error.code != 'CURSOR_EXPIRED':
+                errors.append(error.code)
+        except Exception as error:  # noqa: BLE001 - the test reports any failure
+            errors.append(repr(error))
+
+    threads = [threading.Thread(target=work, args=(worker,)) for worker in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    assert errors == []
+
+
+def test_serve_helper_maps_localhost_and_stops(monkeypatch) -> None:
+    events = {}
+
+    class FakeServer:
+        def __init__(self, facade, **kwargs):
+            events['facade'] = facade
+            events['kwargs'] = kwargs
+            self.base_url = 'http://127.0.0.1:1'
+            self.port = 1
+            self.instance_id = 'synthetic'
+
+        def start(self):
+            events['started'] = True
+            return self
+
+        def serve_forever(self):
+            events['served'] = True
+
+        def stop(self):
+            events['stopped'] = True
+
+    monkeypatch.setattr(local_api, 'LocalApiServer', FakeServer)
+    result = local_api.serve(host='localhost', port=0, facade=object())
+    assert events['kwargs']['bind'] == '127.0.0.1'
+    assert events['served'] and events['stopped']
+    assert result['status'] == 'STOPPED'

@@ -161,16 +161,31 @@ DENY_KEYS = frozenset({
     'encryption_key', 'private_key', 'proxy_url', 'jwt', 'assertion',
 })
 
+# Exact keys miss common credential shapes such as ``cookie_header`` or
+# ``csrf_token_value``.  A key is dropped when one of its word segments is a
+# credential noun; ``auth_state`` is intentionally covered as well.
+SENSITIVE_KEY_SEGMENTS = frozenset({
+    'cookie', 'cookies', 'token', 'tokens', 'secret', 'secrets', 'password',
+    'passwd', 'credential', 'credentials', 'authorization', 'auth', 'csrf',
+    'ticket', 'session', 'sessions', 'jwt', 'bearer', 'apikey',
+})
+SENSITIVE_KEY_SUFFIXES = ('_header', '_headers', '_api_key')
+
 FORBIDDEN_PARAMETER_KEYS = frozenset({
-    'url', 'uri', 'href', 'method', 'headers', 'host', 'port', 'cookie',
-    'cookies', 'token', 'authorization', 'auth', 'body', 'payload', 'proxy',
-    'forward', 'download', 'path', 'file', 'redirect', 'session',
+    'url', 'uri', 'href', 'method', 'headers', 'header', 'host', 'port',
+    'cookie', 'cookies', 'token', 'authorization', 'auth', 'body', 'payload',
+    'proxy', 'forward', 'download', 'path', 'file', 'redirect', 'session',
+    'endpoint', 'target', 'destination', 'dest', 'source', 'origin',
+    'address', 'addr', 'callback', 'webhook', 'redirect_uri', 'return_url',
+    'next',
 })
 
 _PARAMETER_KEY = re.compile(r'^[A-Za-z][A-Za-z0-9_.-]{0,63}$')
 _SERVICE = re.compile(r'^' + SERVICE_ID + r'$')
 _DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 _CURSOR = re.compile(r'^[A-Za-z0-9._~-]{1,128}$')
+_KEY_PATH = re.compile(r'^[A-Za-z0-9_.\[\]-]{1,120}$')
+_WORD_SPLIT = re.compile(r'[^a-z0-9]+')
 
 # Local-boundary error codes.  Registered in error-classification-v1 so a
 # future caller of ``source_state.public_error`` does not collapse them.
@@ -183,8 +198,10 @@ ERROR_CATEGORIES = {
     'LOCAL_API_SESSION_REQUIRED': 'AUTH',
     'LOCAL_API_SESSION_EXPIRED': 'AUTH',
     'LOCAL_API_SESSION_INVALID': 'AUTH',
+    'LOCAL_API_SESSION_LIMIT': 'RATE_LIMIT',
     'LOCAL_API_BOOTSTRAP_INVALID': 'AUTH',
     'LOCAL_API_BOOTSTRAP_EXPIRED': 'AUTH',
+    'LOCAL_API_BOOTSTRAP_USED': 'AUTH',
     'LOCAL_API_BOOTSTRAP_UNAVAILABLE': 'INTERNAL',
     'LOCAL_API_CSRF_REQUIRED': 'PERMISSION',
     'LOCAL_API_REQUEST_TOO_LARGE': 'INPUT',
@@ -197,12 +214,25 @@ ERROR_CATEGORIES = {
     'LOCAL_API_PARAMETER_FORBIDDEN': 'INPUT',
     'LOCAL_API_PARAMETERS_TOO_LARGE': 'INPUT',
     'LOCAL_API_REFRESH_TOO_SOON': 'RATE_LIMIT',
+    'LOCAL_API_RATE_LIMITED': 'RATE_LIMIT',
+    'LOCAL_API_BUSY': 'RATE_LIMIT',
     'LOCAL_API_READ_TIMEOUT': 'NETWORK',
     'LOCAL_API_FACADE_UNAVAILABLE': 'INTERNAL',
     'LOCAL_API_FACADE_INVALID_RESPONSE': 'UPSTREAM_CONTRACT',
     'LOCAL_API_RESPONSE_TOO_LARGE': 'COMPLETENESS',
     'LOCAL_API_INTERNAL_ERROR': 'INTERNAL',
     'LOCAL_API_UI_NOT_INSTALLED': 'NOT_IMPLEMENTED',
+}
+
+# Human-facing local messages; the shared category text talks about a school
+# source, which is wrong for a loopback rate limit.
+CODE_MESSAGES = {
+    'LOCAL_API_RATE_LIMITED': '本地请求过于频繁，请稍后重试。',
+    'LOCAL_API_REFRESH_TOO_SOON': '同一读取刷新过于频繁，请稍后重试。',
+    'LOCAL_API_BUSY': '本地读取容量已满，请稍后重试。',
+    'LOCAL_API_SESSION_LIMIT': '本地会话数量已达上限，请关闭多余会话。',
+    'LOCAL_API_BOOTSTRAP_USED': '本地连接令牌已使用，请重新打开看板。',
+    'LOCAL_API_READ_TIMEOUT': '读取超时，其他卡片不受影响。',
 }
 
 # Error statuses that must carry an ``error`` object (result-envelope-v1).
@@ -236,6 +266,24 @@ def category_for(code: str) -> str:
     return source_state.ERROR_CODES.get(code, 'INTERNAL')
 
 
+def is_sensitive_key(name: Any) -> bool:
+    """Exact deny keys plus controlled credential-shaped patterns."""
+    if not isinstance(name, str):
+        return False
+    folded = name.casefold()
+    if folded in DENY_KEYS:
+        return True
+    if folded.endswith(SENSITIVE_KEY_SUFFIXES):
+        return True
+    return bool(set(_WORD_SPLIT.split(folded)) & SENSITIVE_KEY_SEGMENTS)
+
+
+def key_path(value: Any) -> str:
+    """A bounded, display-safe dotted path used only in warning details."""
+    text = re.sub(r'[^A-Za-z0-9_.\[\]-]', '_', str(value))[:120]
+    return text if _KEY_PATH.fullmatch(text) else 'response'
+
+
 def is_date(value: Any) -> bool:
     return isinstance(value, str) and bool(_DATE.fullmatch(value))
 
@@ -261,12 +309,70 @@ def route_for(path: str) -> tuple[Route | None, dict[str, str]]:
     return None, {}
 
 
-def check_envelope(value: Any) -> list[str]:
-    """Minimal structural check of a ``result-envelope-v1`` object.
+IMPLEMENTATION_STATES = frozenset({'IMPLEMENTED', 'BLOCKED', 'NOT_IMPLEMENTED', 'UNKNOWN'})
+RUNTIME_AVAILABILITY = frozenset({'AVAILABLE', 'UNAVAILABLE', 'LIMITED', 'UNKNOWN'})
+EVIDENCE_LEVELS = frozenset({'NONE', 'OFFLINE_CONTRACT', 'SYNTHETIC_TRANSPORT',
+                             'LIVE_READ', 'LIVE_WRITE', 'UNKNOWN'})
+USER_ACTIONS = frozenset({'NONE', 'RETRY', 'REAUTHENTICATE', 'FIX_INPUT', 'WAIT',
+                          'CHECK_REMOTE_RECORD', 'CONTACT_SUPPORT'})
+_ERROR_CODE = re.compile(r'^[A-Za-z][A-Za-z0-9_]{2,80}$')
 
-    The local API never fabricates the missing half of a facade response: an
-    incomplete envelope becomes an explicit ``LOCAL_API_FACADE_INVALID_RESPONSE``
-    instead of an optimistic default.
+
+def _text(value: Any, maximum: int, *, minimum: int = 1) -> bool:
+    return isinstance(value, str) and minimum <= len(value) <= maximum
+
+
+def _check_error(error: Any) -> list[str]:
+    problems: list[str] = []
+    if not isinstance(error, Mapping):
+        return ['error is not an object']
+    code = error.get('code')
+    if not isinstance(code, str) or not _ERROR_CODE.fullmatch(code):
+        problems.append('error.code is not a stable code')
+    classified = any(key in error for key in
+                     ('category', 'retryable', 'automatic_replay_allowed', 'user_action'))
+    if classified:
+        if error.get('category') not in source_state.CATEGORIES:
+            problems.append('error.category is not a frozen category')
+        if type(error.get('retryable')) is not bool:
+            problems.append('error.retryable is not a boolean')
+        if error.get('automatic_replay_allowed') is not False:
+            problems.append('error.automatic_replay_allowed must be false')
+        if error.get('user_action') not in USER_ACTIONS:
+            problems.append('error.user_action is not a frozen action')
+        if 'message' in error and not _text(error.get('message'), 500, minimum=0):
+            problems.append('error.message is not bounded text')
+        retry_after = error.get('retry_after_ms')
+        if retry_after is not None and (type(retry_after) is not int or retry_after < 0):
+            problems.append('error.retry_after_ms is not a non-negative integer or null')
+    elif not _text(error.get('message'), 500, minimum=0):
+        problems.append('legacy error.message is missing or too long')
+    return problems
+
+
+def _finite(value: Any, depth: int = 0) -> bool:
+    """RFC 8259 has no NaN/Infinity; a non-finite number cannot be encoded."""
+    if depth > 12:
+        return False
+    if isinstance(value, float):
+        return value == value and value not in (float('inf'), float('-inf'))
+    if isinstance(value, Mapping):
+        return all(_finite(key, depth + 1) and _finite(item, depth + 1)
+                   for key, item in value.items())
+    if isinstance(value, (list, tuple)):
+        return all(_finite(item, depth + 1) for item in value)
+    return True
+
+
+def check_envelope(value: Any) -> list[str]:
+    """Structural check of a ``result-envelope-v1`` object.
+
+    The frozen schema declares more than the eight required keys; an optional
+    field with the wrong type or a value outside its enum would still make the
+    response schema-invalid while the display state said READY.  The local API
+    therefore checks every declared property it can receive and turns any
+    mismatch into ``LOCAL_API_FACADE_INVALID_RESPONSE`` instead of an optimistic
+    200.
     """
     if not isinstance(value, Mapping):
         return ['envelope is not an object']
@@ -281,9 +387,12 @@ def check_envelope(value: Any) -> list[str]:
         problems.append('source is not an object')
     else:
         for key in ('service_id', 'operation', 'adapter_version'):
-            item = source.get(key)
-            if not isinstance(item, str) or not item:
-                problems.append(f'source.{key} is not a non-empty string')
+            if not _text(source.get(key), 120 if key == 'operation' else
+                         (64 if key == 'service_id' else 80)):
+                problems.append(f'source.{key} is not a bounded non-empty string')
+        url = source.get('url')
+        if url is not None and not _text(url, 2000, minimum=0):
+            problems.append('source.url is neither null nor bounded text')
     checked = value.get('checked_at')
     if not isinstance(checked, str):
         problems.append('checked_at is not a string')
@@ -295,31 +404,51 @@ def check_envelope(value: Any) -> list[str]:
                 problems.append('checked_at has no UTC offset')
         except ValueError:
             problems.append('checked_at is not ISO 8601')
-    if not isinstance(value.get('verification_level'), str):
-        problems.append('verification_level is not a string')
+    if value.get('verification_level') not in source_state.VERIFICATION_LEVELS:
+        problems.append('verification_level is not a frozen level')
     for key in ('source_complete', 'complete'):
         if type(value.get(key)) is not bool:
             problems.append(f'{key} is not a boolean')
+    if 'snapshot_complete' in value and type(value.get('snapshot_complete')) is not bool:
+        problems.append('snapshot_complete is not a boolean')
     cursor = value.get('next_cursor')
-    if cursor is not None and not isinstance(cursor, str):
-        problems.append('next_cursor is neither null nor a string')
+    if cursor is not None and not _text(cursor, 1024):
+        problems.append('next_cursor is neither null nor bounded text')
     warnings = value.get('warnings')
-    if not isinstance(warnings, list) or any(not isinstance(item, str) for item in warnings):
-        problems.append('warnings is not a list of strings')
+    if not isinstance(warnings, list) or any(not _text(item, 200) for item in warnings):
+        problems.append('warnings is not a list of 1..200 character strings')
+    missing = value.get('missing_pages')
+    if missing is not None and (not isinstance(missing, list)
+                                or any(type(item) is not int or item < 1 for item in missing)):
+        problems.append('missing_pages is not a list of positive integers')
+    errors = value.get('source_errors')
+    if errors is not None and (not isinstance(errors, list)
+                               or any(not _text(item, 200) for item in errors)):
+        problems.append('source_errors is not a list of bounded strings')
+    if 'items' in value and not isinstance(value.get('items'), list):
+        problems.append('items is not an array')
+    if 'implementation_state' in value and value.get('implementation_state') not in IMPLEMENTATION_STATES:
+        problems.append('implementation_state is not a frozen state')
+    if 'runtime_availability' in value and value.get('runtime_availability') not in RUNTIME_AVAILABILITY:
+        problems.append('runtime_availability is not a frozen state')
+    if 'evidence_level' in value and value.get('evidence_level') not in EVIDENCE_LEVELS:
+        problems.append('evidence_level is not a frozen level')
     if value.get('complete') is True and value.get('source_complete') is not True:
         problems.append('complete is true while source_complete is false')
     if status == 'EMPTY' and (value.get('complete') is not True
                              or value.get('source_complete') is not True):
         problems.append('EMPTY must be a proven complete empty result')
+    if status == 'EMPTY' and 'error' in value:
+        problems.append('EMPTY cannot carry an error object')
     if status in _FAILURE_STATUSES:
-        error = value.get('error')
-        if not isinstance(error, Mapping) or not isinstance(error.get('code'), str):
+        if 'error' not in value:
             problems.append('a failure status has no error object')
         else:
-            if not isinstance(error.get('category'), str):
-                problems.append('error.category is missing')
-            if error.get('automatic_replay_allowed') is not False:
-                problems.append('error.automatic_replay_allowed must be false')
+            problems.extend(_check_error(value.get('error')))
+    elif 'error' in value:
+        problems.extend(_check_error(value.get('error')))
+    if not _finite(value):
+        problems.append('envelope contains a non-finite number')
     return problems
 
 

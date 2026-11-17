@@ -114,6 +114,11 @@ def _iso_now() -> str:
     return source_state.now_iso()
 
 
+def _reject_json_constant(value: str) -> None:
+    """RFC 8259 has no NaN/Infinity; the frozen facade does not accept them."""
+    raise ValueError(value)
+
+
 class LocalApiServer:
     """One process-owned local read API instance."""
 
@@ -138,6 +143,7 @@ class LocalApiServer:
         self._logger = logger or LOGGER
         self._facade = facade if facade is not None else facade_module.UnavailableFacade()
         self._executor_workers = max(1, int(executor_workers))
+        self._priority_workers = 2
         base_state = Path(state_dir) if state_dir is not None else path_module.default_paths().state_dir
         self.instance_id = secrets.token_hex(16)
         self._sessions = security.SessionStore(
@@ -152,11 +158,14 @@ class LocalApiServer:
             limit=self._limits.max_requests_per_window,
             window=self._limits.request_window_seconds,
             refresh_min=self._limits.refresh_min_seconds, clock=clock)
-        self._pages = paging.PageStore(clock=clock, ttl=self._limits.cursor_ttl_seconds)
+        self._pages = paging.PageStore(clock=clock, ttl=self._limits.cursor_ttl_seconds,
+                                       max_bytes=self._limits.max_response_bytes)
         self._static_dir = Path(static_dir).resolve() if static_dir is not None else None
         self._httpd: _ThreadingServer | None = None
         self._thread: threading.Thread | None = None
-        self._executor: ThreadPoolExecutor | None = None
+        self._read_executor: ThreadPoolExecutor | None = None
+        self._priority_executor: ThreadPoolExecutor | None = None
+        self._read_slots = threading.BoundedSemaphore(self._executor_workers)
         self._inflight: dict[str, facade_module.CancelToken] = {}
         self._inflight_lock = threading.Lock()
         self._stopping = threading.Event()
@@ -192,15 +201,19 @@ class LocalApiServer:
         self.port = int(self._httpd.server_address[1])
         host = '127.0.0.1' if self.bind == '127.0.0.1' else '[::1]'
         self.base_url = f'http://{host}:{self.port}'
-        self._executor = ThreadPoolExecutor(max_workers=self._executor_workers,
-                                            thread_name_prefix='openthu-local-api')
+        self._read_executor = ThreadPoolExecutor(max_workers=self._executor_workers,
+                                                 thread_name_prefix='openthu-local-read')
+        self._priority_executor = ThreadPoolExecutor(max_workers=self._priority_workers,
+                                                     thread_name_prefix='openthu-local-priority')
         try:
             self.bootstrap_file = self._bootstrap.publish(port=self.port,
                                                           base_url=self.base_url,
                                                           pid=os.getpid())
         except OSError:
-            self._executor.shutdown(wait=False, cancel_futures=True)
-            self._executor = None
+            self._read_executor.shutdown(wait=False, cancel_futures=True)
+            self._priority_executor.shutdown(wait=False, cancel_futures=True)
+            self._read_executor = None
+            self._priority_executor = None
             self._httpd.server_close()
             self._httpd = None
             raise contract.LocalApiError('LOCAL_API_START_FAILED', http_status=500,
@@ -230,8 +243,9 @@ class LocalApiServer:
         if self._httpd is not None:
             self._httpd.shutdown()
             self._httpd.server_close()
-        if self._executor is not None:
-            self._executor.shutdown(wait=False, cancel_futures=True)
+        for executor in (self._read_executor, self._priority_executor):
+            if executor is not None:
+                executor.shutdown(wait=False, cancel_futures=True)
         if self._thread is not None:
             self._thread.join(timeout=max(0.1, float(timeout)))
         self._bootstrap.revoke()
@@ -318,7 +332,12 @@ class LocalApiServer:
 
     def _json(self, payload: Mapping[str, Any], request_id: str,
               status: int = 200, route_name: str | None = None) -> Response:
-        return Response(status, self._encode(payload), self._json_headers(request_id),
+        body = self._encode(payload)
+        if len(body) > self._limits.max_response_bytes:
+            raise contract.LocalApiError(
+                'LOCAL_API_RESPONSE_TOO_LARGE', http_status=502,
+                message='结果超出本地显示上限，请缩小范围。')
+        return Response(status, body, self._json_headers(request_id),
                         route_name=route_name)
 
     def _dispatch(self, request: _Request) -> Response:
@@ -335,12 +354,12 @@ class LocalApiServer:
             raise contract.LocalApiError('LOCAL_API_REQUEST_TOO_LARGE', http_status=413)
         if request.body_length > 0:
             raise contract.LocalApiError('LOCAL_API_REQUEST_BODY_NOT_ALLOWED', http_status=400)
-        if path == '/' or path.startswith('/assets/'):
-            return self._static(path, request)
         site = request.headers.get('Sec-Fetch-Site') if request.headers else None
         mode = request.headers.get('Sec-Fetch-Mode') if request.headers else None
         if not security.fetch_metadata_allowed(site, mode):
             raise contract.LocalApiError('LOCAL_API_ORIGIN_NOT_ALLOWED', http_status=403)
+        if path == '/' or path.startswith('/assets/'):
+            return self._static(path, request)
         route, path_params = contract.route_for(path)
         if route is None:
             raise contract.LocalApiError('LOCAL_API_ROUTE_NOT_FOUND', http_status=404)
@@ -348,22 +367,26 @@ class LocalApiServer:
         session_key = hashlib.sha256(session_id.encode('utf-8')).hexdigest()[:16]
         retry = self._limiter.check_request(session_key)
         if retry is not None:
-            raise contract.LocalApiError('RATE_LIMITED', http_status=429,
+            raise contract.LocalApiError('LOCAL_API_RATE_LIMITED', http_status=429,
                                          retry_after_ms=retry)
         query = self._parse_query(request.raw_query, route)
-        if route.name in ('query', 'todos', 'calendar', 'resources') \
-                and not query.get('cursor'):
+        refresh_key = None
+        if (route.name in ('query', 'todos', 'calendar', 'resources')
+                and not query.get('cursor') and request.method != 'HEAD'):
             refresh_key = '|'.join((session_key, route.name,
                                     json.dumps(path_params, sort_keys=True),
                                     json.dumps({key: value for key, value in query.items()
                                                 if key not in ('cursor', 'page_size')},
                                                sort_keys=True, default=str),
                                     str(query.get('page_size', self._limits.page_size_default))))
-            retry = self._limiter.check_refresh(refresh_key)
+            retry = self._limiter.peek_refresh(refresh_key)
             if retry is not None:
                 raise contract.LocalApiError('LOCAL_API_REFRESH_TOO_SOON', http_status=429,
                                              retry_after_ms=retry)
         response = self._read(route, path_params, query, request, session_key)
+        if refresh_key is not None and response.status < 500:
+            # A failed read keeps the slot free so the user can retry now.
+            self._limiter.record_refresh(refresh_key)
         if cookie_header:
             response.headers['Set-Cookie'] = cookie_header
         return response
@@ -371,22 +394,26 @@ class LocalApiServer:
     def _authenticate(self, request: _Request) -> tuple[str, str | None]:
         header = request.headers.get('X-Openthu-Bootstrap') if request.headers else None
         if header:
-            state = self._bootstrap.verify(header)
+            state = self._bootstrap.consume(header)
+            if state == 'USED':
+                raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_USED', http_status=401)
             if state == 'EXPIRED':
                 raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_EXPIRED', http_status=401)
             if state != 'OK':
                 raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401)
             sid = self._sessions.issue()
             return sid, self._sessions.cookie(sid)
-        sid = security.cookie_value(request.headers.get('Cookie') if request.headers else None)
-        if not sid:
+        candidates = security.cookie_values(request.headers.get('Cookie')
+                                            if request.headers else None)
+        if not candidates:
             raise contract.LocalApiError('LOCAL_API_SESSION_REQUIRED', http_status=401)
-        state, _record = self._sessions.validate(sid)
-        if state == 'OK':
-            return sid, None
-        if state == 'IDLE_EXPIRED':
-            raise contract.LocalApiError('LOCAL_API_SESSION_EXPIRED', http_status=401)
-        if state == 'EXPIRED':
+        states = []
+        for sid in candidates:
+            state, _record = self._sessions.validate(sid)
+            if state == 'OK':
+                return sid, None
+            states.append(state)
+        if any(state in ('EXPIRED', 'IDLE_EXPIRED') for state in states):
             raise contract.LocalApiError('LOCAL_API_SESSION_EXPIRED', http_status=401)
         raise contract.LocalApiError('LOCAL_API_SESSION_INVALID', http_status=401)
 
@@ -411,7 +438,7 @@ class LocalApiServer:
             values[key] = value
         page_size = values.get('page_size')
         if page_size is not None:
-            if not page_size.isdigit():
+            if not re.fullmatch(r'[0-9]{1,3}', page_size):
                 raise contract.LocalApiError('INVALID_ARGUMENT_TYPE', http_status=400)
             page_size = int(page_size)
             if not 1 <= page_size <= self._limits.page_size_max:
@@ -460,7 +487,7 @@ class LocalApiServer:
         if not isinstance(raw, str) or len(raw) > self._limits.max_parameters_characters:
             raise contract.LocalApiError('LOCAL_API_PARAMETERS_TOO_LARGE', http_status=400)
         try:
-            value = json.loads(raw)
+            value = json.loads(raw, parse_constant=_reject_json_constant)
         except ValueError:
             raise contract.LocalApiError('LOCAL_API_QUERY_INVALID', http_status=400) from None
         if not isinstance(value, dict):
@@ -496,15 +523,43 @@ class LocalApiServer:
 
     # -- facade reads ------------------------------------------------------
 
-    def _call(self, name: str, *args: Any, request_id: str, **kwargs: Any) -> Any:
+    def _run_call(self, slot: threading.BoundedSemaphore | None, method: Any,
+                  args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
+        try:
+            return facade_module.call_with_token(method, *args, **kwargs)
+        finally:
+            if slot is not None:
+                try:
+                    slot.release()
+                except ValueError:
+                    pass
+
+    def _call(self, name: str, *args: Any, request_id: str,
+              priority: bool = False, **kwargs: Any) -> Any:
         method = getattr(self._facade, name)
         token = facade_module.CancelToken()
-        if self._executor is None:
+        executor = self._priority_executor if priority else self._read_executor
+        if executor is None:
             raise contract.LocalApiError('LOCAL_API_FACADE_UNAVAILABLE', http_status=502)
+        slot = None
+        if not priority:
+            # Capacity is held by the worker, not by this request: a stuck
+            # adapter keeps its slot, so the next expensive read fails fast
+            # instead of queueing behind it.  Health/services use the separate
+            # priority pool and stay available.
+            if not self._read_slots.acquire(blocking=False):
+                raise contract.LocalApiError('LOCAL_API_BUSY', http_status=503,
+                                             message='本地读取容量已满，请稍后重试。')
+            slot = self._read_slots
         try:
-            future = self._executor.submit(facade_module.call_with_token, method, *args,
-                                           cancel=token, **kwargs)
+            future = executor.submit(self._run_call, slot, method, args,
+                                     {**kwargs, 'cancel': token})
         except RuntimeError:
+            if slot is not None:
+                try:
+                    slot.release()
+                except ValueError:
+                    pass
             raise contract.LocalApiError('LOCAL_API_FACADE_UNAVAILABLE', http_status=503,
                                          message='本地服务正在关闭。') from None
         with self._inflight_lock:
@@ -537,6 +592,12 @@ class LocalApiServer:
 
     def _validate(self, envelope: Any, *, service_id: str, operation: str) -> dict[str, Any]:
         problems = contract.check_envelope(envelope)
+        if not problems and isinstance(envelope, Mapping):
+            source = envelope.get('source') if isinstance(envelope.get('source'), Mapping) else {}
+            if source.get('service_id') != service_id:
+                problems.append('source.service_id does not match the requested route')
+            if source.get('operation') != operation:
+                problems.append('source.operation does not match the requested operation')
         if problems:
             self._logger.warning('local_api_invalid_envelope instance=%s count=%s',
                                  self.instance_id, len(problems))
@@ -607,7 +668,7 @@ class LocalApiServer:
         return 'local', route.name
 
     def _health_envelope(self, request: _Request) -> dict[str, Any]:
-        health = self._call('health', request_id=request.request_id)
+        health = self._call('health', request_id=request.request_id, priority=True)
         if not isinstance(health, Mapping):
             raise contract.LocalApiError('LOCAL_API_FACADE_INVALID_RESPONSE', http_status=502)
         status = health.get('status') if health.get('status') in source_state.ENVELOPE_STATUSES \
@@ -635,7 +696,7 @@ class LocalApiServer:
     def _services_envelope(self, query: Mapping[str, Any], request: _Request) -> dict[str, Any]:
         envelope = self._call('services', query=query.get('query'),
                               category=query.get('category'),
-                              request_id=request.request_id)
+                              request_id=request.request_id, priority=True)
         envelope = self._validate(envelope, service_id='local', operation='services')
         rows = facade_module.normalise_service_list(envelope.get('items'))
         envelope['items'] = rows
@@ -646,9 +707,11 @@ class LocalApiServer:
         return envelope
 
     def _detail_envelope(self, service_id: str, request: _Request) -> dict[str, Any]:
-        describe = self._call('describe', service_id, request_id=request.request_id)
-        health = self._call('health', service_id=service_id, request_id=request.request_id)
-        catalog = self._call('services', request_id=request.request_id)
+        describe = self._call('describe', service_id, request_id=request.request_id,
+                              priority=True)
+        health = self._call('health', service_id=service_id, request_id=request.request_id,
+                            priority=True)
+        catalog = self._call('services', request_id=request.request_id, priority=True)
         if not isinstance(describe, Mapping) or not isinstance(health, Mapping):
             raise contract.LocalApiError('LOCAL_API_FACADE_INVALID_RESPONSE', http_status=502)
         status = health.get('status') if health.get('status') in source_state.ENVELOPE_STATUSES \
@@ -737,10 +800,16 @@ class LocalApiServer:
         return response
 
     def _session_for_navigation(self, request: _Request) -> tuple[str | None, None]:
-        sid = security.cookie_value(request.headers.get('Cookie'))
-        if sid and self._sessions.validate(sid)[0] == 'OK':
-            return sid, None
-        return self._sessions.issue(), None
+        for sid in security.cookie_values(request.headers.get('Cookie')
+                                          if request.headers else None):
+            if self._sessions.validate(sid)[0] == 'OK':
+                return sid, None
+        try:
+            return self._sessions.issue(), None
+        except contract.LocalApiError:
+            # The shell is data-free; reaching the session cap must not turn it
+            # into a server error.
+            return None, None
 
 
 class _Handler(BaseHTTPRequestHandler):

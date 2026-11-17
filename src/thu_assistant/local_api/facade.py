@@ -10,6 +10,8 @@ never returns an empty success: it returns ``UNKNOWN`` with a classified error.
 """
 from __future__ import annotations
 
+from functools import lru_cache
+import inspect
 import threading
 from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 
@@ -35,7 +37,19 @@ class CancelToken:
 
 @runtime_checkable
 class BusinessFacade(Protocol):
-    """The only surface the local read API consumes."""
+    """The only surface the local read API consumes.
+
+    Adapters must:
+
+    * accept ``cancel`` and stop a blocking read within ``ui_wait_seconds``;
+      a non-cooperative adapter cannot be killed in-process and is documented
+      as a 6.1 integration requirement;
+    * return a ``result-envelope-v1`` whose ``source.service_id`` and
+      ``source.operation`` equal the requested ones (``todos`` uses
+      ``agenda``/``todos``, ``calendar`` uses ``agenda``/``calendar`` and
+      ``resources`` uses ``resources``/``resources``), so a mis-routed adapter
+      is rejected instead of being shown on the wrong card.
+    """
 
     def health(self, *, service_id: str | None = None,
                cancel: CancelToken | None = None) -> Mapping[str, Any]:
@@ -163,21 +177,29 @@ class UnavailableFacade:
         return self._gap('resources', 'resources')
 
 
+@lru_cache(maxsize=256)
+def _accepts_cancel(method: Any) -> bool:
+    """Whether a facade method declares ``cancel`` or ``**kwargs``.
+
+    Detecting this by calling and retrying on a ``TypeError`` whose text contains
+    ``cancel`` invokes a method twice when its own body raises such an error.
+    """
+    try:
+        parameters = inspect.signature(method).parameters
+    except (TypeError, ValueError):
+        return False
+    if 'cancel' in parameters:
+        return True
+    return any(item.kind is inspect.Parameter.VAR_KEYWORD
+               for item in parameters.values())
+
+
 def call_with_token(method, *args: Any, cancel: CancelToken | None = None,
                     **kwargs: Any) -> Any:
-    """Call a facade method, forwarding the token only when it accepts one.
-
-    A facade written before 6.2 (or a minimal test double) stays usable; the
-    local API still owns the deadline and the cancellation token.
-    """
-    if cancel is None:
-        return method(*args, **kwargs)
-    try:
+    """Call a facade method once, forwarding the token only when declared."""
+    if cancel is not None and _accepts_cancel(method):
         return method(*args, cancel=cancel, **kwargs)
-    except TypeError as error:
-        if 'cancel' not in str(error):
-            raise
-        return method(*args, **kwargs)
+    return method(*args, **kwargs)
 
 
 def normalise_service_list(value: Any) -> list[dict[str, Any]]:

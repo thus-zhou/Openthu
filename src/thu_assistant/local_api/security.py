@@ -29,6 +29,7 @@ import os
 from pathlib import Path
 import secrets
 import stat
+import threading
 import time
 from typing import Any, Callable, Mapping
 from urllib.parse import urlsplit
@@ -134,48 +135,54 @@ class SessionStore:
         self._max = max(1, int(max_sessions))
         self._secret = secret or secrets.token_bytes(32)
         self._sessions: dict[str, dict[str, Any]] = {}
+        self._lock = threading.RLock()
 
     def __len__(self) -> int:
-        return len(self._sessions)
+        with self._lock:
+            return len(self._sessions)
 
-    def _purge(self) -> None:
+    def _purge_locked(self) -> None:
         now = self._clock()
         for key in [key for key, row in self._sessions.items()
                     if now >= row['expires']]:
             self._sessions.pop(key, None)
 
     def issue(self) -> str:
-        self._purge()
-        while len(self._sessions) >= self._max:
-            oldest = min(self._sessions, key=lambda key: self._sessions[key]['created'])
-            self._sessions.pop(oldest, None)
-        sid = secrets.token_urlsafe(32)
-        now = self._clock()
-        self._sessions[_digest(sid)] = {'created': now, 'seen': now,
-                                        'expires': now + self._ttl,
-                                        'instance_id': self.instance_id}
-        return sid
+        """Mint a session; never evict an active one to make room."""
+        with self._lock:
+            self._purge_locked()
+            if len(self._sessions) >= self._max:
+                raise contract.LocalApiError('LOCAL_API_SESSION_LIMIT', http_status=429,
+                                             message='本地会话数量已达上限，请关闭多余会话。')
+            sid = secrets.token_urlsafe(32)
+            now = self._clock()
+            self._sessions[_digest(sid)] = {'created': now, 'seen': now,
+                                            'expires': now + self._ttl,
+                                            'instance_id': self.instance_id}
+            return sid
 
     def validate(self, sid: str | None) -> tuple[str, dict[str, Any] | None]:
         if not isinstance(sid, str) or not 20 <= len(sid) <= 200:
             return 'UNKNOWN', None
         key = _digest(sid)
-        record = self._sessions.get(key)
-        if record is None:
-            return 'UNKNOWN', None
-        now = self._clock()
-        if record.get('instance_id') != self.instance_id or now >= record['expires']:
-            self._sessions.pop(key, None)
-            return 'EXPIRED', None
-        if now - record['seen'] > self._idle:
-            self._sessions.pop(key, None)
-            return 'IDLE_EXPIRED', None
-        record['seen'] = now
-        return 'OK', record
+        with self._lock:
+            record = self._sessions.get(key)
+            if record is None:
+                return 'UNKNOWN', None
+            now = self._clock()
+            if record.get('instance_id') != self.instance_id or now >= record['expires']:
+                self._sessions.pop(key, None)
+                return 'EXPIRED', None
+            if now - record['seen'] > self._idle:
+                self._sessions.pop(key, None)
+                return 'IDLE_EXPIRED', None
+            record['seen'] = now
+            return 'OK', dict(record)
 
     def csrf_for(self, sid: str) -> str | None:
-        if _digest(sid) not in self._sessions:
-            return None
+        with self._lock:
+            if _digest(sid) not in self._sessions:
+                return None
         return hmac.new(self._secret, _digest(sid).encode('ascii'),
                         hashlib.sha256).hexdigest()[:32]
 
@@ -195,24 +202,42 @@ class SessionStore:
 
     def snapshot(self) -> list[dict[str, Any]]:
         """Metadata only; the raw session id is never stored."""
-        return [dict(row) for row in self._sessions.values()]
+        with self._lock:
+            return [dict(row) for row in self._sessions.values()]
 
     def clear(self) -> None:
-        self._sessions.clear()
+        with self._lock:
+            self._sessions.clear()
 
 
-def cookie_value(header: str | None) -> str | None:
+def cookie_values(header: str | None) -> list[str]:
+    """All values of our cookie name, in header order.
+
+    A loopback page on another port can write a same-name cookie (cookies are
+    host-scoped, not port-scoped).  Treating only the first value as the session
+    would let that page lock the dashboard out; every candidate is verified
+    instead.
+    """
     if not isinstance(header, str) or len(header) > 8192:
-        return None
+        return []
+    values = []
     for part in header.split(';'):
         name, separator, value = part.strip().partition('=')
         if separator and name == COOKIE_NAME:
-            return value.strip()
-    return None
+            candidate = value.strip()
+            if candidate:
+                values.append(candidate)
+    return values
+
+
+def cookie_value(header: str | None) -> str | None:
+    """The first candidate, kept for callers that only need one value."""
+    values = cookie_values(header)
+    return values[0] if values else None
 
 
 class BootstrapChannel:
-    """The protected local handover of the one-time-ish bootstrap token."""
+    """The protected local handover of a single-use bootstrap token."""
 
     def __init__(self, state_dir: Path | str, *, instance_id: str,
                  clock: Callable[[], float] = time.time,
@@ -225,6 +250,8 @@ class BootstrapChannel:
         self._clock = clock
         self._ttl = float(ttl)
         self.expires_at: float | None = None
+        self._used = False
+        self._lock = threading.RLock()
 
     def publish(self, *, port: int, base_url: str, pid: int) -> Path:
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -266,43 +293,85 @@ class BootstrapChannel:
         return self.expires_at is None or self._clock() >= self.expires_at
 
     def verify(self, token: str | None) -> str:
-        """Return ``OK``, ``EXPIRED`` or ``INVALID``."""
-        if self.expired():
-            return 'EXPIRED'
-        if not isinstance(token, str) or not 20 <= len(token) <= 200:
-            return 'INVALID'
-        return 'OK' if hmac.compare_digest(self.token, token) else 'INVALID'
+        """Return ``OK``, ``USED``, ``EXPIRED`` or ``INVALID``."""
+        with self._lock:
+            if self._used:
+                return 'USED'
+            if self.expired():
+                return 'EXPIRED'
+            if not isinstance(token, str) or not 20 <= len(token) <= 200:
+                return 'INVALID'
+            return 'OK' if hmac.compare_digest(self.token, token) else 'INVALID'
+
+    def consume(self, token: str | None) -> str:
+        """Verify and atomically spend the token; a second exchange fails."""
+        with self._lock:
+            state = self.verify(token)
+            if state == 'OK':
+                self._used = True
+                self.revoke()
+            return state
 
     def revoke(self) -> None:
-        try:
-            record = json.loads(self.path.read_text(encoding='utf-8'))
-        except (OSError, ValueError):
-            record = {}
-        if isinstance(record, dict) and record.get('instance_id') == self.instance_id:
+        with self._lock:
             try:
-                self.path.unlink(missing_ok=True)
-            except OSError:
-                pass
+                record = json.loads(self.path.read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                record = {}
+            if isinstance(record, dict) and record.get('instance_id') == self.instance_id:
+                try:
+                    self.path.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
 
 def _iso(epoch: float) -> str:
     return datetime.fromtimestamp(float(epoch), timezone.utc).isoformat(timespec='seconds')
 
 
+def _read_private_bootstrap(path: Path) -> bytes:
+    """Read from one verified descriptor; never follow a symlink."""
+    if os.name != 'posix' and os.path.islink(path):
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401)
+    flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
+    try:
+        descriptor = os.open(path, flags)
+    except FileNotFoundError:
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE',
+                                     http_status=401) from None
+    except OSError:
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID',
+                                     http_status=401) from None
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401)
+        if os.name == 'posix':
+            if stat.S_IMODE(info.st_mode) & 0o077 or info.st_uid != os.geteuid():
+                raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401)
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(descriptor, 65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > 65536:
+                raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401)
+            chunks.append(chunk)
+        return b''.join(chunks)
+    finally:
+        os.close(descriptor)
+
+
 def read_bootstrap(path: Path | str, *,
                    clock: Callable[[], float] = time.time) -> dict[str, Any]:
     """Read and validate a bootstrap file from the protected local channel."""
     target = Path(path)
+    data = _read_private_bootstrap(target)
     try:
-        info = target.stat()
-    except OSError:
-        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=401) from None
-    if os.name == 'posix':
-        if stat.S_IMODE(info.st_mode) & 0o077 or info.st_uid != os.geteuid():
-            raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401)
-    try:
-        record = json.loads(target.read_text(encoding='utf-8'))
-    except (OSError, ValueError):
+        record = json.loads(data.decode('utf-8'))
+    except (UnicodeDecodeError, ValueError):
         raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401) from None
     if not isinstance(record, dict) or record.get('schema') != BOOTSTRAP_SCHEMA:
         raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401)
@@ -339,8 +408,9 @@ class RateLimiter:
         self._max_keys = max(16, int(max_keys))
         self._hits: dict[str, list[float]] = {}
         self._refresh: dict[str, float] = {}
+        self._lock = threading.RLock()
 
-    def _prune(self, now: float) -> None:
+    def _prune_locked(self, now: float) -> None:
         for key in [key for key, hits in self._hits.items()
                     if not hits or now - hits[-1] >= self._window]:
             self._hits.pop(key, None)
@@ -349,28 +419,39 @@ class RateLimiter:
                 self._refresh.pop(key, None)
 
     def check_request(self, key: str) -> int | None:
-        now = self._clock()
-        self._prune(now)
-        hits = self._hits.setdefault(key, [])
-        hits[:] = [stamp for stamp in hits if now - stamp < self._window]
-        if len(hits) >= self._limit:
-            return max(1, int(math.ceil((hits[0] + self._window - now) * 1000)))
-        hits.append(now)
-        return None
+        with self._lock:
+            now = self._clock()
+            self._prune_locked(now)
+            hits = self._hits.setdefault(key, [])
+            hits[:] = [stamp for stamp in hits if now - stamp < self._window]
+            if len(hits) >= self._limit:
+                return max(1, int(math.ceil((hits[0] + self._window - now) * 1000)))
+            hits.append(now)
+            return None
 
-    def check_refresh(self, key: str) -> int | None:
+    def peek_refresh(self, key: str) -> int | None:
+        """Return a retry delay without consuming the refresh slot."""
         if self._refresh_min <= 0:
             return None
-        now = self._clock()
-        last = self._refresh.get(key)
-        if last is not None and now - last < self._refresh_min:
-            return max(1, int(math.ceil((self._refresh_min - (now - last)) * 1000)))
-        self._refresh[key] = now
-        return None
+        with self._lock:
+            now = self._clock()
+            last = self._refresh.get(key)
+            if last is not None and now - last < self._refresh_min:
+                return max(1, int(math.ceil((self._refresh_min - (now - last)) * 1000)))
+            return None
+
+    def record_refresh(self, key: str) -> None:
+        """Commit the slot only after a non-5xx read."""
+        if self._refresh_min <= 0:
+            return
+        with self._lock:
+            self._prune_locked(self._clock())
+            self._refresh[key] = self._clock()
 
     def clear(self) -> None:
-        self._hits.clear()
-        self._refresh.clear()
+        with self._lock:
+            self._hits.clear()
+            self._refresh.clear()
 
 
 def request_fingerprint(headers: Mapping[str, str]) -> str:

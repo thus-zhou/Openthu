@@ -13,6 +13,7 @@ from copy import deepcopy
 import hashlib
 import json
 import secrets
+import threading
 import time
 from typing import Any, Callable, Mapping
 
@@ -43,6 +44,7 @@ class PageStore:
         self._max_bytes = max(1024, int(max_bytes))
         self._entries: dict[str, dict[str, Any]] = {}
         self._cursors: dict[str, tuple[str, int]] = {}
+        self._lock = threading.RLock()
 
     def _purge(self) -> None:
         now = self._clock()
@@ -51,8 +53,8 @@ class PageStore:
 
     def _drop(self, key: str) -> None:
         self._entries.pop(key, None)
-        self._cursors = {token: value for token, value in self._cursors.items()
-                         if value[0] != key}
+        for token in [token for token, value in self._cursors.items() if value[0] == key]:
+            self._cursors.pop(token, None)
 
     def _slice(self, entry: Mapping[str, Any], offset: int) -> dict[str, Any]:
         items = entry['items']
@@ -85,50 +87,54 @@ class PageStore:
 
     def start(self, key: str, envelope: Mapping[str, Any], items: list[Any],
               page_size: int) -> dict[str, Any]:
-        self._purge()
-        base = deepcopy(dict(envelope))
-        trailing = base.get('next_cursor')
-        had_data = isinstance(base.get('data'), list) and base.get('data') == items
-        base.pop('items', None)
-        base.pop('data', None)
-        base['next_cursor'] = None
-        cost = len(json.dumps(items, ensure_ascii=False, default=str).encode('utf-8'))
-        if cost > self._max_bytes:
-            raise contract.LocalApiError('LOCAL_API_RESPONSE_TOO_LARGE', http_status=502,
-                                         message='结果超出本地显示上限，请缩小范围。')
-        while self._entries and (len(self._entries) >= self._max_entries
-                                 or sum(entry['bytes'] for entry in self._entries.values())
-                                 + cost > self._max_bytes):
-            self._drop(next(iter(self._entries)))
-        key_id = secrets.token_urlsafe(12)
-        entry = {'id': key_id, 'binding': key, 'base': base, 'items': deepcopy(items),
-                 'page_size': page_size, 'had_data': had_data,
-                 'trailing_cursor': trailing if isinstance(trailing, str) else None,
-                 'expires': self._clock() + self._ttl, 'bytes': cost, 'tokens': {}}
-        self._entries[key_id] = entry
-        return self._slice(entry, 0)
+        with self._lock:
+            self._purge()
+            base = deepcopy(dict(envelope))
+            trailing = base.get('next_cursor')
+            had_data = isinstance(base.get('data'), list) and base.get('data') == items
+            base.pop('items', None)
+            base.pop('data', None)
+            base['next_cursor'] = None
+            cost = len(json.dumps(items, ensure_ascii=False, default=str).encode('utf-8'))
+            if cost > self._max_bytes:
+                raise contract.LocalApiError('LOCAL_API_RESPONSE_TOO_LARGE', http_status=502,
+                                             message='结果超出本地显示上限，请缩小范围。')
+            while self._entries and (len(self._entries) >= self._max_entries
+                                     or sum(entry['bytes'] for entry in self._entries.values())
+                                     + cost > self._max_bytes):
+                self._drop(next(iter(self._entries)))
+            key_id = secrets.token_urlsafe(12)
+            entry = {'id': key_id, 'binding': key, 'base': base, 'items': deepcopy(items),
+                     'page_size': page_size, 'had_data': had_data,
+                     'trailing_cursor': trailing if isinstance(trailing, str) else None,
+                     'expires': self._clock() + self._ttl, 'bytes': cost, 'tokens': {}}
+            self._entries[key_id] = entry
+            return self._slice(entry, 0)
 
     def resume(self, cursor: str, key: str) -> dict[str, Any]:
-        self._purge()
-        if not isinstance(cursor, str) or not cursor.startswith(CURSOR_PREFIX + '.'):
-            raise contract.LocalApiError('LOCAL_API_QUERY_INVALID', http_status=400,
-                                         message='游标格式无效。')
-        if cursor not in self._cursors:
-            raise contract.LocalApiError('CURSOR_EXPIRED', http_status=400,
-                                         message='分页快照已过期，请重新读取。')
-        identifier, offset = self._cursors[cursor]
-        entry = self._entries.get(identifier)
-        if entry is None:
-            raise contract.LocalApiError('CURSOR_EXPIRED', http_status=400,
-                                         message='分页快照已过期，请重新读取。')
-        if entry['binding'] != key:
-            raise contract.LocalApiError('CURSOR_QUERY_MISMATCH', http_status=400,
-                                         message='游标与当前查询条件不一致。')
-        return self._slice(entry, offset)
+        with self._lock:
+            self._purge()
+            if not isinstance(cursor, str) or not cursor.startswith(CURSOR_PREFIX + '.'):
+                raise contract.LocalApiError('LOCAL_API_QUERY_INVALID', http_status=400,
+                                             message='游标格式无效。')
+            if cursor not in self._cursors:
+                raise contract.LocalApiError('CURSOR_EXPIRED', http_status=400,
+                                             message='分页快照已过期，请重新读取。')
+            identifier, offset = self._cursors[cursor]
+            entry = self._entries.get(identifier)
+            if entry is None:
+                raise contract.LocalApiError('CURSOR_EXPIRED', http_status=400,
+                                             message='分页快照已过期，请重新读取。')
+            if entry['binding'] != key:
+                raise contract.LocalApiError('CURSOR_QUERY_MISMATCH', http_status=400,
+                                             message='游标与当前查询条件不一致。')
+            return self._slice(entry, offset)
 
     def clear(self) -> None:
-        self._entries.clear()
-        self._cursors.clear()
+        with self._lock:
+            self._entries.clear()
+            self._cursors.clear()
 
     def __len__(self) -> int:
-        return len(self._entries)
+        with self._lock:
+            return len(self._entries)
