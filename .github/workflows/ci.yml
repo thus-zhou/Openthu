@@ -6,6 +6,10 @@ permissions:
   contents: read
 jobs:
   test:
+    # The machine gate matches the two platform job names exactly, so the
+    # default 3.12 rows must stay "test (<os>)" while the extra 3.13 row keeps
+    # its version suffix.  A plain matrix would name every row with both values.
+    name: ${{ matrix.python-version == '3.12' && format('test ({0})', matrix.os) || format('test ({0}, {1})', matrix.os, matrix.python-version) }}
     strategy:
       fail-fast: false
       matrix:
