@@ -119,6 +119,8 @@
     mp3: '音频', m4a: '音频', wav: '音频', flac: '音频',
     txt: '文本', md: '文本', json: '数据', xml: '数据', yaml: '数据', yml: '数据'
   };
+  const RESOURCE_KINDS = ['PDF', '文档', '表格', '演示', '图片', '视频', '音频',
+                          '压缩包', '文本', '数据', '其他'];
   const CALENDAR_LIMIT_WARNINGS = new Set([
     'TIME_NOT_FROM_PERIOD_TABLE', 'PERIOD_TABLE_MISSING',
     'CALENDAR_PERIOD_TABLE_SEMESTER_MISMATCH', 'PERIODS_MISSING'
@@ -162,9 +164,28 @@
     return parts;
   }
 
+  function parseSourceTime(value) {
+    if (value === null || value === undefined) return NaN;
+    if (value instanceof Date) return value.getTime();
+    let raw = String(value).trim();
+    if (!raw) return NaN;
+    // A source DATE_TIME without an offset is a Shanghai wall-clock value in
+    // local-read-api-v1.  Letting the browser parse it would make overdue and
+    // display depend on the machine's timezone.
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(raw)) {
+      raw += '+08:00';
+    }
+    return Date.parse(raw);
+  }
+
   function dateOf(value) {
-    if (!value) return null;
-    const parsed = value instanceof Date ? value : new Date(value);
+    if (value === null || value === undefined || value === '') return null;
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+    if (typeof value === 'number') {
+      const numeric = new Date(value);
+      return Number.isNaN(numeric.getTime()) ? null : numeric;
+    }
+    const parsed = new Date(parseSourceTime(value));
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
@@ -215,6 +236,10 @@
     const location = (parsed.pathname || '') + '?' + (parsed.search || '');
     if (/(?:^|\/)(?:cas|sso|login|auth|oauth|idp)(?:\/|$)/i.test(parsed.pathname || '')) return false;
     if (/(?:^|[?&])(?:service|ticket|client_id|redirect_uri)=/i.test(location)) return false;
+    const params = new URLSearchParams(parsed.search || '');
+    for (const key of params.keys()) {
+      if (/^(?:service|ticket|client_id|redirect_uri)$/i.test(key)) return false;
+    }
     return true;
   }
 
@@ -322,11 +347,6 @@
     return STATUS_LABELS[key] || text(value, 40) || '状态未知';
   }
 
-  function formatCount(value, noun) {
-    if (!Number.isInteger(value)) return '数量未知';
-    return value + ' 条' + (noun || '');
-  }
-
   function formatBytes(value) {
     if (!Number.isInteger(value) || value < 0) return '大小未知';
     if (value < 1024) return value + ' B';
@@ -359,6 +379,7 @@
 
   function courseKind(row) {
     const key = text(row && (row.role || row.type || row.kind), 40).toLowerCase();
+    if (key === 'ta') return 'assistant';
     return KIND_LABELS[key] ? key : 'other';
   }
 
@@ -404,7 +425,7 @@
       if (kind) return kind;
     }
     const declared = text(item.kind, 40);
-    return declared || '其他';
+    return RESOURCE_KINDS.indexOf(declared) >= 0 ? declared : '其他';
   }
 
   function filterResources(items, filters) {
@@ -551,9 +572,9 @@
     const limitation = warnings.some(function (warning) {
       return CALENDAR_LIMIT_WARNINGS.has(warning);
     });
-    const startMs = when.start ? Date.parse(when.start) : NaN;
-    const endMs = when.end ? Date.parse(when.end) : NaN;
-    const nowMs = Date.parse(nowIso || new Date().toISOString());
+    const startMs = parseSourceTime(when.start);
+    const endMs = parseSourceTime(when.end);
+    const nowMs = parseSourceTime(nowIso || new Date().toISOString());
     let overdue = false;
     if (when.kind === 'DATE') overdue = Boolean(when.date && when.date < todayIso(nowIso));
     else if (when.kind === 'DATE_TIME' && Number.isFinite(startMs)) {
@@ -683,7 +704,9 @@
   }
 
   function severityRank(tone) {
-    return {error: 0, auth: 1, limited: 2, partial: 3, unknown: 4, empty: 5, ok: 6}[tone] || 4;
+    const ranks = {error: 0, auth: 1, limited: 2, partial: 3, unknown: 4, empty: 5, ok: 6};
+    const rank = ranks[tone];
+    return rank === undefined ? 4 : rank;
   }
 
   function attentionSummary(models) {
@@ -711,9 +734,10 @@
     KIND_LABELS: KIND_LABELS,
     text: text, asList: asList, todayIso: todayIso, formatTimestamp: formatTimestamp,
     formatDate: formatDate, addDays: addDays, isSchoolHttps: isSchoolHttps,
+    parseSourceTime: parseSourceTime,
     linkFor: linkFor, stateInfo: stateInfo, freshnessInfo: freshnessInfo,
     completenessInfo: completenessInfo, envelopeModel: envelopeModel,
-    statusLabel: statusLabel, formatCount: formatCount, formatBytes: formatBytes,
+    statusLabel: statusLabel, formatBytes: formatBytes,
     semesterOptions: semesterOptions, courseKind: courseKind,
     filterCourses: filterCourses, courseFacets: courseFacets,
     resourceType: resourceType, filterResources: filterResources,

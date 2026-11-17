@@ -183,6 +183,7 @@ class SyntheticFacade:
         self.courses = deepcopy(options.get('courses') or default_courses())
         self.resources_pages = deepcopy(options.get('resources_pages') or default_resources())
         self.resource_page_size = int(options.get('resource_page_size') or 50)
+        self.resources_fail_cursor = options.get('resources_fail_cursor')
         self.todos_items = deepcopy(options.get('todos_items') or [
             {'event_id': 'SYN-EVENT-1', 'title': '合成作业截止',
              'due_at': iso(datetime.combine(TODAY + timedelta(days=1), datetime.min.time()).replace(hour=23, minute=59, tzinfo=TZ)),
@@ -330,6 +331,8 @@ class SyntheticFacade:
                                          'semester': semester, 'cursor': cursor}))
         self._wait('resources', cancel)
         self._fail('resources')
+        if self.resources_fail_cursor and str(cursor or '') == str(self.resources_fail_cursor):
+            raise CampusError('SOURCE_TIMEOUT')
         if not semester:
             value = valid_envelope('resources', 'resources', status='ERROR',
                                    complete=False, source_complete=False,
@@ -365,6 +368,15 @@ class SyntheticFacade:
             if query not in haystack:
                 return False
         return True
+
+
+class NoSportsFacade(SyntheticFacade):
+    """A facade without the query operation, used for the 501 capability path."""
+
+    def __getattribute__(self, name):
+        if name == 'query':
+            raise AttributeError(name)
+        return super().__getattribute__(name)
 
 
 def make_server(tmp_path: Path, facade, *, static_dir=WEB, clock=None, limits=None):
@@ -407,11 +419,14 @@ def scene_factory(browser, tmp_path):
     resources: list[tuple] = []
 
     def start(facade=None, *, viewport=(1280, 900), clock=None, limits=None,
-              hash_route: str = ''):
+              hash_route: str = '', timezone_id: str | None = None):
         facade = facade if facade is not None else SyntheticFacade()
         clock = clock or FakeClock()
         server = make_server(tmp_path, facade, clock=clock, limits=limits)
-        context = browser.new_context(viewport={'width': viewport[0], 'height': viewport[1]})
+        context_options = {'viewport': {'width': viewport[0], 'height': viewport[1]}}
+        if timezone_id:
+            context_options['timezone_id'] = timezone_id
+        context = browser.new_context(**context_options)
         page = context.new_page()
         records: list[dict] = []
         console: list[tuple[str, str]] = []
@@ -847,6 +862,7 @@ def test_overview_renders_seven_cards_and_readonly_notice(scene_factory) -> None
     assert '只读看板' in body
     assert '成绩、密钥、写入和模型生成不在看板中提供' in body
     assert scene.page.locator('[data-action="cancel-all"]').count() == 1
+    assert scene.page.locator('[data-action="cancel-all"]').is_hidden()
 
 
 def test_overview_card_shows_source_time_freshness_completeness_and_next_step(scene_factory) -> None:
@@ -923,6 +939,7 @@ def test_cancelled_loading_keeps_other_cards_and_reports_cancelled(scene_factory
     scene = scene_factory(facade)
     page = scene.page
     page.wait_for_selector('[data-card="todos"] [data-action="cancel"]', timeout=5000)
+    assert page.locator('[data-action="cancel-all"]').is_visible()
     page.click('[data-card="todos"] [data-action="cancel"]')
     page.wait_for_selector('[data-card="todos"][data-card-state="CANCELLED"]', timeout=5000)
     assert '已取消' in page.locator('[data-card="todos"]').inner_text()
@@ -1281,7 +1298,7 @@ def test_health_page_shows_implementation_runtime_and_evidence(scene_factory) ->
 
 
 def test_unimplemented_capability_has_its_own_text(scene_factory) -> None:
-    facade = SyntheticFacade(failures={'orders': 'ADAPTER_REQUIRED'})
+    facade = NoSportsFacade()
     scene = scene_factory(facade)
     page = scene.page
     wait_cards(page)
@@ -1289,6 +1306,17 @@ def test_unimplemented_capability_has_its_own_text(scene_factory) -> None:
     assert card.locator('[data-state="NOT_ENABLED"]').count() == 1
     assert '未启用' in card.inner_text()
     assert '没有记录' not in card.inner_text()
+
+
+def test_a_facade_failure_is_not_relabelled_as_not_enabled(scene_factory) -> None:
+    facade = SyntheticFacade(failures={'orders': 'ADAPTER_REQUIRED'})
+    scene = scene_factory(facade)
+    page = scene.page
+    wait_cards(page)
+    card = page.locator('[data-card="orders"]')
+    assert card.locator('[data-state="NOT_ENABLED"]').count() == 0
+    assert '未启用' not in card.inner_text()
+    assert '业务门面不可用' in card.inner_text()
 
 
 # ---------------------------------------------------------------------------
@@ -1517,3 +1545,288 @@ def test_refresh_and_detail_navigation_do_not_write(scene_factory) -> None:
                   or re.search(r'/(execute|prepare|submit|pay|cancel|renew|book|upload)',
                                urlsplit(record['url']).path)]
     assert write_like == []
+
+
+# ---------------------------------------------------------------------------
+# Audit regressions: concurrency, navigation, failure text and model edges
+# ---------------------------------------------------------------------------
+
+def _resource_row(uid: str, title: str, semester: str, *, mime: str = 'application/pdf',
+                  course: str = 'SYN-COURSE-A') -> dict:
+    return {'stable_resource_uid': uid, 'title': title, 'course_id': course,
+            'course_name': '合成课程甲' if course == 'SYN-COURSE-A' else '合成课程乙',
+            'semester': semester, 'mime_type': mime, 'size_bytes': 100,
+            'state': 'ACTIVE'}
+
+
+def test_filter_change_during_load_more_discards_the_old_page_and_cursor(scene_factory) -> None:
+    pages = [
+        [_resource_row('learn:FILE:RACE-1', '合成秋季资料一', '2026-2027-1'),
+         _resource_row('learn:FILE:RACE-2', '合成秋季资料二', '2026-2027-1')],
+        [_resource_row('learn:FILE:RACE-3', '合成秋季资料三', '2026-2027-1'),
+         _resource_row('learn:FILE:RACE-4', '合成秋季资料四', '2026-2027-1')],
+        [_resource_row('learn:FILE:RACE-S1', '合成春季资料一', '2026-2027-2'),
+         _resource_row('learn:FILE:RACE-S2', '合成春季资料二', '2026-2027-2')],
+    ]
+    facade = SyntheticFacade(resources_pages=pages, resource_page_size=2,
+                             delays={'resources': 1.2})
+    scene = scene_factory(facade)
+    page = scene.page
+    open_page(page, 'resources')
+    wait_quiet(page, '[data-resource-results]')
+    assert page.locator('[data-resource-results] .resource').count() == 2
+    page.click('[data-resource-results] [data-action="load-more"]')
+    page.select_option('[data-form="resources"] select[data-filter="semester"]', '2026-2027-2')
+    page.click('[data-form="resources"] button[type="submit"]')
+    page.wait_for_function(
+        "() => document.querySelector('[data-resource-results]').textContent.includes('合成春季资料一')",
+        timeout=10000)
+    page.wait_for_function(
+        "() => !document.querySelector('[data-resource-results] .loading-state')",
+        timeout=10000)
+    body = page.inner_text('[data-resource-results]')
+    assert '合成春季资料一' in body and '合成春季资料二' in body
+    assert '合成秋季资料' not in body
+    assert '来源共 2 条' in body
+    assert '来源共 4 条' not in body
+    assert page.locator('[data-action="load-more"]').count() == 0
+    assert page.locator('[data-form="resources"] select[data-filter="semester"]').input_value() \
+        == '2026-2027-2'
+
+
+def test_navigation_back_to_resources_keeps_selection_and_loaded_pages(scene_factory) -> None:
+    scene = scene_factory(SyntheticFacade(resource_page_size=2))
+    page = scene.page
+    open_page(page, 'resources')
+    wait_quiet(page, '[data-resource-results]')
+    assert page.locator('[data-resource-results] .resource').count() == 2
+    page.click('[data-resource-results] [data-action="load-more"]')
+    page.wait_for_function(
+        "() => document.querySelectorAll('[data-resource-results] .resource').length === 3",
+        timeout=10000)
+    page.check('input[data-select-uid="learn:FILE:REC-001"]')
+    assert '1 项已选择' in page.inner_text('[data-selection-panel]')
+    before = len([row for row in json_requests(scene)
+                  if row['parsed'].path == '/api/v1/resources'])
+    open_page(page, 'courses')
+    page.wait_for_selector('[data-course-results] .item', timeout=10000)
+    open_page(page, 'resources')
+    wait_quiet(page, '[data-resource-results]')
+    after = len([row for row in json_requests(scene)
+                 if row['parsed'].path == '/api/v1/resources'])
+    assert after == before
+    assert '1 项已选择' in page.inner_text('[data-selection-panel]')
+    assert page.locator('input[data-select-uid="learn:FILE:REC-001"]').is_checked()
+    assert page.locator('[data-resource-results] .resource').count() == 3
+
+
+def test_course_link_clears_previous_resource_query_and_kind(scene_factory) -> None:
+    scene = scene_factory()
+    page = scene.page
+    open_page(page, 'resources')
+    wait_quiet(page, '[data-resource-results]')
+    page.fill('#resource-query', '讲义一')
+    page.click('[data-form="resources"] button[type="submit"]')
+    wait_quiet(page, '[data-resource-results]')
+    assert page.locator('[data-resource-results] .resource').count() == 1
+    open_page(page, 'courses')
+    page.wait_for_selector('[data-course="SYN-COURSE-A"] [data-action="open-resources"]',
+                           timeout=10000)
+    page.click('[data-course="SYN-COURSE-A"] [data-action="open-resources"]')
+    page.wait_for_selector('#view[data-view="resources"]', timeout=10000)
+    wait_quiet(page, '[data-resource-results]')
+    assert page.input_value('#resource-query') == ''
+    assert page.input_value('#resource-kind') == ''
+    body = page.inner_text('[data-resource-results]')
+    assert '来源共 2 条' in body
+    assert page.locator('[data-resource-results] .resource').count() == 2
+
+
+def test_calendar_list_uses_unknown_node_for_an_undated_item(scene_factory) -> None:
+    scene = scene_factory()
+    page = scene.page
+    open_page(page, 'calendar')
+    page.wait_for_selector('[data-event="SYN-UID-UNDATED"]', timeout=10000)
+    page.click('[data-action="calendar-mode"][data-mode="list"]')
+    page.wait_for_selector('[data-event="SYN-UID-UNDATED"]', timeout=10000)
+    item = page.locator('[data-event="SYN-UID-UNDATED"]')
+    text = item.inner_text()
+    assert item.get_attribute('data-kind') == 'UNKNOWN'
+    assert '时间未知' in text
+    assert '原始周期' in text
+    assert '不编造日期' in text
+    assert '精确时间' not in text
+
+
+def test_health_page_has_a_refresh_control_that_forces_both_reads(scene_factory) -> None:
+    scene = scene_factory()
+    page = scene.page
+    open_page(page, 'health')
+    wait_quiet(page, '[data-health-results]')
+    health_before = len([call for call in scene.facade.calls if call[0] == 'health'])
+    services_before = len([call for call in scene.facade.calls if call[0] == 'services'])
+    page.click('[data-action="refresh-health"]')
+    page.wait_for_timeout(600)
+    page.wait_for_selector('[data-health-row="learn"]', timeout=10000)
+    assert len([call for call in scene.facade.calls if call[0] == 'health']) > health_before
+    assert len([call for call in scene.facade.calls if call[0] == 'services']) > services_before
+
+
+def test_failed_load_more_keeps_the_cursor_and_offers_a_retry(scene_factory) -> None:
+    facade = SyntheticFacade(resource_page_size=2, resources_fail_cursor='page2')
+    scene = scene_factory(facade)
+    page = scene.page
+    open_page(page, 'resources')
+    wait_quiet(page, '[data-resource-results]')
+    assert page.locator('[data-resource-results] .resource').count() == 2
+    page.click('[data-resource-results] [data-action="load-more"]')
+    page.wait_for_function(
+        "() => { const node = document.querySelector('[data-action=\"load-more\"]');"
+        " return node && node.textContent.includes('重试本页'); }",
+        timeout=10000)
+    body = page.inner_text('[data-resource-results]')
+    assert '业务门面不可用' in body
+    assert '未启用' not in body
+    assert page.locator('[data-resource-results] .resource').count() == 2
+    cursors = [row['query'].get('cursor', [''])[0] for row in json_requests(scene)
+               if row['parsed'].path == '/api/v1/resources']
+    assert 'page2' in cursors
+
+
+def test_api_timeout_is_not_reported_as_user_cancellation(scene_factory) -> None:
+    scene = scene_factory()
+    page = scene.page
+    result = page.evaluate("""async () => {
+      const api = OpenthuApi.createApi({
+        base: '', timeoutMs: 25,
+        fetchImpl: (url, options) => new Promise((resolve, reject) => {
+          options.signal.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        })
+      });
+      return await api.get('/api/v1/health');
+    }""")
+    assert result['timedOut'] is True
+    assert result['aborted'] is False
+    cancelled = page.evaluate("""async () => {
+      const api = OpenthuApi.createApi({
+        base: '', timeoutMs: 5000,
+        fetchImpl: (url, options) => new Promise((resolve, reject) => {
+          options.signal.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        })
+      });
+      const controller = new AbortController();
+      const pending = api.get('/api/v1/health', {}, {signal: controller.signal});
+      controller.abort();
+      return await pending;
+    }""")
+    assert cancelled['aborted'] is True
+    assert cancelled['timedOut'] is False
+    assert '读取超时' in (ASSETS / 'app.js').read_text(encoding='utf-8')
+
+
+def test_attention_summary_puts_error_before_limited_and_partial(scene_factory) -> None:
+    scene = scene_factory()
+    headline = scene.page.evaluate("""() => OpenthuModel.attentionSummary([
+      {state: 'PARTIAL', tone: 'partial', label: '部分读取'},
+      {state: 'ERROR', tone: 'error', label: '读取失败'},
+      {state: 'LIMITED', tone: 'limited', label: '来源受限'}
+    ]).headline""")
+    assert headline == '3 处需要留意：读取失败、来源受限、部分读取'
+
+
+def test_course_source_failure_does_not_say_the_filter_is_empty(scene_factory) -> None:
+    facade = SyntheticFacade(statuses={'courses': 'TIMEOUT'})
+    scene = scene_factory(facade)
+    page = scene.page
+    open_page(page, 'courses')
+    wait_quiet(page, '[data-course-results]')
+    body = page.inner_text('[data-course-results]')
+    assert '本次未读取到课程' in body
+    assert '当前筛选下没有课程' not in body
+
+
+def test_naive_source_time_is_read_as_shanghai_time_in_another_timezone(scene_factory) -> None:
+    scene = scene_factory(timezone_id='Europe/Berlin')
+    result = scene.page.evaluate("""() => {
+      const item = OpenthuModel.calendarItem({
+        event_uid: 'SYN-NAIVE', title: '合成无偏移日程',
+        time: {kind: 'DATE_TIME', start: '2026-11-18T09:00', end: '2026-11-18T10:00'},
+        time_semantics: 'INTERVAL', calendar_valid: true, status: 'ACTIVE'
+      }, '2026-11-18T08:00:00Z');
+      return {
+        formatted: OpenthuModel.formatTimestamp('2026-11-18T09:00'),
+        parsed: OpenthuModel.parseSourceTime('2026-11-18T09:00'),
+        expected: Date.UTC(2026, 10, 18, 1, 0, 0),
+        overdue: item.overdue
+      };
+    }""")
+    assert result['formatted'] == '2026-11-18 09:00'
+    assert result['parsed'] == result['expected']
+    assert result['overdue'] is True
+
+
+def test_filter_enums_cover_assistant_video_audio_data_and_other(scene_factory) -> None:
+    scene = scene_factory()
+    page = scene.page
+    open_page(page, 'courses')
+    page.wait_for_selector('#course-kind', timeout=10000)
+    assert page.locator('#course-kind option[value="assistant"]').count() == 1
+    open_page(page, 'resources')
+    page.wait_for_selector('#resource-kind', timeout=10000)
+    for value in ('视频', '音频', '数据', '其他'):
+        assert page.locator(f'#resource-kind option[value="{value}"]').count() == 1
+    model = page.evaluate("""() => ({
+      assistant: OpenthuModel.courseKind({role: 'assistant'}),
+      ta: OpenthuModel.courseKind({role: 'ta'}),
+      assistantRows: OpenthuModel.filterCourses([
+        {role: 'assistant', course_name: '助教课程'}, {role: 'student', course_name: '学生课程'}
+      ], {kind: 'assistant'}).length,
+      video: OpenthuModel.resourceType({mime_type: 'video/mp4'}),
+      audio: OpenthuModel.resourceType({mime_type: 'audio/mpeg'}),
+      data: OpenthuModel.resourceType({title: '导出.json'}),
+      other: OpenthuModel.resourceType({kind: '未知自定义类型'})
+    })""")
+    assert model['assistant'] == 'assistant' and model['ta'] == 'assistant'
+    assert model['assistantRows'] == 1
+    assert model['video'] == '视频' and model['audio'] == '音频'
+    assert model['data'] == '数据' and model['other'] == '其他'
+
+
+def test_type_filter_says_loaded_range_and_keeps_load_more_above_empty(scene_factory) -> None:
+    pages = [
+        [_resource_row('learn:FILE:TXT-1', '合成文本讲义', '2026-2027-1', mime='text/plain')],
+        [_resource_row('learn:FILE:PDF-1', '合成 PDF 讲义', '2026-2027-1', mime='application/pdf')],
+    ]
+    facade = SyntheticFacade(resources_pages=pages, resource_page_size=1)
+    scene = scene_factory(facade)
+    page = scene.page
+    open_page(page, 'resources')
+    wait_quiet(page, '[data-resource-results]')
+    page.select_option('#resource-kind', 'PDF')
+    page.click('[data-form="resources"] button[type="submit"]')
+    wait_quiet(page, '[data-resource-results]')
+    body = page.inner_text('[data-resource-results]')
+    assert '当前已加载范围' in body
+    assert '当前筛选下没有资料' not in body
+    assert page.locator('[data-action="load-more"]').count() == 1
+    page.click('[data-action="load-more"]')
+    page.wait_for_selector('[data-resource-results] .resource', timeout=10000)
+    body = page.inner_text('[data-resource-results]')
+    assert '合成 PDF 讲义' in body
+    assert '当前筛选下没有资料' not in body
+
+
+def test_encoded_ticket_parameter_is_not_a_school_link(scene_factory) -> None:
+    scene = scene_factory()
+    result = scene.page.evaluate("""() => ({
+      encoded: OpenthuModel.isSchoolHttps('https://tsinghua.edu.cn/?%74icket=ST-1'),
+      plain: OpenthuModel.isSchoolHttps('https://tsinghua.edu.cn/?x=1'),
+      link: OpenthuModel.linkFor('https://tsinghua.edu.cn/?%74icket=ST-1')
+    })""")
+    assert result['encoded'] is False
+    assert result['plain'] is True
+    assert not result['link']

@@ -31,7 +31,7 @@
   };
 
   const NOT_ENABLED_CODES = new Set([
-    'LOCAL_API_FACADE_UNAVAILABLE', 'ADAPTER_REQUIRED', 'FACADE_CAPABILITY_UNAVAILABLE',
+    'ADAPTER_REQUIRED', 'FACADE_CAPABILITY_UNAVAILABLE',
     'CAPABILITY_UNAVAILABLE', 'NOT_IMPLEMENTED', 'LOCAL_DASHBOARD_UNAVAILABLE'
   ]);
   const WARNING_LABELS = {
@@ -57,7 +57,7 @@
     routed: false,
     session: 'unknown',
     cache: new Map(),
-    semesters: {loaded: false, loading: null, options: [], manual: false, error: null},
+    semesters: {loaded: false, loading: null, options: [], error: null},
     data: {
       overview: {},
       courses: null,
@@ -74,8 +74,8 @@
     },
     resources: {
       items: [], cursor: null, cursorFilters: null, loaded: 0, total: null,
-      selection: M.createSelection(), titles: new Map(), loading: false, snapshot: 0,
-      error: null
+      selection: M.createSelection(), titles: new Map(),
+      generation: 0, signature: null, lastModel: null
     },
     pending: new Map()
   };
@@ -156,10 +156,14 @@
       '这是本地契约问题；请记录请求编号并稍后重试。', {requestId: requestId});
   }
 
-  function withNotEnabled(model, body) {
+  function withNotEnabled(model, body, httpStatus) {
     const code = body && body.error && typeof body.error.code === 'string'
       ? body.error.code : '';
-    if (!NOT_ENABLED_CODES.has(code)) return model;
+    const specific = NOT_ENABLED_CODES.has(code) && code !== 'LOCAL_API_FACADE_UNAVAILABLE';
+    // A 501 means the facade has no such operation (a capability gap).  A 502
+    // means the operation exists but failed; never relabel that as "not
+    // enabled", even though the current local API uses one generic code.
+    if (!specific && httpStatus !== 501) return model;
     const base = M.STATES.NOT_ENABLED;
     return Object.assign({}, model, {
       state: 'NOT_ENABLED', tone: base.tone, label: base.label,
@@ -373,7 +377,7 @@
       const hit = state.cache.get(signature);
       if (hit && Date.now() - hit.at < M.REFRESH_MIN_SECONDS * 1000) {
         return {kind: 'ok', body: hit.body, cached: true,
-                model: withNotEnabled(M.envelopeModel(hit.body), hit.body)};
+                model: withNotEnabled(M.envelopeModel(hit.body), hit.body, 200)};
       }
     }
     abortKey(key, true);
@@ -384,6 +388,10 @@
     const result = await client.get(path, params || {}, {signal: controller.signal});
     if (state.pending.get(key) === controller) state.pending.delete(key);
     syncBusy();
+    if (result.timedOut) {
+      return {kind: 'ok', body: null,
+              model: localModel('LIMITED', '读取超时。', '稍后重试；其他卡片不受影响。')};
+    }
     if (result.aborted) return {kind: 'cancelled'};
     if (result.networkError === 'LOCAL_API_NETWORK_UNAVAILABLE') {
       return {kind: 'ok', body: null, model: networkModel(result.requestId)};
@@ -398,7 +406,14 @@
       return {kind: 'session'};
     }
     let model = M.envelopeModel(body);
-    model = withNotEnabled(model, body);
+    model = withNotEnabled(model, body, result.httpStatus);
+    if (result.httpStatus > 501 && body.error
+        && body.error.code === 'LOCAL_API_FACADE_UNAVAILABLE') {
+      // The local API currently collapses facade exceptions into one 502
+      // code.  Show a real error, not the UNKNOWN display state.
+      model = localModel('ERROR', '业务门面不可用。', '稍后重试；其他卡片不受影响。',
+        {requestId: result.requestId});
+    }
     if (result.ok && body && body.status) state.cache.set(signature, {body: body, at: Date.now()});
     return {kind: 'ok', body: body, model: model};
   }
@@ -421,7 +436,6 @@
         state.semesters.error = result.model.state === 'READY' || result.model.state === 'EMPTY'
           ? null : result.model;
         state.semesters.options = M.semesterOptions(result.body);
-        state.semesters.manual = state.semesters.options.length === 0;
         if (state.semesters.options.length && !state.filters.courses.semester
             && !state.filters.resources.semester) {
           const current = state.semesters.options.filter(function (row) { return row.current; })[0]
@@ -490,6 +504,12 @@
     {key: 'orders', title: '体育预约', page: 'library'}
   ];
 
+  const LIBRARY_SECTIONS = [
+    {key: 'loans', title: '借阅', path: M.API.query + 'library/loans'},
+    {key: 'reservations', title: '图书馆预约', path: M.API.query + 'library/reservations'},
+    {key: 'orders', title: '体育预约', path: M.API.query + 'sports/orders'}
+  ];
+
   function renderOverviewPage() {
     const summary = h('p', {class: 'section-note', dataset: {overviewSummary: 'true'}},
       '正在读取总览…');
@@ -512,8 +532,8 @@
       h('h3', {class: 'card-title', text: title}),
       h('span', {class: 'badge badge-unknown', dataset: {state: 'IDLE'}}, '等待读取'));
     const meta = h('dl', {class: 'meta'});
-    const body = h('div');
-    const extra = h('div');
+    const body = h('div', {dataset: {cardBody: 'true'}});
+    const extra = h('div', {dataset: {cardExtra: 'true'}});
     const actions = h('div', {class: 'button-row'});
     const article = h('article', {class: 'card', dataset: {card: key, cardState: 'IDLE'}},
       head, meta, body, extra, actions);
@@ -530,11 +550,7 @@
     replace(view.body, [stateBlock(model), opts.items || '']);
     replace(view.extra, opts.cached ? cachedNote() : '');
     const actions = [];
-    if (opts.cancelKey) {
-      actions.push(actionButton('取消加载', 'cancel', opts.cancelKey, 'ghost'));
-    } else {
-      actions.push(actionButton(opts.retryLabel || '刷新', 'refresh-card', view.key));
-    }
+    actions.push(actionButton(opts.retryLabel || '刷新', 'refresh-card', view.key));
     if (opts.link) {
       actions.push(pageLink(opts.link.label, opts.link.page));
     } else if (view.page !== state.route) {
@@ -600,10 +616,10 @@
   }
 
   function overviewRequest(spec) {
-    const window = localTimeWindow();
+    const range = localTimeWindow();
     if (spec.key === 'health') return {path: M.API.health, params: {}};
     if (spec.key === 'todos') {
-      return {path: M.API.todos, params: {start_date: window.start, end_date: window.end,
+      return {path: M.API.todos, params: {start_date: range.start, end_date: range.end,
                                           page_size: M.PAGE_SIZE}};
     }
     if (spec.key === 'courses') {
@@ -689,7 +705,8 @@
       h('div', {class: 'field'},
         h('label', {for: 'course-kind'}, '类型'),
         h('select', {id: 'course-kind', dataset: {filter: 'kind'}},
-          [['', '全部'], ['student', '学生'], ['teacher', '教师'], ['other', '其他']]
+          [['', '全部'], ['student', '学生'], ['teacher', '教师'], ['assistant', '助教'],
+           ['other', '其他']]
             .map(function (pair) {
               return h('option', {value: pair[0], selected: pair[0] === state.filters.courses.kind},
                 pair[1]);
@@ -748,8 +765,10 @@
       (result.cached ? '；10 秒内复用上次读取结果' : '') + '。');
     const body = h('div', {}, stateBlock(model));
     if (!filtered.length) {
-      append(body, emptyBlock(model.state === 'EMPTY'
-        ? '没有符合条件的课程。' : '当前筛选下没有课程。'));
+      const emptyText = model.state === 'EMPTY' ? '没有符合条件的课程。'
+        : (['READY', 'PARTIAL'].indexOf(model.state) >= 0
+          ? '当前筛选下没有课程。' : '本次未读取到课程，见上方状态。');
+      append(body, emptyBlock(emptyText));
     } else {
       const list = h('ul', {class: 'item-list'});
       filtered.forEach(function (row) {
@@ -792,7 +811,8 @@
         h('label', {for: 'resource-kind'}, '类型'),
         h('select', {id: 'resource-kind', dataset: {filter: 'kind'}},
           [['', '全部'], ['PDF', 'PDF'], ['文档', '文档'], ['表格', '表格'], ['演示', '演示'],
-           ['图片', '图片'], ['压缩包', '压缩包'], ['文本', '文本'], ['其他', '其他']]
+           ['图片', '图片'], ['视频', '视频'], ['音频', '音频'], ['压缩包', '压缩包'],
+           ['文本', '文本'], ['数据', '数据'], ['其他', '其他']]
             .map(function (pair) {
               return h('option', {value: pair[0], selected: pair[0] === state.filters.resources.kind},
                 pair[1]);
@@ -816,8 +836,14 @@
       if (state.route !== 'resources') return;
       renderResourcesToolbar();
       renderResourceSelection();
-      if (state.filters.resources.semester) loadResources(true);
-      else renderResourcesPrompt();
+      if (!state.filters.resources.semester) { renderResourcesPrompt(); return; }
+      const signature = JSON.stringify(state.filters.resources);
+      if (state.resources.items.length && state.resources.signature === signature
+          && state.resources.lastModel) {
+        renderResourceResults(state.resources.lastModel, false, 0);
+      } else {
+        loadResources(true);
+      }
     });
   }
 
@@ -895,12 +921,57 @@
     replace(panel, parts);
   }
 
+  function renderResourceResults(model, cached, added) {
+    const results = dom.view.querySelector('[data-resource-results]');
+    if (!results) return;
+    const filtered = M.filterResources(state.resources.items, state.filters.resources);
+    const success = ['READY', 'EMPTY', 'PARTIAL'].indexOf(model.state) >= 0;
+    const header = h('div', {},
+      h('h2', {}, '资料列表'),
+      h('p', {class: 'section-note'},
+        model.label + '；已加载 ' + state.resources.items.length + ' 条' +
+        (state.resources.total !== null ? '，来源共 ' + state.resources.total + ' 条' : '') +
+        '；本次新增 ' + added + ' 条' +
+        (cached ? '；10 秒内复用上次读取结果' : '') + '。'),
+      stateBlock(model));
+    const more = state.resources.cursor
+      ? h('div', {class: 'button-row'},
+        h('button', {type: 'button', dataset: {action: 'load-more'}},
+          success ? '加载更多' : '重试本页'))
+      : null;
+    if (!filtered.length) {
+      if (more) append(header, more);
+      let message;
+      if (state.resources.cursor) {
+        message = '当前已加载范围内没有符合条件的资料；还有更多页，可继续加载。';
+      } else if (model.state === 'EMPTY') {
+        message = '没有符合条件的资料。';
+      } else if (!success) {
+        message = '本次未读取到资料，见上方状态。';
+      } else {
+        message = '当前筛选下没有资料。';
+      }
+      append(header, emptyBlock(message));
+    } else {
+      append(header, h('ul', {class: 'resource-list'},
+        filtered.map(function (row) { return resourceRow(row); })));
+      if (more) append(header, more);
+    }
+    replace(results, header);
+    renderResourceSelection();
+  }
+
   async function loadResources(reset, force) {
-    if (state.resources.loading) return;
     if (!state.filters.resources.semester) { renderResourcesPrompt(); return; }
     const results = dom.view.querySelector('[data-resource-results]');
     if (!results) return;
-    state.resources.loading = true;
+    // Every read owns a generation.  A filter change or a newer read starts a
+    // new generation, and an older response is never allowed to populate the
+    // new filter's items or cursor.
+    const generation = ++state.resources.generation;
+    abortKey('resources', true);
+    const filtersNow = Object.assign({}, state.filters.resources);
+    state.resources.signature = JSON.stringify(filtersNow);
     if (reset) {
       state.resources.items = [];
       state.resources.cursor = null;
@@ -911,7 +982,7 @@
         state.resources.titles.clear();
       }
       state.resources.loaded = 0;
-      state.resources.snapshot += 1;
+      state.resources.lastModel = null;
       replace(results, [h('h2', {}, '资料列表'), loadingBlock('正在读取资料…',
         function () { abortKey('resources'); }, 'resources')]);
       renderResourceSelection();
@@ -920,10 +991,10 @@
       if (more) { more.disabled = true; more.textContent = '正在加载…'; }
     }
     const cursor = reset ? null : state.resources.cursor;
-    const params = M.resourceQuery(state.filters.resources, cursor);
+    const params = M.resourceQuery(filtersNow, cursor);
     const result = await request('resources', M.API.resources, params,
       {label: '课程资料', cache: force !== true});
-    state.resources.loading = false;
+    if (generation !== state.resources.generation) return;
     if (result.kind === 'session' || state.route !== 'resources') return;
     if (result.kind === 'cancelled') {
       replace(results, [h('h2', {}, '资料列表'), emptyBlock('本次读取已取消。')]);
@@ -931,12 +1002,21 @@
       return;
     }
     const model = result.model;
-    if (model.state !== 'READY' && model.state !== 'EMPTY' && model.state !== 'PARTIAL'
-        && state.resources.items.length === 0) {
-      replace(results, [h('h2', {}, '资料列表'), stateBlock(model),
-        h('div', {class: 'button-row'},
-          actionButton('重试', 'refresh-resources', '', 'ghost'))]);
+    const success = ['READY', 'EMPTY', 'PARTIAL'].indexOf(model.state) >= 0;
+    if (!success) {
+      state.resources.lastModel = model;
       state.data.resources = model;
+      if (reset || state.resources.items.length === 0) {
+        state.resources.cursor = null;
+        state.resources.cursorFilters = null;
+        replace(results, [h('h2', {}, '资料列表'), stateBlock(model),
+          h('div', {class: 'button-row'},
+            actionButton('重试', 'refresh-resources', '', 'ghost'))]);
+      } else {
+        // A failed "load more" keeps the old cursor so the same page can be
+        // retried; it must not erase the pages already on screen.
+        renderResourceResults(model, result.cached === true, 0);
+      }
       renderResourceSelection();
       announce('课程资料：' + model.label + '。');
       return;
@@ -955,32 +1035,12 @@
       added += 1;
     });
     state.resources.cursor = result.body && result.body.next_cursor ? result.body.next_cursor : null;
-    state.resources.cursorFilters = Object.assign({}, state.filters.resources);
+    state.resources.cursorFilters = filtersNow;
     state.resources.total = model.paging.total;
     state.resources.loaded = state.resources.items.length;
+    state.resources.lastModel = model;
     state.data.resources = model;
-    const filtered = M.filterResources(state.resources.items, state.filters.resources);
-    const header = h('div', {},
-      h('h2', {}, '资料列表'),
-      h('p', {class: 'section-note'},
-        model.label + '；已加载 ' + state.resources.items.length + ' 条' +
-        (state.resources.total !== null ? '，来源共 ' + state.resources.total + ' 条' : '') +
-        '；本次新增 ' + added + ' 条' +
-        (result.cached ? '；10 秒内复用上次读取结果' : '') + '。'),
-      stateBlock(model));
-    if (!filtered.length) {
-      append(header, emptyBlock(model.state === 'EMPTY' ? '没有符合条件的资料。'
-        : '当前筛选下没有资料。'));
-    } else {
-      append(header, h('ul', {class: 'resource-list'},
-        filtered.map(function (row) { return resourceRow(row); })));
-    }
-    if (state.resources.cursor) {
-      append(header, h('div', {class: 'button-row'},
-        h('button', {type: 'button', dataset: {action: 'load-more'}}, '加载更多')));
-    }
-    replace(results, header);
-    renderResourceSelection();
+    renderResourceResults(model, result.cached === true, added);
     announce('课程资料：' + model.label + '，已加载 ' + state.resources.items.length + ' 条。');
   }
 
@@ -997,12 +1057,16 @@
     const filtersChanged = next.changed;
     state.filters.resources = next.filters;
     if (filtersChanged) {
+      state.resources.generation += 1;
       state.resources.selection.reset();
       state.resources.titles.clear();
       state.resources.cursor = null;
       state.resources.cursorFilters = null;
       state.resources.items = [];
       state.resources.total = null;
+      state.resources.loaded = 0;
+      state.resources.signature = null;
+      state.resources.lastModel = null;
     } else if (state.resources.items.length) {
       announce('筛选条件未变化；已选择的资料和当前分页保持不变。');
       return;
@@ -1015,9 +1079,9 @@
   // ---------------------------------------------------------------- calendar
 
   function renderCalendarPage() {
-    const window = localTimeWindow();
-    if (!state.filters.calendar.startDate) state.filters.calendar.startDate = window.start;
-    if (!state.filters.calendar.endDate) state.filters.calendar.endDate = window.end;
+    const range = localTimeWindow();
+    if (!state.filters.calendar.startDate) state.filters.calendar.startDate = range.start;
+    if (!state.filters.calendar.endDate) state.filters.calendar.endDate = range.end;
     const form = h('form', {class: 'toolbar', dataset: {form: 'calendar'}, novalidate: true});
     const toggles = h('div', {class: 'toggle-group', role: 'group', 'aria-label': '日程视图'},
       h('button', {type: 'button', dataset: {action: 'calendar-mode', mode: 'timeline'},
@@ -1194,7 +1258,7 @@
     if (!all.length) return emptyBlock('所选时间范围内没有日程。');
     const list = h('ul', {class: 'timeline-events'});
     all.forEach(function (item) {
-      const node = eventNode(item);
+      const node = (!item.valid || item.kind === 'UNKNOWN') ? unknownEventNode(item) : eventNode(item);
       node.dataset.date = item.dateKey || 'unknown';
       list.append(node);
     });
@@ -1209,12 +1273,7 @@
       '只读取既有记录；本页没有预约、取消、续借或付款按钮。办理请使用原有 MCP/CLI 受控流程。');
     const container = h('div', {class: 'cards', dataset: {libraryCards: 'true'}});
     replace(dom.view, [intro, container]);
-    const sections = [
-      {key: 'loans', title: '借阅', path: M.API.query + 'library/loans'},
-      {key: 'reservations', title: '图书馆预约', path: M.API.query + 'library/reservations'},
-      {key: 'orders', title: '体育预约', path: M.API.query + 'sports/orders'}
-    ];
-    sections.forEach(function (section) {
+    LIBRARY_SECTIONS.forEach(function (section) {
       const view = cardShell(section.key, section.title, 'library');
       container.append(view.article);
       loadLibrarySection(section, view);
@@ -1271,11 +1330,14 @@
   function renderHealthPage() {
     const container = h('div', {dataset: {healthResults: 'true'}});
     const services = h('section', {class: 'section', dataset: {serviceCatalog: 'true'}});
-    replace(dom.view, [container, services]);
+    const actions = h('div', {class: 'button-row'},
+      actionButton('刷新健康报告', 'refresh-health', '', 'ghost'));
+    replace(dom.view, [actions, container, services]);
     loadHealth(container, services);
   }
 
   async function loadHealth(container, services, force) {
+    if (!container) return;
     replace(container, [h('h2', {}, '服务健康'), loadingBlock('正在读取健康报告…',
       function () { abortKey('health-page'); }, 'health-page')]);
     const result = await request('health-page', M.API.health, {},
@@ -1366,12 +1428,15 @@
     state.cache.clear();
     state.data = {overview: {}, courses: null, resources: null, calendar: null,
                   calendarEnvelope: null, library: {}, health: null, services: null};
-    state.semesters = {loaded: false, loading: null, options: [], manual: false, error: null};
+    state.semesters = {loaded: false, loading: null, options: [], error: null};
     state.resources.items = [];
     state.resources.cursor = null;
     state.resources.cursorFilters = null;
     state.resources.total = null;
     state.resources.loaded = 0;
+    state.resources.generation += 1;
+    state.resources.signature = null;
+    state.resources.lastModel = null;
     state.resources.selection.reset();
     state.resources.titles.clear();
     dom.banner.hidden = false;
@@ -1408,6 +1473,12 @@
     if (action === 'refresh-card') { refreshCard(target.dataset.key); return; }
     if (action === 'refresh-courses') { loadCourses(true); return; }
     if (action === 'refresh-resources') { loadResources(true, true); return; }
+    if (action === 'refresh-health') {
+      const health = dom.view.querySelector('[data-health-results]');
+      const services = dom.view.querySelector('[data-service-catalog]');
+      loadHealth(health, services, true);
+      return;
+    }
     if (action === 'refresh-calendar') { loadCalendar(true); return; }
     if (action === 'load-more') { loadMoreResources(); return; }
     if (action === 'clear-selection') {
@@ -1424,9 +1495,15 @@
     }
     if (action === 'open-resources') {
       state.filters.resources.courseId = target.dataset.courseId || '';
+      state.filters.resources.query = '';
+      state.filters.resources.kind = '';
       if (target.dataset.semester) {
         state.filters.resources.semester = target.dataset.semester;
       }
+      // The old cursor and page set belong to the previous filter, not this
+      // course link.  Invalidate any in-flight read before navigating.
+      state.resources.generation += 1;
+      state.resources.signature = null;
       location.hash = '#/resources';
       return;
     }
@@ -1443,24 +1520,21 @@
       if (article) {
         const view = {key: key, title: spec.title, page: spec.page, article: article,
           head: article.querySelector('.card-head'), meta: article.querySelector('.meta'),
-          body: article.children[2], extra: article.children[3],
+          body: article.querySelector('[data-card-body]'),
+          extra: article.querySelector('[data-card-extra]'),
           actions: article.querySelector('.button-row')};
         loadOverviewCard(spec, view, true);
       }
       return;
     }
     if (state.route === 'library') {
-      const section = {
-        loans: {key: 'loans', title: '借阅', path: M.API.query + 'library/loans'},
-        reservations: {key: 'reservations', title: '图书馆预约',
-                       path: M.API.query + 'library/reservations'},
-        orders: {key: 'orders', title: '体育预约', path: M.API.query + 'sports/orders'}
-      }[key];
+      const section = LIBRARY_SECTIONS.filter(function (row) { return row.key === key; })[0];
       const article = dom.view.querySelector('[data-card="' + key + '"]');
       if (section && article) {
         const view = {key: key, title: section.title, page: 'library', article: article,
           head: article.querySelector('.card-head'), meta: article.querySelector('.meta'),
-          body: article.children[2], extra: article.children[3],
+          body: article.querySelector('[data-card-body]'),
+          extra: article.querySelector('[data-card-extra]'),
           actions: article.querySelector('.button-row')};
         loadLibrarySection(section, view, true);
       }

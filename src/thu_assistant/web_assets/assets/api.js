@@ -46,12 +46,13 @@
       const controller = new AbortController();
       const external = settings && settings.signal;
       let cancelled = false;
+      let timedOut = false;
       const abort = function () { cancelled = true; controller.abort(); };
       if (external) {
         if (external.aborted) abort();
         else external.addEventListener('abort', abort, {once: true});
       }
-      const timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+      const timer = setTimeout(function () { timedOut = true; controller.abort(); }, timeoutMs);
       try {
         const response = await fetchImpl(buildUrl(base, path, params), {
           method: 'GET',
@@ -75,24 +76,31 @@
           parsed = false;
         }
         if (!parsed || !body || typeof body !== 'object') {
-          return {ok: false, aborted: false, networkError: 'LOCAL_API_INVALID_JSON',
+          return {ok: false, aborted: false, timedOut: false,
+                  networkError: 'LOCAL_API_INVALID_JSON',
                   httpStatus: response.status, body: null, requestId: ''};
         }
         const requestId = typeof body.request_id === 'string' ? body.request_id : '';
         return {
           ok: response.ok,
           aborted: false,
+          timedOut: false,
           networkError: '',
           httpStatus: response.status,
           body: body,
           requestId: requestId
         };
       } catch (error) {
-        if (cancelled || (error && error.name === 'AbortError')) {
-          return {ok: false, aborted: true, networkError: '', httpStatus: 0,
-                  body: null, requestId: ''};
+        if (timedOut) {
+          return {ok: false, aborted: false, timedOut: true, networkError: '',
+                  httpStatus: 0, body: null, requestId: ''};
         }
-        return {ok: false, aborted: false, networkError: 'LOCAL_API_NETWORK_UNAVAILABLE',
+        if (cancelled || (error && error.name === 'AbortError')) {
+          return {ok: false, aborted: true, timedOut: false, networkError: '',
+                  httpStatus: 0, body: null, requestId: ''};
+        }
+        return {ok: false, aborted: false, timedOut: false,
+                networkError: 'LOCAL_API_NETWORK_UNAVAILABLE',
                 httpStatus: 0, body: null, requestId: ''};
       } finally {
         clearTimeout(timer);
