@@ -55,7 +55,7 @@ class BusinessFacade:
         self.owner = owner
         self.env = dict(os.environ if env is None else env)
         self.clock = clock or time.time
-        self.requests = RequestRegistry()
+        self.requests = RequestRegistry(clock=self.clock)
         self.resources = resources
         self.media = media
         self.academics = academics
@@ -68,13 +68,19 @@ class BusinessFacade:
         self._registration_signature = None
         self._registration_at = 0.0
         self._registration_ttl = 5.0
+        self._registration_failures: list[dict] = []
 
     # -- providers ---------------------------------------------------------
     def service_ids(self) -> tuple[str, ...]:
+        """Current catalog ids plus the pseudo services.
+
+        Recomputed on every read so ``refresh_service_directory`` is visible
+        without a process restart; the catalog files are small.
+        """
         if self._service_ids is not None:
             return self._service_ids
         from .. import catalog
-        ids = []
+        ids: list[str] = []
         try:
             for row in catalog.load_services():
                 identifier = row.get('id') if isinstance(row, dict) else None
@@ -82,14 +88,13 @@ class BusinessFacade:
                     ids.append(identifier)
         except Exception:
             ids = []
-        for fallback in ('info', 'learn', 'library', 'sports'):
+        for fallback in ('info', 'learn', 'library', 'sports', 'campus'):
             if fallback not in ids:
                 ids.append(fallback)
         from .. import local_ops
         if local_ops.SERVICE_ID not in ids:
             ids.append(local_ops.SERVICE_ID)
-        self._service_ids = tuple(ids)
-        return self._service_ids
+        return tuple(ids)
 
     def submissions(self):
         """Build the 5.3 boundary once; a failure stays a capability gap."""
@@ -138,17 +143,20 @@ class BusinessFacade:
         return [entry for entry in entries if entry.service_id == service_id]
 
     def _cached_registrations(self) -> list[reg.Registration]:
-        """Rebuild only when a switch changed; descriptions run on every call."""
+        """Rebuild only when a switch or the catalog changed."""
         from ..queries import describe as describe_queries
-        signature = tuple(sorted((key, value) for key, value in os.environ.items()
-                                 if key.startswith(('THU_', 'OPENTHU_'))))
+        service_ids = self.service_ids()
+        signature = (tuple(sorted((key, str(value)) for key, value in self.env.items()
+                                  if key.startswith(('THU_', 'OPENTHU_')))),
+                     len(service_ids), tuple(service_ids[:3]))
         now = time.monotonic()
         if (self._registration_cache is not None and signature == self._registration_signature
                 and now - self._registration_at < self._registration_ttl):
             return self._registration_cache
-        entries = reg.registrations(self.providers(), service_ids=self.service_ids(),
-                                    describe=describe_queries)
+        entries, failures = reg.registrations(self.providers(), service_ids=service_ids,
+                                              describe=describe_queries, env=self.env)
         self._registration_cache = entries
+        self._registration_failures = failures
         self._registration_signature = signature
         self._registration_at = now
         return entries
@@ -184,14 +192,28 @@ class BusinessFacade:
             'services': state['services'],
             'states': state['states'],
             'blockers': [entry.public() for entry in entries if entry.blocking],
+            'registration_failures': list(self._registration_failures),
             'live_probe': False,
             'note': '能力是否存在由提供者、写开关和来源契约共同决定；代码存在不构成可用证据。',
         }
 
     def describe_service(self, service_id: str) -> dict:
         from ..queries import describe as describe_queries
-        base = describe_queries(service_id)
         entries = self.registrations(service_id)
+        known = {entry.service_id for entry in self.registrations()} | set(self.service_ids())
+        if service_id not in known:
+            raise FacadeError('FACADE_SERVICE_UNKNOWN')
+        if service_id not in set(self.service_ids()) and entries:
+            # A facade-only service (for example 4.1 academics) has no catalog
+            # entry; describe it from its own registrations instead of raising.
+            base = {'service_id': service_id, 'operations': [], 'actions': [],
+                    'registry_version': VERSION, 'catalog_registered': False,
+                    'note': '该服务不在校园服务目录中，描述来自能力登记表。'}
+        else:
+            try:
+                base = describe_queries(service_id)
+            except CampusError:
+                raise FacadeError('FACADE_SERVICE_UNKNOWN') from None
         by_operation = {(entry.service_id, entry.operation): entry.public() for entry in entries}
         operations = []
         for operation in base.get('operations') or []:
@@ -203,6 +225,13 @@ class BusinessFacade:
             name = action.get('operation')
             actions.append({**action,
                             'facade': by_operation.get((service_id, name), {'state': 'UNKNOWN'})})
+        if not operations and entries:
+            # Registry-only services still expose their operations with the
+            # public capability block, so a client never sees an empty shell.
+            operations = [{'operation': entry.operation, 'category': 'read',
+                           'pagination': 'local_snapshot', 'adapter_version': entry.adapter_version,
+                           'facade': by_operation[(entry.service_id, entry.operation)]}
+                          for entry in entries if entry.kind == 'READ']
         capabilities = [entry.public() for entry in entries if entry.kind != 'READ']
         return {
             **base,
@@ -223,14 +252,18 @@ class BusinessFacade:
     def query(self, service_id: str, operation: str, parameters: dict | None = None,
               cursor: str | None = None, page_size: int = 50) -> dict:
         parameters = {} if parameters is None else parameters
-        _reject_proxy_fields(parameters)
         if isinstance(operation, str) and operation in WRITE_OPERATIONS:
             raise FacadeError('FACADE_WRITE_NOT_REGISTERED', detail='WRITE_ON_READ_ENTRY')
         entry = self.capability(service_id, operation)
-        if entry is not None:
-            reg.require(entry, write=False)
-            if not entry.executable:
-                raise gap('FACADE_CAPABILITY_UNAVAILABLE', entry)
+        if entry is None:
+            # No fallback to QueryEngine: the registration table is the read
+            # authority.  The legacy code keeps old clients' error handling.
+            raise CampusError('UNREGISTERED_QUERY_OPERATION')
+        reg.require(entry, write=False)
+        _reject_proxy_fields(parameters, allow_url=entry.service_id == 'campus'
+                             and entry.operation == 'page')
+        if not entry.executable:
+            raise gap('FACADE_CAPABILITY_UNAVAILABLE', entry)
         result = self.owner.queries.query(service_id=service_id, operation=operation,
                                           parameters=parameters, cursor=cursor,
                                           page_size=page_size)
@@ -262,14 +295,21 @@ class BusinessFacade:
                              'blockers': ['HEALTH_PROBE_FAILED'], 'checked_at': checked,
                              'warnings': ['HEALTH_PROBE_FAILED']})
         aggregates = {row['state'] for row in rows}
+        known_states = {item for item in aggregates if item != 'UNKNOWN'}
         if not rows:
             status = 'UNKNOWN'
         elif aggregates == {'AVAILABLE'}:
             status = 'OK'
-        elif 'AVAILABLE' in aggregates:
+        elif 'AVAILABLE' in aggregates or 'PARTIAL' in aggregates:
             status = 'PARTIAL'
-        else:
+        elif not known_states:
             status = 'UNKNOWN'
+        elif known_states == {'BLOCKED'} or 'BLOCKED' in known_states:
+            status = 'BLOCKED'
+        elif 'DISABLED' in known_states:
+            status = 'DISABLED'
+        else:
+            status = 'MISSING'
         return {'status': status, 'checked_at': checked, 'services': rows,
                 'warnings': sorted(warnings), 'live_probe': False,
                 'probe': 'STATIC_REGISTRATION_ONLY',
@@ -284,6 +324,10 @@ class BusinessFacade:
             # ``ADAPTER_REQUIRED`` preview path stays available for operations
             # without an adapter so old clients keep their plan shape.
             raise gap('FACADE_CAPABILITY_UNAVAILABLE', entry)
+        if entry.state == 'DISABLED' and entry.reason:
+            # The switch code is already registered and is more useful than a
+            # generic gap; nothing is dispatched either way.
+            raise FacadeError(entry.reason, capability=entry.public())
         if service_id == 'learn':
             provider = self.submissions()
             if provider is None:
@@ -317,28 +361,15 @@ class BusinessFacade:
 
     def cancel(self, request_id: str, reason: str | None = None) -> dict:
         value = self.requests.cancel(request_id, reason=reason)
-        value['media_cleanup'] = self._cancel_media(request_id)
+        # Media staging is bound to a real in-flight request only; cancelling an
+        # unknown or finished id must not touch an unrelated task of the same name.
+        value['media_cleanup'] = self._cancel_media(request_id, value.get('state'))
         value['remote_effect'] = 'NONE'
         value['facade'] = {'version': VERSION, 'request_id': str(request_id),
                            'kind': 'LOCAL_ONLY'}
         return value
 
     # -- local, explicitly non-campus operations ---------------------------
-    def export_resources(self, semester, destination, **options) -> dict:
-        """Write a local resource summary through the 4.2 provider.
-
-        This is a local file write, not a campus operation: the destination is
-        validated by the resource centre's own path rules and nothing is
-        downloaded or uploaded here.
-        """
-        entry = self.capability(_LOCAL, 'resources_export')
-        if entry is None or entry.state != 'AVAILABLE' or self.resources is None:
-            raise gap('FACADE_CAPABILITY_UNAVAILABLE',
-                      entry or {'service_id': _LOCAL, 'operation': 'resources_export',
-                                'state': 'MISSING', 'reason': 'RESOURCE_PROVIDER_UNAVAILABLE'})
-        result = self.resources.export_summary(semester, destination=destination, **options)
-        return self._stamp(result, _LOCAL, 'resources_export', 'LOCAL_WRITE', entry)
-
     def export_agenda(self, path, *, start_date=None, end_date=None, services=None,
                       format='ics', overwrite=False, allow_partial=False) -> dict:
         entry = self.capability(_LOCAL, 'agenda')
@@ -346,7 +377,13 @@ class BusinessFacade:
             raise gap('FACADE_CAPABILITY_UNAVAILABLE',
                       entry or {'service_id': _LOCAL, 'operation': 'agenda', 'state': 'MISSING'})
         if not isinstance(path, (str, os.PathLike)):
-            raise CampusError('EXPORT_DESTINATION_REQUIRED' if not isinstance(path, (str, os.PathLike)) else 'EXPORT_DESTINATION_INVALID')
+            raise CampusError('EXPORT_DESTINATION_REQUIRED')
+        if type(overwrite) is not bool or type(allow_partial) is not bool:
+            raise CampusError('INVALID_ARGUMENT_TYPE')
+        if format not in ('ics', 'markdown', 'json'):
+            raise CampusError('EXPORT_FORMAT_UNSUPPORTED')
+        # Absolute-path, overwrite and existing-target rules stay owned by 5.4's
+        # calendar_export; the facade only refuses an unusable call shape.
         result = self.owner.todos.export_agenda(
             path, start_date=start_date, end_date=end_date, services=services,
             format=format, overwrite=overwrite, allow_partial=allow_partial)
@@ -367,7 +404,10 @@ class BusinessFacade:
             'kind': kind,
             'service_domain': source_state.service_domain(service_id),
             'capability_state': entry.state if entry is not None else 'UNKNOWN',
-            'live_probe': False,
+            # A query reads its source; prepare/execute/result/cancel do not
+            # perform a discovery probe.  ``live_probe`` stays reserved for the
+            # static health/describe report.
+            'probe': 'SOURCE_READ' if kind == 'READ' else 'NONE',
         }
         return out
 
@@ -431,7 +471,11 @@ class BusinessFacade:
             'live_probe': False,
         }
 
-    def _cancel_media(self, request_id) -> str:
+    def _cancel_media(self, request_id, state: str | None) -> str:
+        # Only an in-flight request has staging to clean.  A queued request never
+        # started, and an unknown/finished id must not cancel an unrelated task.
+        if state not in ('RUNNING', 'CANCELLATION_REQUESTED'):
+            return 'NOT_APPLICABLE'
         if self.media is None:
             return 'UNAVAILABLE'
         cancel = getattr(self.media, 'cancel_task', None)
@@ -484,23 +528,30 @@ def _aggregate(rows) -> str:
     return 'MISSING'
 
 
-def _reject_proxy_fields(parameters, depth: int = 0, seen: list | None = None) -> None:
-    """Refuse a read/write payload that tries to become a generic HTTP proxy."""
+def _reject_proxy_fields(parameters, depth: int = 0, seen: list | None = None,
+                         allow_url: bool = False) -> None:
+    """Refuse a read/write payload that tries to become a generic HTTP proxy.
+
+    ``url`` is accepted only for the registered ``campus.page`` read, whose host
+    is validated by the gateway; every other operation must use a service id.
+    """
     if depth > 5:
         raise FacadeError('FACADE_QUERY_CANNOT_PROXY')
     if seen is None:
         seen = []
     if isinstance(parameters, dict):
         for key, value in parameters.items():
-            if isinstance(key, str) and key.strip().casefold() in RESERVED_KEYS:
+            folded = key.strip().casefold() if isinstance(key, str) else ''
+            if folded in RESERVED_KEYS or (folded == 'url' and not allow_url
+                                           and depth == 0):
                 raise FacadeError('FACADE_QUERY_CANNOT_PROXY', detail=str(key)[:40])
             seen.append(key)
             if len(seen) > _MAX_SCAN:
                 raise FacadeError('FACADE_QUERY_CANNOT_PROXY')
-            _reject_proxy_fields(value, depth + 1, seen)
+            _reject_proxy_fields(value, depth + 1, seen, allow_url)
     elif isinstance(parameters, (list, tuple)):
         for value in parameters:
             seen.append(value)
             if len(seen) > _MAX_SCAN:
                 raise FacadeError('FACADE_QUERY_CANNOT_PROXY')
-            _reject_proxy_fields(value, depth + 1, seen)
+            _reject_proxy_fields(value, depth + 1, seen, allow_url)

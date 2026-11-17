@@ -121,15 +121,19 @@ class Providers:
                              'media', 'academics')}
 
 
-def _query_entries(providers: Providers, service_ids: Iterable[str], describe) -> list[Registration]:
+def _query_entries(providers: Providers, service_ids: Iterable[str],
+                   describe) -> tuple[list[Registration], list[dict]]:
     entries: list[Registration] = []
+    failures: list[dict] = []
     local = _local_table()
     for service in service_ids:
         try:
             operations = describe(service).get('operations') or []
         except Exception:
-            # A service whose description fails is not silently treated as empty;
-            # the health report attaches the failure to that service.
+            # A service whose description fails keeps an explicit failure record
+            # and no invented operations.  Exception text is never copied.
+            failures.append({'service_id': service, 'stage': 'QUERY_DESCRIPTION',
+                             'code': 'CAPABILITY_REPORT_FAILED'})
             continue
         for operation in operations:
             name = operation.get('operation')
@@ -145,7 +149,7 @@ def _query_entries(providers: Providers, service_ids: Iterable[str], describe) -
                 evidence='REGISTERED_LOCAL_QUERY', executable=True,
                 note=str(operation.get('note') or ''),
             ))
-    return entries
+    return entries, failures
 
 
 def _local_table() -> dict:
@@ -156,10 +160,10 @@ def _local_table() -> dict:
 _LOCAL_SERVICE = 'local'
 
 
-def _local_entries(providers: Providers) -> list[Registration]:
+def _local_entries(providers: Providers, env=None) -> list[Registration]:
     local = _local_table()
-    agenda_state = 'AVAILABLE' if providers.todos is not None else 'MISSING'
-    agenda_reason = None if agenda_state == 'AVAILABLE' else 'AGENDA_PROVIDER_UNAVAILABLE'
+    env = os.environ if env is None else env
+    agenda_state, agenda_reason = _agenda_state(providers, env)
     resource_state = 'AVAILABLE' if providers.resources is not None else 'MISSING'
     resource_reason = None if resource_state == 'AVAILABLE' else 'RESOURCE_PROVIDER_UNAVAILABLE'
     return [
@@ -171,11 +175,14 @@ def _local_entries(providers: Providers) -> list[Registration]:
                      local['agenda_changes']['adapter_version'], agenda_state,
                      reason=agenda_reason, evidence='LOCAL_DERIVED_READ',
                      executable=agenda_state == 'AVAILABLE', note=local['agenda_changes']['note']),
+        # 4.2 export_summary is a host API.  6.1 has no CLI/MCP entry for it, so
+        # advertising it as executable would contradict the call surface.
         Registration(_LOCAL_SERVICE, 'resources_export', 'LOCAL_WRITE', local['resources']['owner'],
-                     local['resources']['adapter_version'], resource_state,
-                     reason=resource_reason, entry='cli', side_effects=(LOCAL_FILE_WRITE,),
-                     evidence='LOCAL_INDEX_WRITE', executable=resource_state == 'AVAILABLE',
-                     note='只把本地索引摘要写到显式绝对路径；不下载、不上传、不发送消息。'),
+                     local['resources']['adapter_version'], 'MISSING',
+                     reason='NO_PUBLIC_ENTRY', entry='none', side_effects=(LOCAL_FILE_WRITE,),
+                     evidence='NO_PUBLIC_ENTRY', executable=False,
+                     note='4.2 的 export_summary 只在宿主 API 可用；6.1 未提供 CLI/MCP 入口，'
+                          '因此不进入默认可用能力表。'),
         Registration(_LOCAL_SERVICE, 'resources', 'READ', local['resources']['owner'],
                      local['resources']['adapter_version'], resource_state,
                      reason=resource_reason, evidence='LOCAL_INDEX_READ',
@@ -183,12 +190,22 @@ def _local_entries(providers: Providers) -> list[Registration]:
     ]
 
 
+def _agenda_state(providers: Providers, env) -> tuple[str, str | None]:
+    """THU_TODOS=0 suspends the todo/agenda read, so the capability is disabled."""
+    if providers.todos is None:
+        return 'MISSING', 'AGENDA_PROVIDER_UNAVAILABLE'
+    if str(env.get('THU_TODOS', '1')) == '0':
+        return 'DISABLED', 'TODOS_DISABLED'
+    return 'AVAILABLE', None
+
+
 def _action_state(enabled: bool, reason: str | None, env) -> tuple[str, str | None, bool]:
     """Map an action contract to a public state, gap reason and prepare gate."""
     if enabled:
         return 'AVAILABLE', None, True
     text = str(reason or 'ADAPTER_REQUIRED')
-    if text in ('WRITES_DISABLED', 'SPORTS_WRITES_DISABLED', 'LIBRARY_WRITES_DISABLED'):
+    if text in ('WRITES_DISABLED', 'SPORTS_WRITES_DISABLED', 'LIBRARY_WRITES_DISABLED',
+                'LIBRARY_RENEW_DISABLED'):
         return 'DISABLED', text, False
     if text == 'SOURCE_CONTRACT_UNVERIFIED':
         # Renewal may still prepare a plan and hand off to the official page;
@@ -197,23 +214,30 @@ def _action_state(enabled: bool, reason: str | None, env) -> tuple[str, str | No
     return 'MISSING', text, False
 
 
-def _action_entries(providers: Providers, env) -> list[Registration]:
+def _action_entries(providers: Providers, env) -> tuple[list[Registration], list[dict]]:
     from .. import actions
     entries: list[Registration] = []
+    failures: list[dict] = []
     try:
         services = sorted({service for service, _ in actions.REGISTRY})
     except Exception:
-        services = []
+        return entries, [{'service_id': '*', 'stage': 'ACTION_REGISTRY',
+                          'code': 'CAPABILITY_REPORT_FAILED'}]
     for service in services:
         try:
             rows = actions.describe_actions(service)
         except Exception:
+            failures.append({'service_id': service, 'stage': 'ACTION_DESCRIPTION',
+                             'code': 'CAPABILITY_REPORT_FAILED'})
             continue
         for row in rows:
             operation = row.get('operation')
             if not isinstance(operation, str):
                 continue
             state, reason, prepare_allowed = _action_state(bool(row.get('enabled')), row.get('reason'), env)
+            if service == 'library' and operation == 'renew_loan' and state == 'BLOCKED':
+                # The renewal switch is separate from the general library one.
+                state, reason, prepare_allowed = _renewal_state(env)
             kind = 'CAMPUS_WRITE'
             entries.append(Registration(
                 service_id=service, operation=operation, kind=kind,
@@ -222,22 +246,34 @@ def _action_entries(providers: Providers, env) -> list[Registration]:
                 state=state, reason=reason, entry='prepare_service_action',
                 authorization='TRUSTED_HOST_AUTHORIZATION',
                 side_effects=(LOCAL_PLAN_WRITE, CAMPUS_WRITE) if state != 'MISSING' else (),
-                evidence=('VERIFIED_ADAPTER' if row.get('enabled') else 'CONTRACT_ONLY'
-                          if reason == 'SOURCE_CONTRACT_UNVERIFIED' else 'NO_PROVIDER'),
+                evidence=('VERIFIED_ADAPTER' if state == 'AVAILABLE' else 'CONTRACT_ONLY'
+                          if state == 'BLOCKED' else 'SWITCHED_OFF'
+                          if state == 'DISABLED' else 'NO_PROVIDER'),
                 prepare_allowed=prepare_allowed, executable=state == 'AVAILABLE',
                 note=str(row.get('reconciliation_scope') or row.get('reconciliation') or ''),
                 extra=(('prechecks', list(row.get('prechecks') or [])),
                        ('request_sequence', row.get('request_sequence')),
                        ('risk_conditions', list(row.get('risk_conditions') or []))),
             ))
-    return entries
+    return entries, failures
+
+
+def _renewal_state(env) -> tuple[str, str | None, bool]:
+    """A switched-off renewal must not still advertise a prepare path."""
+    from .. import library_contracts
+    if not library_contracts.enabled():
+        return 'DISABLED', 'LIBRARY_WRITES_DISABLED', False
+    if not library_contracts.renewal_enabled():
+        return 'DISABLED', 'LIBRARY_RENEW_DISABLED', False
+    return 'BLOCKED', 'SOURCE_CONTRACT_UNVERIFIED', True
 
 
 _ACTION_OWNERS = {'library': '5.1', 'sports': '5.2', 'learn': '5.3'}
 
 
-def _module_entries(providers: Providers, env) -> list[Registration]:
+def _module_entries(providers: Providers, env) -> tuple[list[Registration], list[dict]]:
     entries: list[Registration] = []
+    failures: list[dict] = []
     # 5.3 submission capability: blocked source evidence, own write switch.
     try:
         from .. import submissions
@@ -260,6 +296,8 @@ def _module_entries(providers: Providers, env) -> list[Registration]:
         ))
     except Exception as error:  # pragma: no cover - defensive, provider optional
         if not isinstance(error, FacadeError):
+            failures.append({'service_id': 'learn', 'stage': 'SUBMISSION_CAPABILITY',
+                             'code': 'SUBMISSION_PROVIDER_UNAVAILABLE'})
             entries.append(Registration(
                 service_id='learn', operation='submit_assignment', kind='CAMPUS_WRITE',
                 owner='5.3', adapter_version='unavailable', state='MISSING',
@@ -283,19 +321,28 @@ def _module_entries(providers: Providers, env) -> list[Registration]:
                        ('blocked_scope', list(spec.get('blocked_scope') or []))),
             ))
     except Exception:
-        pass
-    # 3.3/4.5 media: local preparation is available only with a provider; the
-    # model image transport is blocked because the shipped protocol registry is
-    # empty and a catalogue flag never enables transport.
-    media_ready = providers.media is not None
+        # Keep the three known academic operations visible as a specific gap
+        # instead of losing the service from describe/health.
+        failures.append({'service_id': 'academics', 'stage': 'ACADEMIC_CAPABILITY',
+                         'code': 'CAPABILITY_REPORT_FAILED'})
+        for operation in ('exams', 'timetable', 'grades'):
+            entries.append(Registration(
+                service_id='academics', operation=operation, kind='READ', owner='4.1',
+                adapter_version='unavailable', state='MISSING',
+                reason='CAPABILITY_REPORT_FAILED', entry='get_todos' if operation in ('exams', 'timetable') else 'query_service',
+                evidence='NO_PROVIDER', executable=False, prepare_allowed=False,
+                note='4.1 能力报告不可用；未选择能力时不会读取，也不产生空成功。',
+            ))
+    # 3.3/4.5 media: registration and model transport are host APIs.  6.1 exposes
+    # no public entry for preparation, so it is not advertised as executable;
+    # the model image transport is blocked because the protocol registry is empty.
     entries.append(Registration(
         service_id=_LOCAL_SERVICE, operation='media_prepare', kind='LOCAL_WRITE', owner='3.3',
-        adapter_version='media-reference-v1',
-        state='AVAILABLE' if media_ready else 'MISSING',
-        reason=None if media_ready else 'MEDIA_PROVIDER_UNAVAILABLE',
-        entry='local', side_effects=(LOCAL_FILE_WRITE,), evidence='LOCAL_SYNTHETIC_ONLY',
-        prepare_allowed=False, executable=media_ready,
-        note='只在本地检查、清洗并登记引用；不联网、不返回绝对路径。',
+        adapter_version='media-reference-v1', state='MISSING',
+        reason='NO_PUBLIC_ENTRY', entry='none', side_effects=(LOCAL_FILE_WRITE,),
+        evidence='NO_PUBLIC_ENTRY', prepare_allowed=False, executable=False,
+        note='3.3 的 register_user_file 只在宿主 API 可用；6.1 未提供 CLI/MCP 入口，'
+             '因此不进入默认可用能力表。',
     ))
     entries.append(Registration(
         service_id=_LOCAL_SERVICE, operation='model_image_input', kind='MODEL', owner='4.5',
@@ -305,28 +352,37 @@ def _module_entries(providers: Providers, env) -> list[Registration]:
         executable=False, prepare_allowed=False,
         note='只有已登记协议且媒体管道可用时才允许发送；目录标注不构成传输证据。',
     ))
-    return entries
+    return entries, failures
 
 
-def registrations(providers: Providers, *, service_ids: Iterable[str],
-                  describe) -> list[Registration]:
+def registrations(providers: Providers, *, service_ids: Iterable[str], describe,
+                  env=None) -> tuple[list[Registration], list[dict]]:
     """Build the full registration list, de-duplicated by service and operation.
 
     A write operation wins over a same-named read entry: the stricter entry is
-    the one a caller must satisfy.
+    the one a caller must satisfy.  A module report that raises leaves an
+    explicit failure record and never disappears silently.
     """
+    env = os.environ if env is None else env
     entries: list[Registration] = []
-    entries.extend(_local_entries(providers))
-    entries.extend(_query_entries(providers, service_ids, describe))
-    entries.extend(_action_entries(providers, os.environ))
-    entries.extend(_module_entries(providers, os.environ))
+    failures: list[dict] = []
+    entries.extend(_local_entries(providers, env))
+    query_entries, query_failures = _query_entries(providers, service_ids, describe)
+    entries.extend(query_entries)
+    failures.extend(query_failures)
+    action_entries, action_failures = _action_entries(providers, env)
+    entries.extend(action_entries)
+    failures.extend(action_failures)
+    module_entries, module_failures = _module_entries(providers, env)
+    entries.extend(module_entries)
+    failures.extend(module_failures)
     chosen: dict[tuple[str, str], Registration] = {}
     for entry in entries:
         key = (entry.service_id, entry.operation)
         current = chosen.get(key)
         if current is None or _strictness(entry) >= _strictness(current):
             chosen[key] = entry
-    return list(chosen.values())
+    return list(chosen.values()), failures
 
 
 def _strictness(entry: Registration) -> tuple[int, int, int]:

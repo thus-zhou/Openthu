@@ -19,7 +19,7 @@ from . import source_state
 from .browser import BrowserManager
 from .actions import ActionEngine
 from .facade import BusinessFacade, FacadeError
-from .facade.requests import scope as request_scope
+from .facade.requests import TERMINAL as REQUEST_TERMINAL, scope as request_scope
 from .queries import QueryEngine, legacy_metadata, metadata
 from . import models
 from . import todos
@@ -209,7 +209,11 @@ class McpServer:
                 result={'content':[{'type':'text','text':json.dumps(value,ensure_ascii=False)}],
                         'structuredContent':value,'isError':False}
             except Exception as error:
-                code=error.code if isinstance(error,CampusError) else type(error).__name__
+                # A provider error may not inherit CampusError (4.2/4.1 do not);
+                # its registered .code must survive the boundary, and only a
+                # code-less exception falls back to the class name.
+                raw_code=getattr(error,'code',None)
+                code=raw_code if isinstance(raw_code,str) and raw_code else type(error).__name__
                 args=params.get('arguments') or {}
                 service=args.get('service_id','learn' if str(params.get('name','')).startswith('list_') else 'campus') if isinstance(args,dict) else 'campus'
                 if params.get('name') in ('list_models','model_chat'):service='madmodel'
@@ -240,6 +244,88 @@ class McpServer:
         else:return {'jsonrpc':'2.0','id':rid,'error':{'code':-32601,'message':'Method not found'}}
         return {'jsonrpc':'2.0','id':rid,'result':result}
 
+def request_key(rid):
+    """A JSON-RPC id is (type, value): 1 and "1" are different requests."""
+    if rid is None:
+        return None
+    return f'{type(rid).__name__}:{rid}'
+
+
+def error_response(rid, code):
+    """One public error result with the frozen classified fields."""
+    public = source_state.public_error(code)
+    public['code'] = code
+    value = {'error': public}
+    return {'jsonrpc': '2.0', 'id': rid,
+            'result': {'content': [{'type': 'text', 'text': json.dumps(value)}],
+                       'structuredContent': value, 'isError': True}}
+
+
+class RequestRunner:
+    """Process one MCP request under the facade request registry.
+
+    Queue state, cancellation, progress and cleanup are bound to the same
+    request id here, so the stdio loop and its tests exercise one path.
+    """
+
+    def __init__(self, server, registry, emit, *, timeout=240):
+        self.server = server
+        self.registry = registry
+        self.emit = emit
+        self.timeout = timeout
+
+    def run(self, request, event, enqueued):
+        rid = request.get('id')
+        step = [0]
+        token = ((request.get('params') or {}).get('_meta') or {}).get('progressToken')
+
+        def progress(status):
+            if token is not None:
+                step[0] += 1
+                self.emit({'jsonrpc': '2.0', 'method': 'notifications/progress',
+                           'params': {'progressToken': token, 'progress': step[0],
+                                      'message': status, 'request_id': request_key(rid)}})
+
+        scope = None
+        response = None
+        if rid is not None:
+            try:
+                scope = self.registry.begin(request_key(rid))
+            except FacadeError as error:
+                response = error_response(rid, error.code)
+                self.emit(response)
+                return response
+        try:
+            if event.is_set() or time.monotonic() - enqueued >= self.timeout:
+                if scope is not None:
+                    self.registry.finish(scope, state='CANCELLED' if event.is_set() else 'FINISHED',
+                                         reason='CANCELLED_BEFORE_START' if event.is_set() else 'QUEUE_TIMEOUT')
+                value = {'error': {'code': 'CANCELLED' if event.is_set() else 'QUEUE_TIMEOUT'}}
+                if (request.get('params') or {}).get('name') == 'model_chat':
+                    value.update(usage=None, usage_state='UNKNOWN', generation_started=False,
+                                 output_is_authorization=False)
+                response = {'jsonrpc': '2.0', 'id': rid, 'result': {
+                    'content': [{'type': 'text', 'text': json.dumps(value)}],
+                    'structuredContent': value, 'isError': True}}
+            else:
+                if scope is not None:
+                    self.registry.start(scope)
+                with request_control(event, progress), request_scope(scope):
+                    response = self.server.handle(request)
+            if response is not None:
+                self.emit(response)
+            return response
+        finally:
+            if scope is not None and scope.state not in REQUEST_TERMINAL:
+                if scope.event.is_set() or scope.state == 'CANCELLATION_REQUESTED':
+                    # A running cancel stays visible after the handler returns.
+                    self.registry.finish(scope, state='CANCELLED')
+                elif isinstance(response, dict) and (response.get('result') or {}).get('isError'):
+                    self.registry.finish(scope, state='FAILED')
+                else:
+                    self.registry.finish(scope, state='FINISHED')
+
+
 def main():
     if hasattr(sys.stdin,'reconfigure'):sys.stdin.reconfigure(encoding='utf-8')
     if hasattr(sys.stdout,'reconfigure'):sys.stdout.reconfigure(encoding='utf-8')
@@ -249,6 +335,7 @@ def main():
     pending={};pending_lock=threading.Lock();output_lock=threading.Lock()
     def emit(value):
         with output_lock:print(json.dumps(value,ensure_ascii=False),flush=True)
+    runner=RequestRunner(server,registry,emit)
     def receive():
         try:
             for line in sys.stdin:
@@ -261,24 +348,25 @@ def main():
                     meta=(request.get('params') or {}).get('_meta')
                     if meta is not None and not isinstance(meta,dict):raise ValueError()
                     if request['method']=='notifications/cancelled':
+                        key=request_key((request.get('params') or {}).get('requestId'))
                         with pending_lock:
-                            event=pending.get((request.get('params') or {}).get('requestId'))
+                            event=pending.get(key)
                             if event:event.set()
                         # The facade records whether the request was still
                         # queued or already running, and runs its cleanup.
-                        try:registry.cancel(str((request.get('params') or {}).get('requestId')),
-                                            'PROTOCOL_CANCELLED')
+                        try:registry.cancel(key,'PROTOCOL_CANCELLED')
                         except CampusError:pass
                         continue
                     rid=request.get('id')
                     if rid is not None and (isinstance(rid,bool) or not isinstance(rid,(str,int))):raise ValueError()
+                    key=request_key(rid)
                     event=threading.Event()
                     with pending_lock:
-                        if rid is not None and rid in pending:raise ValueError()
-                        if rid is not None:pending[rid]=event
+                        if key is not None and key in pending:raise ValueError()
+                        if key is not None:pending[key]=event
                     try:inbox.put_nowait((request,event,time.monotonic()))
                     except queue.Full:
-                        with pending_lock:pending.pop(rid,None)
+                        with pending_lock:pending.pop(key,None)
                         emit({'jsonrpc':'2.0','id':rid,'error':{'code':-32000,'message':'QUEUE_FULL'}})
                 except (ValueError,TypeError,AttributeError):
                     emit({'jsonrpc':'2.0','id':None,'error':{'code':-32700,'message':'Invalid JSON-RPC request'}})
@@ -288,38 +376,10 @@ def main():
         while True:
             item=inbox.get()
             if item is None:break
-            request,event,enqueued=item;rid=request.get('id');step=[0]
-            token=((request.get('params') or {}).get('_meta') or {}).get('progressToken')
-            def progress(status):
-                if token is not None:
-                    step[0]+=1
-                    emit({'jsonrpc':'2.0','method':'notifications/progress','params':{'progressToken':token,'progress':step[0],'message':status,
-                        'request_id':str(rid) if rid is not None else None}})
-            scope=None
-            try:
-                if rid is not None:
-                    try:scope=registry.begin(str(rid))
-                    except FacadeError:
-                        emit({'jsonrpc':'2.0','id':rid,'result':{'content':[{'type':'text','text':json.dumps({'error':{'code':'FACADE_REQUEST_LIMIT'}})}],
-                            'structuredContent':{'error':{'code':'FACADE_REQUEST_LIMIT'}},'isError':True}})
-                        continue
-                if event.is_set() or time.monotonic()-enqueued>=240:
-                    if scope is not None:
-                        registry.finish(scope,state='CANCELLED' if event.is_set() else 'FINISHED',
-                                        reason='CANCELLED_BEFORE_START' if event.is_set() else 'QUEUE_TIMEOUT')
-                    value={'error':{'code':'CANCELLED' if event.is_set() else 'QUEUE_TIMEOUT'}}
-                    if (request.get('params') or {}).get('name')=='model_chat':
-                        value.update(usage=None,usage_state='UNKNOWN',generation_started=False,output_is_authorization=False)
-                    response={'jsonrpc':'2.0','id':rid,'result':{'content':[{'type':'text','text':json.dumps(value)}],'structuredContent':value,'isError':True}}
-                else:
-                    if scope is not None:registry.start(scope)
-                    with request_control(event,progress),request_scope(scope):
-                        response=server.handle(request)
-                if response is not None:emit(response)
+            request,event,enqueued=item
+            try:runner.run(request,event,enqueued)
             finally:
-                if scope is not None and scope.state not in ('CANCELLED','FINISHED','FAILED'):
-                    registry.finish(scope,state='CANCELLED' if scope.event.is_set() else 'FINISHED')
-                with pending_lock:pending.pop(rid,None)
+                with pending_lock:pending.pop(request_key(request.get('id')),None)
     finally:
         close_gateway()
         server.assistant.browsers.close_all()

@@ -374,7 +374,9 @@ def test_query_rejects_write_operations_and_proxy_fields(monkeypatch, tmp_path):
     assert a.todos.calls == before
 
 
-def test_unregistered_operation_keeps_the_legacy_query_error(monkeypatch, tmp_path):
+def test_unregistered_operation_is_refused_by_the_facade(monkeypatch, tmp_path):
+    # The registration table is the authority; the facade does not fall back to
+    # QueryEngine for an operation it did not register.
     a = assistant(monkeypatch, tmp_path)
     with pytest.raises(CampusError) as caught:
         a.facade.query('local', 'no_such_operation', {})
@@ -471,7 +473,7 @@ def test_cancel_of_a_queued_request_runs_cleanup_once_and_never_sends(monkeypatc
     request.add_cleanup(lambda: cleaned.append('once'))
     value = registry.cancel('req-queued', 'synthetic')
     assert value['cancelled'] is True and value['state'] == CANCELLED
-    assert value['sent_before_cancel'] is False
+    assert value['started_before_cancel'] is False
     assert cleaned == ['once'] and request.event.is_set()
     again = registry.cancel('req-queued')
     assert again['state'] == CANCELLED and cleaned == ['once']
@@ -485,10 +487,12 @@ def test_cancel_of_a_running_request_is_recorded_as_requested_not_undone(monkeyp
     request.add_cleanup(lambda: cleaned.append('later'))
     value = registry.cancel('req-running')
     assert value['state'] == CANCEL_REQUESTED and value['cancelled'] is True
-    assert value['sent_before_cancel'] is True
+    assert value['started_before_cancel'] is True
     assert cleaned == []          # staging stays until the handler returns
     registry.finish(request)
-    assert request.state == FINISHED and cleaned == ['later']
+    # The cancellation that happened while running is not overwritten by finish.
+    assert request.state == CANCELLED and cleaned == ['later']
+    assert registry.cancel('req-running')['cancelled'] is True
 
 
 def test_cancel_of_an_unknown_or_finished_request_is_not_success(monkeypatch, tmp_path):
@@ -744,29 +748,6 @@ def test_prepare_execute_authorization_sequence_dispatches_exactly_once(monkeypa
     assert executed['automatic_resend'] is False
     again = a.facade.execute(plan['plan_id'], '对本次合成场地的明确人工授权')
     assert again['status'] == 'SUCCEEDED' and adapter.sent == 1
-
-
-def test_resources_export_is_local_and_requires_the_provider(monkeypatch, tmp_path):
-    class ExportResources(FakeResources):
-        def __init__(self):
-            super().__init__()
-            self.exports = []
-
-        def export_summary(self, semester, *, destination, **options):
-            self.exports.append((semester, destination, options))
-            return {'status': 'EXPORTED', 'destination': str(destination)}
-
-    a = assistant(monkeypatch, tmp_path)
-    with pytest.raises(facade_errors.FacadeError) as caught:
-        a.facade.export_resources('2026-2027-1', str(tmp_path / 'summary.md'))
-    assert caught.value.code == 'FACADE_CAPABILITY_UNAVAILABLE'
-    assert caught.value.capability['reason'] == 'RESOURCE_PROVIDER_UNAVAILABLE'
-
-    provider = ExportResources()
-    a = assistant(monkeypatch, tmp_path, resources=provider)
-    value = a.facade.export_resources('2026-2027-1', str(tmp_path / 'summary.md'))
-    assert value['facade']['kind'] == 'LOCAL_WRITE'
-    assert provider.exports[0][0] == '2026-2027-1'
 
 
 def test_legacy_unbacked_write_keeps_its_prepare_shape(monkeypatch, tmp_path):

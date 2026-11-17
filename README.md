@@ -27,6 +27,18 @@ python scripts/dev.py test
 
 离线演示：`openthu services`。该命令只读随程序提供的静态服务目录，不证明登录或校园业务可用。
 
+### 命令行（6.1）
+
+`openthu` 保留原有 `services`、`discover`、`login`、`read`、`courses`、`model` 子命令和参数，新增：
+
+- `openthu describe [--service ID]`：业务门面的能力登记、阻塞原因与本地方法。
+- `openthu health [--service ID]`：本地能力健康；只报告静态登记，不探测真实站点。
+- `openthu query --service ID --operation OP [--parameters JSON|@file] [--cursor C] [--page-size N]`：执行一个已登记的只读查询。
+- `openthu agenda [--export PATH] [--format ics|markdown|json]`：按需读取统一日程；导出只写本地文件，必须给绝对路径。
+- `openthu dashboard [--host 127.0.0.1] [--port N]`：启动本地只读看板；提供者未安装时返回 `LOCAL_DASHBOARD_UNAVAILABLE`。
+
+迁移说明：原来的位置参数 `operation` 现在是子命令，全局参数必须写在子命令之后；成功输出新增顶层 `command` 字段；错误对象从 `{"code": ...}` 扩展为带 `category`、`retryable`、`automatic_replay_allowed`、`user_action` 的分类错误。旧调用如 `openthu read --url ...` 仍按原字段返回。
+
 **真实使用：** 阅读[安装与配置](docs/INSTALL.md)。不要向聊天、Issue 或仓库提交学校密码、Cookie、模型凭据或个人业务记录。默认安装不会搬迁任何人的认证状态。
 
 ## 首次安装诊断

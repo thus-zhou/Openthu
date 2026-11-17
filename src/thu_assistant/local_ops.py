@@ -36,12 +36,14 @@ def schema(properties, required=()):
 
 AGENDA = schema(WINDOW)
 CHANGES = schema({**WINDOW, 'change_cursor': {'type': 'string', 'minLength': 1, 'maxLength': 128}})
+# Paging is the snapshot cursor/page_size pair, matching the frozen local read
+# API.  offset/limit are deliberately absent: the 4.2 provider caps one search
+# at limits.max_search_limit rows, so advertising an independent offset window
+# would promise behaviour the provider cannot honour.
 RESOURCE_FIELDS = {
     'semester': {'type': 'string', 'pattern': r'^[A-Za-z0-9_.-]{1,80}$'},
     'query': {'type': 'string', 'minLength': 1, 'maxLength': 200},
     'course_id': {'type': 'string', 'pattern': r'^[A-Za-z0-9_.:-]{1,128}$'},
-    'offset': {'type': 'integer', 'minimum': 0, 'maximum': 100000},
-    'limit': {'type': 'integer', 'minimum': 1, 'maximum': 200},
 }
 RESOURCES = schema(RESOURCE_FIELDS, ('semester',))
 
@@ -81,6 +83,8 @@ def operations() -> dict[str, dict[str, Any]]:
             'schema': RESOURCES, 'pagination': 'local_index_snapshot', 'level': 'LOCAL_DERIVED_READ',
             'owner': '4.2', 'adapter_version': resources,
             'note': '只读取本地加密资料索引；不下载、不刷新、不调用模型。'
+                    '每次读取上限取提供者的 max_search_limit（默认 50），'
+                    '超过上限时结果标记为不完整；分页只用 cursor/page_size。'
                     '未配置资料库提供者时返回 RESOURCE_PROVIDER_UNAVAILABLE。',
         },
     }

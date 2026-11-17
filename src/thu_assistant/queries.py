@@ -104,6 +104,15 @@ for _operation, _spec in LOCAL_OPS.items():
 
 
 
+def _provider_page_limit(provider, default=50, ceiling=200):
+    """The provider's own search ceiling, clamped to a sane engineering bound."""
+    limits = getattr(provider, 'limits', None)
+    value = getattr(limits, 'max_search_limit', default)
+    if type(value) is not int or value < 1:
+        value = default
+    return max(1, min(ceiling, value))
+
+
 def now():
     return source_state.now_iso()
 
@@ -626,10 +635,14 @@ class QueryEngine:
         provider = getattr(self.owner, 'resources', None)
         if provider is None:
             raise CampusError('RESOURCE_PROVIDER_UNAVAILABLE')
+        # The provider owns its own ceiling (4.2 default max_search_limit is 50);
+        # asking for more is rejected before matching, so clamp to it and report
+        # the truncation instead of failing.
+        limit = _provider_page_limit(provider)
         search = provider.search(semester=parameters['semester'],
                                  query=parameters.get('query'),
                                  course_id=parameters.get('course_id'),
-                                 offset=0, limit=200)
+                                 offset=0, limit=limit)
         rows = list(search.get('items') or [])
         total = search.get('total')
         capped = type(total) is int and total > len(rows)
@@ -637,8 +650,12 @@ class QueryEngine:
         if capped:
             warnings.add('RESOURCE_SEARCH_LIMIT_APPLIED')
         result = {name: value for name, value in search.items() if name != 'items'}
-        result.update(source=source, query_time=query_time,
-                      verification_level='LOCAL_INDEX_READ',
+        checked = source_state.normalize_timestamp(search.get('checked_at'), query_time) or query_time
+        result.update(source=source, query_time=query_time, checked_at=checked,
+                      # The frozen envelope has no LOCAL_INDEX_READ value; a
+                      # local index read is local execution state, not a live
+                      # business read.
+                      verification_level='LOCAL_EXECUTION_STATE',
                       status=search.get('status') or 'UNKNOWN',
                       # A capped search did not read every source row, so it is
                       # not complete even when the local index itself is.

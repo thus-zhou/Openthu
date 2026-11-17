@@ -91,11 +91,14 @@ class RequestRegistry:
                 request.started_at = self.clock()
             return request
 
-    def finish(self, request: Request, *, state: str = FINISHED,
+    def finish(self, request: Request, *, state: str | None = None,
                reason: str | None = None) -> Request:
+        """End a request without losing a cancellation that already happened."""
         with self._lock:
             if request.state in TERMINAL:
                 return request
+            if state is None:
+                state = CANCELLED if request.state == CANCEL_REQUESTED else FINISHED
             request.state = state
             request.reason = reason or request.reason
             request.finished_at = self.clock()
@@ -130,7 +133,10 @@ class RequestRegistry:
         _run(hooks)
         return {**request.public(), 'cancelled': True,
                 'note': '只取消本地排队或执行中的请求，不撤回校园业务写入。',
-                'sent_before_cancel': not queued}
+                # A started request has been handed to the transport; it is not
+                # proof that bytes were sent, which stays UNKNOWN.
+                'started_before_cancel': not queued,
+                'transport_state_after_cancel': 'ABORT_REQUESTED' if not queued else 'NOT_STARTED'}
 
     def state(self, request_id: str) -> str:
         text = _identifier(request_id)

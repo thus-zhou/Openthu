@@ -183,7 +183,8 @@ def main(argv=None):
     except SystemExit:
         raise
     except Exception as error:
-        code = getattr(error, 'code', None) if isinstance(error, CampusError) else type(error).__name__
+        raw_code = getattr(error, 'code', None)
+        code = raw_code if isinstance(raw_code, str) and raw_code else type(error).__name__
         public = source_state.public_error(code if isinstance(code, str) else 'UNKNOWN')
         _emit({'ok': False, 'command': args.command, 'error': public})
         return 1
