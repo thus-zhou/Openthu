@@ -93,7 +93,7 @@
     },
     "dev_check": {
       "ok": true,
-      "files_checked": 502,
+      "files_checked": 504,
       "findings": 0,
       "mcp_tools": 29,
       "command": "python scripts/dev.py check"
