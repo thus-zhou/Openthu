@@ -1034,6 +1034,31 @@ def test_installed_doctor_reports_the_layout_and_never_writes_state(tmp_path):
     assert paths.bundled_layout(package_root_value=package) is not None
 
 
+def test_doctor_survives_a_non_utf8_console(tmp_path):
+    """A cp1252 console must not abort the self-check with UnicodeEncodeError."""
+    env = dict(os.environ)
+    env.update(
+        PYTHONIOENCODING="cp1252",
+        PYTHONPATH=str(ROOT / "src"),
+        HOME=str(tmp_path),
+        OPENTHU_STATE_DIR=str(tmp_path / "state"),
+        OPENTHU_DOWNLOAD_DIR=str(tmp_path / "downloads"),
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "thu_assistant.doctor", "--json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Traceback" not in result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["mode"] in {"source", "installed"}
+    assert payload["checks"]
+
+
 def test_installed_doctor_flags_a_missing_bundle(tmp_path):
     from thu_assistant import doctor
 

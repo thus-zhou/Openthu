@@ -240,7 +240,24 @@ def format_report(report: dict) -> str:
     return "\n".join(lines)
 
 
+def _utf8_console() -> None:
+    """Write UTF-8 regardless of the Windows console code page.
+
+    The report contains Chinese diagnostics; a cp1252 console would raise
+    ``UnicodeEncodeError`` while printing them and abort the self-check.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):  # pragma: no cover - exotic stream
+            pass
+
+
 def main(argv=None) -> int:
+    _utf8_console()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="机器可读输出")
     parser.add_argument("--config", metavar="PATH", help="显式配置文件")
