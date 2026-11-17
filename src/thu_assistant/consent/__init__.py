@@ -7,6 +7,7 @@ Public surface:
 * ``issue`` / ``verify`` - pure signed-grant protocol functions.
 * ``authorize`` - local interactive confirmation used by the CLI.
 """
+from .cli import authorize
 from .protocol import VERSION, canonical, issue, new_challenge, sign, verify
 from .store import HostConsent
 
