@@ -16,9 +16,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 _SRC = ROOT / "src"
@@ -56,6 +55,8 @@ def main(argv=None) -> int:
         return 1
     if args.command == "preview":
         print(json.dumps(plan, ensure_ascii=False, indent=2) if args.json else upgrade.describe(plan))
+        if plan.get("no_op"):
+            print("无需迁移：状态目录已经是当前版本的位置。", file=sys.stderr)
         return 0
     decisions = {item: "replace" for item in args.replace}
     decisions.update({item: "keep" for item in args.keep})
@@ -68,9 +69,14 @@ def main(argv=None) -> int:
         for row in result["results"]:
             print(f"[{row['status']}] {row['item']}")
         print(result["note"])
+        if result["pending_decisions"]:
+            print(
+                f"仍有 {result['pending_decisions']} 项冲突未决定：请显式 --replace 或 --keep。",
+                file=sys.stderr,
+            )
     else:
         print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0 if result["ok"] else 1
+    return 0 if result["complete"] else 1
 
 
 if __name__ == "__main__":

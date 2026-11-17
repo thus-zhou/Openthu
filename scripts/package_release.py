@@ -281,22 +281,27 @@ def normalize_sdist(path: Path, *, epoch: int) -> None:
 
 
 def wheel_resource_records(path: Path) -> tuple[list[dict], int]:
-    """Logical resource name, install location and hash, read from the wheel."""
+    """Every bundled file with its install location and hash, read from the wheel."""
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
         layout_name = "thu_assistant/_bundled/layout.json"
         if layout_name not in names:
             raise ReleaseError("RELEASE_WHEEL_LAYOUT_MISSING", layout_name)
         layout = json.loads(archive.read(layout_name))
+        logical = {
+            "thu_assistant/_bundled/" + relative: resource_id
+            for resource_id, relative in layout.get("resources", {}).items()
+        }
         rows = []
-        for resource_id, relative in sorted(layout.get("resources", {}).items()):
-            member = "thu_assistant/_bundled/" + relative
-            if member not in names:
-                raise ReleaseError("RELEASE_WHEEL_RESOURCE_MISSING", f"{resource_id}: {relative}")
+        for member in sorted(names):
+            if not member.startswith("thu_assistant/_bundled/"):
+                continue
+            if member.endswith("/" + materialize.LAYOUT_NAME):
+                continue
             data = archive.read(member)
             rows.append(
                 {
-                    "id": resource_id,
+                    "id": logical.get(member, "bundled:" + member.split("/_bundled/", 1)[1]),
                     "install": member,
                     "sha256": hashlib.sha256(data).hexdigest(),
                     "bytes": len(data),
@@ -316,6 +321,12 @@ def artifact_record(path: Path) -> dict:
 
 
 def build_candidate(dist: Path = DIST) -> dict:
+    """Build every artifact, then swap the finished directory into place.
+
+    A failed build leaves the previous candidate untouched: everything is
+    written to a sibling temporary directory and only a complete, verified set
+    replaces ``dist``.
+    """
     require_clean_tracked_tree()
     manifest = materialize.load_manifest(ROOT)
     version = declared_version()
@@ -328,68 +339,90 @@ def build_candidate(dist: Path = DIST) -> dict:
     if missing_licenses:
         raise ReleaseError("RELEASE_LICENSE_MISSING", missing_licenses[0])
 
-    dist.mkdir(exist_ok=True)
-    for stale in dist.iterdir():
-        if stale.is_file() and (
-            stale.name in {RELEASE_MANIFEST, "SHA256SUMS"}
-            or stale.name.startswith(("openthu-", "Openthu-"))
-        ):
-            stale.unlink()
+    dist = Path(dist)
+    dist.parent.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix=".openthu-dist-", dir=dist.parent))
+    try:
+        prefix = f"Openthu-{version}"
+        source_zip = work / f"{prefix}-source.zip"
+        source_tar = work / f"{prefix}-source.tar.gz"
+        write_source_zip(source_zip, prefix, files)
+        write_source_tar(source_tar, prefix, files)
 
-    prefix = f"Openthu-{version}"
-    source_zip = dist / f"{prefix}-source.zip"
-    source_tar = dist / f"{prefix}-source.tar.gz"
-    write_source_zip(source_zip, prefix, files)
-    write_source_tar(source_tar, prefix, files)
+        with tempfile.TemporaryDirectory(prefix="openthu-release-") as tmp:
+            staging = Path(tmp) / "tree"
+            stage_tree(files, staging)
+            run_build(staging, commit=commit, commit_time=git_commit_time())
+            for produced in sorted((staging / "dist").iterdir()):
+                shutil.copy2(produced, work / produced.name)
 
-    with tempfile.TemporaryDirectory(prefix="openthu-release-") as tmp:
-        staging = Path(tmp) / "tree"
-        stage_tree(files, staging)
-        run_build(staging, commit=commit, commit_time=git_commit_time())
-        for produced in sorted((staging / "dist").iterdir()):
-            shutil.copy2(produced, dist / produced.name)
-        for produced in sorted(dist.glob("openthu-*.tar.gz")):
-            normalize_sdist(produced, epoch=git_commit_time())
+        epoch = git_commit_time()
+        for produced in sorted(work.glob("openthu-*.tar.gz")):
+            normalize_sdist(produced, epoch=epoch)
+        for produced in sorted(work.glob("*.whl")):
+            harden_bundled_modes(produced)
 
-    artifacts = sorted(path for path in dist.iterdir() if path.is_file())
-    artifacts = [path for path in artifacts if path.name not in {RELEASE_MANIFEST, "SHA256SUMS"}]
-    records = [artifact_record(path) for path in artifacts]
-    wheel = next((path for path in artifacts if path.suffix == ".whl"), None)
-    resources, bundled_files = wheel_resource_records(wheel) if wheel else ([], 0)
-    source_archive = next(
-        (row for row in records if row["name"].startswith("Openthu-") and row["name"].endswith("-source.zip")),
-        None,
-    )
-    source_summary = {
-        "files": sum(1 for name in files if not name.startswith(".git")),
-        "bytes": sum(len(data) for data in files.values()),
-        "archive_sha256": source_archive["sha256"] if source_archive else None,
-    }
-    release = {
-        "schema_version": "openthu-release-manifest-v1",
-        "product": "openthu",
-        "version": version,
-        "commit": commit,
-        "python_requires": manifest["product"]["python_requires"],
-        "validated_python": manifest["product"]["validated_python"],
-        "node_requires": manifest["product"]["node_requires"],
-        "artifact_files": records,
-        "source": source_summary,
-        "resources": resources,
-        "bundled_files": bundled_files,
-        "dependencies": manifest["dependencies"],
-        "licenses": manifest["licenses"],
-        "release_status": "candidate-not-released",
-        "published": False,
-    }
-    (dist / RELEASE_MANIFEST).write_text(
-        json.dumps(release, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    sums = "".join(
-        row["sha256"] + "  " + row["name"] + "\n"
-        for row in sorted(records, key=lambda row: row["name"])
-    )
-    (dist / "SHA256SUMS").write_text(sums, encoding="ascii")
+        artifacts = sorted(path for path in work.iterdir() if path.is_file())
+        records = [artifact_record(path) for path in artifacts]
+        wheel = next((path for path in artifacts if path.suffix == ".whl"), None)
+        resources, bundled_files = wheel_resource_records(wheel) if wheel else ([], 0)
+        source_archive = next(
+            (
+                row
+                for row in records
+                if row["name"].startswith("Openthu-") and row["name"].endswith("-source.zip")
+            ),
+            None,
+        )
+        source_summary = {
+            "files": len(files),
+            "archive_members": len(files),
+            "bytes": sum(len(data) for data in files.values()),
+            "archive_sha256": source_archive["sha256"] if source_archive else None,
+        }
+        release = {
+            "schema_version": "openthu-release-manifest-v1",
+            "product": "openthu",
+            "version": version,
+            "commit": commit,
+            "dirty": False,
+            "python_requires": manifest["product"]["python_requires"],
+            "validated_python": manifest["product"]["validated_python"],
+            "node_requires": manifest["product"]["node_requires"],
+            "artifact_files": records,
+            "source": source_summary,
+            "resources": resources,
+            "bundled_files": bundled_files,
+            "dependencies": manifest["dependencies"],
+            "licenses": manifest["licenses"],
+            "release_status": "candidate-not-released",
+            "published": False,
+        }
+        (work / RELEASE_MANIFEST).write_text(
+            json.dumps(release, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        sums = "".join(
+            row["sha256"] + "  " + row["name"] + "\n"
+            for row in sorted(records, key=lambda row: row["name"])
+        )
+        (work / "SHA256SUMS").write_text(sums, encoding="ascii")
+
+        backup = dist.with_name(dist.name + ".previous")
+        if backup.exists():
+            shutil.rmtree(backup)
+        if dist.exists():
+            dist.rename(backup)
+        try:
+            work.rename(dist)
+        except OSError:
+            if backup.exists():
+                backup.rename(dist)
+            raise
+        if backup.exists():
+            shutil.rmtree(backup, ignore_errors=True)
+    except BaseException:
+        shutil.rmtree(work, ignore_errors=True)
+        raise
     return release
 
 
@@ -397,29 +430,138 @@ def build_candidate(dist: Path = DIST) -> dict:
 # Verification
 # --------------------------------------------------------------------------
 
-def _wheel_version(archive: zipfile.ZipFile) -> tuple[str, str]:
+def _metadata_fields(archive: zipfile.ZipFile) -> dict[str, list[str]]:
+    """Parse every METADATA header, keeping repeated fields such as Requires-Dist."""
     metadata = next(
         (name for name in archive.namelist() if name.endswith(".dist-info/METADATA")), None
     )
     if metadata is None:
         raise ReleaseError("RELEASE_WHEEL_METADATA_MISSING", "METADATA")
     text = archive.read(metadata).decode("utf-8", "replace")
-    fields = {}
+    fields: dict[str, list[str]] = {}
     for line in text.splitlines():
         if not line.strip():
             break
         key, _, value = line.partition(":")
-        fields.setdefault(key.strip().lower(), value.strip())
-    return fields.get("name", ""), fields.get("version", "")
+        fields.setdefault(key.strip().lower(), []).append(value.strip())
+    return fields
+
+
+def _wheel_version(archive: zipfile.ZipFile) -> tuple[str, str]:
+    fields = _metadata_fields(archive)
+    name = (fields.get("name") or [""])[0]
+    version = (fields.get("version") or [""])[0]
+    return name, version
+
+
+def declared_scripts() -> dict[str, str]:
+    """The console entry points declared in pyproject, as ``name -> target``."""
+    spec = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    scripts = spec.get("project", {}).get("scripts", {})
+    if not isinstance(scripts, dict) or not scripts:
+        raise ReleaseError("RELEASE_ENTRY_POINTS_MISSING", "[project.scripts]")
+    return {str(name): str(target) for name, target in scripts.items()}
+
+
+def _parse_requires_dist(value: str) -> tuple[str, str | None]:
+    """Split one Requires-Dist into ``pkg==version`` plus its extra marker."""
+    requirement, _, marker = value.partition(";")
+    requirement = requirement.strip()
+    marker = marker.strip()
+    extra = None
+    if marker:
+        parts = marker.replace(" ", "").split("==")
+        if len(parts) == 2 and parts[0] == 'extra':
+            extra = parts[1].strip('"\'')
+    return requirement, extra
+
+
+def expected_license_members(manifest: dict, version: str) -> list[str]:
+    """Map each declared licence file to the exact wheel member that must hold it."""
+    members: list[str] = []
+    for name in manifest["license_files"]:
+        posix = PurePosixPath(name)
+        if len(posix.parts) == 1:
+            members.append(f"openthu-{version}.dist-info/licenses/{posix.name}")
+        elif posix.parts[0] == "src":
+            members.append("/".join(posix.parts[1:]))
+        else:
+            members.append("thu_assistant/_bundled/" + posix.as_posix())
+    return members
+
+
+def harden_bundled_modes(path: Path) -> None:
+    """Mark bundled resources read-only inside the wheel.
+
+    ``materialize`` writes them read-only in the build tree; the wheel carries
+    the mode in the zip entry, so the installed files stay read-only as well.
+    Content and RECORD hashes are untouched.
+    """
+    staging = path.with_name(path.name + ".staging")
+    with zipfile.ZipFile(path) as source, zipfile.ZipFile(
+        staging, "w", zipfile.ZIP_DEFLATED, compresslevel=9
+    ) as target:
+        for info in source.infolist():
+            data = source.read(info)
+            if info.filename.startswith("thu_assistant/_bundled/"):
+                info.external_attr = 0o100444 << 16
+                info.create_system = 3
+            target.writestr(info, data)
+    staging.replace(path)
+
+
+def _head_commit() -> str | None:
+    try:
+        return git_commit()
+    except ReleaseError:
+        return None
 
 
 def verify_wheel(path: Path, release: dict, manifest: dict) -> dict:
     report = {"name": path.name, "status": "pass", "checks": []}
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
-        name, version = _wheel_version(archive)
+        fields = _metadata_fields(archive)
+        name = (fields.get("name") or [""])[0]
+        version = (fields.get("version") or [""])[0]
         if name != "openthu" or version != release["version"]:
             raise ReleaseError("RELEASE_WHEEL_VERSION_MISMATCH", f"{name} {version}")
+        requires_python = (fields.get("requires-python") or [""])[0]
+        if requires_python != manifest["product"]["python_requires"]:
+            raise ReleaseError("RELEASE_WHEEL_PYTHON_REQUIREMENT", requires_python)
+
+        runtime = manifest["dependencies"]["runtime"]
+        optional = manifest["dependencies"].get("optional", {})
+        seen: dict[str, set[str | None]] = {}
+        for value in fields.get("requires-dist") or []:
+            requirement, extra = _parse_requires_dist(value)
+            seen.setdefault(requirement, set()).add(extra)
+        for package, pin in runtime.items():
+            requirement = f"{package}=={pin}"
+            if requirement not in seen or seen[requirement] != {None}:
+                raise ReleaseError("RELEASE_WHEEL_DEPENDENCY_MISSING", requirement)
+        for extra_name, packages in optional.items():
+            for package, pin in packages.items():
+                requirement = f"{package}=={pin}"
+                if extra_name not in (seen.get(requirement) or set()):
+                    raise ReleaseError(
+                        "RELEASE_WHEEL_OPTIONAL_DEPENDENCY", f"{extra_name}:{requirement}"
+                    )
+        development = manifest["dependencies"].get("development", {})
+        allowed = {name.lower() for name in runtime}
+        for packages in optional.values():
+            allowed.update(name.lower() for name in packages)
+        for package in development:
+            if package.lower() in allowed:
+                continue
+            for requirement, extras in seen.items():
+                if requirement.split("==")[0].lower() != package.lower():
+                    continue
+                if None in extras:
+                    # A development tool declared as a hard runtime dependency
+                    # would make a normal install pull the test framework.
+                    raise ReleaseError("RELEASE_WHEEL_DEV_DEPENDENCY", package)
+
         findings = materialize.scan_forbidden(names, manifest)
         if findings:
             raise ReleaseError("RELEASE_WHEEL_FORBIDDEN_FILE", findings[0]["file"])
@@ -431,6 +573,9 @@ def verify_wheel(path: Path, release: dict, manifest: dict) -> dict:
         layout = json.loads(archive.read(layout_name))
         if layout.get("product_version") != release["version"]:
             raise ReleaseError("RELEASE_WHEEL_LAYOUT_VERSION", layout.get("product_version", ""))
+        for member in expected_license_members(manifest, release["version"]):
+            if member not in names:
+                raise ReleaseError("RELEASE_WHEEL_LICENSE_MISSING", member)
         for resource, relative in manifest["resource_map"].items():
             member = "thu_assistant/_bundled/" + relative
             if member not in names:
@@ -441,25 +586,55 @@ def verify_wheel(path: Path, release: dict, manifest: dict) -> dict:
                 raise ReleaseError("RELEASE_WHEEL_RESOURCE_MISSING", record.get("id", ""))
             if hashlib.sha256(archive.read(member)).hexdigest() != record.get("sha256"):
                 raise ReleaseError("RELEASE_RESOURCE_HASH_MISMATCH", record.get("id", ""))
-        for license_file in manifest["license_files"]:
-            if not any(
-                name.endswith("/" + PurePosixPath(license_file).name) for name in names
-            ):
-                raise ReleaseError("RELEASE_WHEEL_LICENSE_MISSING", license_file)
+        bundled_members = [name for name in names if name.startswith("thu_assistant/_bundled/")]
+        recorded = [name for name in bundled_members if not name.endswith("/" + materialize.LAYOUT_NAME)]
+        if len(recorded) != len(release.get("resources", [])):
+            raise ReleaseError(
+                "RELEASE_RESOURCE_RECORD_COUNT",
+                f"{len(recorded)} members, {len(release.get('resources', []))} records",
+            )
+        if os.name != "nt":
+            for member in bundled_members:
+                mode = (archive.getinfo(member).external_attr >> 16) & 0o777
+                if mode & 0o200:
+                    raise ReleaseError("RELEASE_RESOURCE_WRITABLE", member)
         entry_points = next(
             (name for name in names if name.endswith(".dist-info/entry_points.txt")), None
         )
         if entry_points is None:
             raise ReleaseError("RELEASE_WHEEL_ENTRY_POINTS_MISSING", "entry_points.txt")
+        published: dict[str, str] = {}
+        section = None
+        for line in archive.read(entry_points).decode("utf-8", "replace").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                section = stripped[1:-1]
+                continue
+            if section != "console_scripts" or not stripped or stripped.startswith("#"):
+                continue
+            entry, _, target = stripped.partition("=")
+            published[entry.strip()] = target.strip()
+        expected_scripts = declared_scripts()
+        if published != expected_scripts:
+            missing = sorted(set(expected_scripts) - set(published))
+            extra = sorted(set(published) - set(expected_scripts))
+            raise ReleaseError(
+                "RELEASE_WHEEL_ENTRY_POINTS_MISMATCH",
+                f"missing={missing} extra={extra}",
+            )
         report["checks"] = [
             "metadata",
+            "requires-python",
+            "requires-dist",
             "forbidden-files",
             "bundled-layout",
             "resources",
+            "resource-modes",
             "licenses",
             "entry-points",
         ]
         report["members"] = len(names)
+        report["bundled_members"] = len(bundled_members)
     return report
 
 
@@ -483,12 +658,32 @@ def verify_sdist(path: Path, release: dict, manifest: dict) -> dict:
                 )
     if f"{root}/PKG-INFO" not in names:
         raise ReleaseError("RELEASE_SDIST_METADATA_MISSING", "PKG-INFO")
-    report["checks"] = ["metadata", "forbidden-files", "build-support", "bundled-sources"]
+    with tarfile.open(path) as archive:
+        handle = archive.extractfile(f"{root}/PKG-INFO")
+        pkg_info = handle.read().decode("utf-8", "replace") if handle else ""
+    fields: dict[str, str] = {}
+    for line in pkg_info.splitlines():
+        if not line.strip():
+            break
+        key, _, value = line.partition(":")
+        fields.setdefault(key.strip().lower(), value.strip())
+    if fields.get("version") != release["version"]:
+        raise ReleaseError("RELEASE_SDIST_VERSION_MISMATCH", fields.get("version", ""))
+    if fields.get("requires-python") != manifest["product"]["python_requires"]:
+        raise ReleaseError("RELEASE_SDIST_PYTHON_REQUIREMENT", fields.get("requires-python", ""))
+    report["checks"] = [
+        "metadata",
+        "version",
+        "python-requirement",
+        "forbidden-files",
+        "build-support",
+        "bundled-sources",
+    ]
     report["members"] = len(names)
     return report
 
 
-def verify(dist: Path = DIST) -> dict:
+def verify(dist: Path = DIST, *, expected_commit: str | None = None) -> dict:
     manifest = materialize.load_manifest(ROOT)
     manifest_path = dist / RELEASE_MANIFEST
     if not manifest_path.is_file():
@@ -496,6 +691,15 @@ def verify(dist: Path = DIST) -> dict:
     release = json.loads(manifest_path.read_text(encoding="utf-8"))
     if release.get("version") != declared_version():
         raise ReleaseError("RELEASE_VERSION_MISMATCH", release.get("version", ""))
+    head = expected_commit or _head_commit()
+    if head is None:
+        raise ReleaseError("RELEASE_COMMIT_UNKNOWN", "pass --expected-commit")
+    if release.get("commit") != head:
+        raise ReleaseError(
+            "RELEASE_COMMIT_MISMATCH", f"artifact {release.get('commit')} != HEAD {head}"
+        )
+    if release.get("dirty") is not False:
+        raise ReleaseError("RELEASE_DIRTY_ARTIFACT", str(release.get("dirty")))
     notes = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     if release["version"] not in notes[:600]:
         raise ReleaseError("RELEASE_NOTES_MISSING", "CHANGELOG.md")
@@ -653,9 +857,53 @@ def install_check(wheel: Path, *, python: str | None = None) -> dict:
         tools = rows.get(2, {}).get("result", {}).get("tools", [])
         if len(tools) != 29 or rows.get(3, {}).get("result", {}).get("isError"):
             raise ReleaseError("INSTALL_MCP_TOOLS", f"{len(tools)} tools")
+
+        # An installed wheel must be able to diagnose itself without the
+        # source-only scripts/dev.py, and doing so must not touch user state.
+        user_state = root / "user-state"
+        (user_state / "downloads").mkdir(parents=True)
+        (user_state / "config.json").write_text('{"ui": {"page_size": 20}}', encoding="utf-8")
+        (user_state / "downloads" / "keep.bin").write_bytes(b"synthetic download\n")
+        before = _snapshot_tree(user_state)
+        doctor_env = dict(env)
+        doctor_env.update(
+            OPENTHU_STATE_DIR=str(user_state),
+            OPENTHU_DOWNLOAD_DIR=str(user_state / "downloads"),
+            OPENTHU_CONFIG_FILE=str(user_state / "config.json"),
+        )
+        doctor = subprocess.run(
+            [str(target_python), "-I", "-m", "thu_assistant.doctor", "--json"],
+            cwd=workdir,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=doctor_env,
+        )
+        if doctor.returncode:
+            raise ReleaseError("INSTALL_DOCTOR_FAILED", doctor.stdout[-300:] or doctor.stderr[-300:])
+        diagnostics = json.loads(doctor.stdout)
+        if not diagnostics.get("ok") or diagnostics.get("mode") != "installed":
+            raise ReleaseError(
+                "INSTALL_DOCTOR_REPORT", f"ok={diagnostics.get('ok')} mode={diagnostics.get('mode')}"
+            )
+        if _snapshot_tree(user_state) != before:
+            raise ReleaseError("INSTALL_TOUCHED_USER_STATE", str(user_state.name))
         report["mcp_tools"] = len(tools)
+        report["doctor_ok"] = True
+        report["user_state_unchanged"] = True
         report["venv"] = "temporary"
         return report
+
+
+def _snapshot_tree(root: Path) -> dict[str, tuple[int, str]]:
+    rows: dict[str, tuple[int, str]] = {}
+    for path in sorted(root.rglob("*")):
+        if path.is_file() and not path.is_symlink():
+            rows[path.relative_to(root).as_posix()] = (
+                path.stat().st_mtime_ns,
+                hashlib.sha256(path.read_bytes()).hexdigest(),
+            )
+    return rows
 
 
 # --------------------------------------------------------------------------
@@ -670,17 +918,27 @@ def main(argv=None) -> int:
     )
     parser.add_argument("--dist", type=Path, default=DIST, help="artifact directory")
     parser.add_argument("--wheel", type=Path, default=None, help="wheel for install-check")
+    parser.add_argument(
+        "--expected-commit",
+        default=None,
+        metavar="SHA",
+        help="commit the candidate must have been built from (defaults to HEAD)",
+    )
     args = parser.parse_args(argv)
     if args.command == "manifest":
         print(json.dumps(materialize.load_manifest(ROOT), ensure_ascii=False, indent=2))
         return 0
     if args.command == "build":
         release = build_candidate(args.dist)
-        result = verify(args.dist)
+        result = verify(args.dist, expected_commit=args.expected_commit)
         print(json.dumps({"build": release, "verify": result}, ensure_ascii=False))
         return 0
     if args.command == "verify":
-        print(json.dumps(verify(args.dist), ensure_ascii=False))
+        print(
+            json.dumps(
+                verify(args.dist, expected_commit=args.expected_commit), ensure_ascii=False
+            )
+        )
         return 0
     wheel = args.wheel or next(iter(sorted(args.dist.glob("*.whl"))), None)
     if wheel is None:

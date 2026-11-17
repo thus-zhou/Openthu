@@ -284,17 +284,44 @@ def key_roots(state_dir: Path | str) -> list[Path]:
     return [state / name for name in ("keys", "keyrings", "secrets", "credentials")]
 
 
+def _legacy_candidate(
+    *, env: dict[str, str] | None = None, platform_name: str | None = None
+) -> tuple[str, Path]:
+    """The pre-v0.2 state location plus where that answer came from.
+
+    A state directory pinned through the compatibility environment variables is
+    still the directory the old runtime used; reporting it (instead of the
+    platform default) is what lets the migration preview find a custom state.
+    Nothing is read from the directory itself.
+    """
+    env = os.environ if env is None else env
+    platform_name = platform_name or os.name
+    for name in ("OPENTHU_STATE_DIR", "THU_ASSISTANT_STATE_DIR"):
+        value = (env.get(name) or "").strip()
+        if not value:
+            continue
+        candidate = Path(value)
+        if candidate.is_absolute() and candidate.is_dir():
+            return f"environment:{name}", candidate
+    if platform_name == "nt":
+        home = Path(env.get("USERPROFILE") or env.get("HOME") or Path.home())
+        local = Path(env.get("LOCALAPPDATA") or env.get("APPDATA") or home / "AppData" / "Local")
+        return "platform-default", local / APP_NAME
+    return "platform-default", Path(env.get("HOME") or Path.home()) / APP_NAME
+
+
 def legacy_state_dir(
     *, env: dict[str, str] | None = None, platform_name: str | None = None
 ) -> Path:
     """The pre-v0.2 state location, returned without reading or moving it."""
-    env = os.environ if env is None else env
-    platform_name = platform_name or os.name
-    if platform_name == "nt":
-        home = Path(env.get("USERPROFILE") or env.get("HOME") or Path.home())
-        local = Path(env.get("LOCALAPPDATA") or env.get("APPDATA") or home / "AppData" / "Local")
-        return local / APP_NAME
-    return Path(env.get("HOME") or Path.home()) / APP_NAME
+    return _legacy_candidate(env=env, platform_name=platform_name)[1]
+
+
+def legacy_state_source(
+    *, env: dict[str, str] | None = None, platform_name: str | None = None
+) -> str:
+    """Where :func:`legacy_state_dir` came from (``environment:<NAME>`` or default)."""
+    return _legacy_candidate(env=env, platform_name=platform_name)[0]
 
 
 def migration_preview(

@@ -8,6 +8,10 @@ copies of the gateway and helper code.
 The module is deliberately stdlib-only: ``setup.py`` imports it during a build
 where project dependencies (and even ``setuptools`` internals) are not the
 subject under test.
+
+Every path from the manifest is treated as untrusted input: a ``source`` or
+``install`` entry that is absolute, contains ``..`` or resolves outside its
+documented root fails the build instead of writing outside the bundle.
 """
 from __future__ import annotations
 
@@ -16,11 +20,18 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shutil
 
 MANIFEST_RELATIVE = "build_support/distribution.json"
 BUNDLE_DIRNAME = "_bundled"
 LAYOUT_NAME = "layout.json"
 LAYOUT_SCHEMA_VERSION = "openthu-bundled-layout-v1"
+
+#: Files are shipped read-only so a running process cannot rewrite program
+#: resources.  Windows only exposes the read-only attribute through chmod and
+#: its build tools must be able to replace the tree, so the strict mode is
+#: applied on POSIX and the platform default is kept on Windows.
+RESOURCE_FILE_MODE = 0o644 if os.name == "nt" else 0o444
 
 
 class DistributionError(RuntimeError):
@@ -85,12 +96,35 @@ def matches_any(relpath: str, patterns) -> bool:
     return _matches_any(relpath, patterns)
 
 
+def _safe_relative(value, item: str) -> str:
+    """Return a normalized POSIX relative path or fail the build."""
+    text = str(value or "").replace("\\", "/")
+    if not text or text.startswith("/") or any(
+        part in {"..", ""} for part in text.split("/")
+    ):
+        raise DistributionError("DISTRIBUTION_PATH_INVALID", item)
+    pure = PurePosixPath(text)
+    if pure.is_absolute() or not pure.parts:
+        raise DistributionError("DISTRIBUTION_PATH_INVALID", item)
+    return pure.as_posix()
+
+
+def _bundle_root(root: Path, bundle: dict) -> Path:
+    relative = _safe_relative(bundle.get("source"), f"{bundle.get('id', '?')}.source")
+    source = (root / relative).resolve()
+    try:
+        source.relative_to(root.resolve())
+    except ValueError:
+        raise DistributionError("DISTRIBUTION_PATH_OUTSIDE", str(bundle.get("source"))) from None
+    if not source.is_dir():
+        raise DistributionError("DISTRIBUTION_BUNDLE_MISSING", relative)
+    return source
+
+
 def bundle_files(root: Path | str, bundle: dict) -> list[str]:
     """Return sorted repository-relative POSIX paths for one bundle."""
     root = Path(root)
-    source = root / bundle["source"]
-    if not source.is_dir():
-        raise DistributionError("DISTRIBUTION_BUNDLE_MISSING", bundle["source"])
+    source = _bundle_root(root, bundle)
     include = bundle.get("include") or ["**/*"]
     exclude = bundle.get("exclude") or []
     rows: list[str] = []
@@ -148,6 +182,18 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _force_remove(path: Path) -> None:
+    """Remove a previously materialised bundle, including read-only files."""
+    if not path.exists():
+        return
+
+    def _retry(function, target, _error):
+        os.chmod(target, 0o700)
+        function(target)
+
+    shutil.rmtree(path, onexc=_retry)
+
+
 def materialize(
     root: Path | str,
     package_dir: Path | str,
@@ -158,23 +204,36 @@ def materialize(
 ) -> dict:
     """Copy the declared bundles into ``package_dir/_bundled`` and describe them.
 
-    Files are copied read-only.  Nothing outside ``package_dir`` is created and
+    The target directory is rebuilt from scratch: a file deleted from the
+    repository must not survive as a stale resource in an incremental build.
+    Files are read-only, nothing outside ``package_dir/_bundled`` is created and
     no state, credential or cache directory is ever consulted.
     """
     root = Path(root)
-    target = Path(package_dir) / BUNDLE_DIRNAME
+    package = Path(package_dir)
+    target = package / BUNDLE_DIRNAME
+    _force_remove(target)
+    target.mkdir(parents=True, exist_ok=True)
     copied = 0
     total = 0
     hashes: dict[str, str] = {}
+    installs: dict[str, str] = {}
     for bundle in manifest["bundles"]:
+        install = _safe_relative(bundle.get("install"), f"{bundle.get('id', '?')}.install")
+        bundle_target = (target / install).resolve()
+        try:
+            bundle_target.relative_to(target.resolve())
+        except ValueError:
+            raise DistributionError("DISTRIBUTION_PATH_OUTSIDE", str(bundle.get("install"))) from None
+        installs[bundle["id"]] = install
+        source_root = _bundle_root(root, bundle)
         for rel in bundle_files(root, bundle):
-            source = root / bundle["source"] / rel
-            data = source.read_bytes()
-            destination = target / bundle["install"] / rel
+            data = (source_root / rel).read_bytes()
+            destination = target / install / rel
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(data)
-            os.chmod(destination, 0o644)
-            hashes[f"{bundle['install']}/{rel}"] = hashlib.sha256(data).hexdigest()
+            os.chmod(destination, RESOURCE_FILE_MODE)
+            hashes[f"{install}/{rel}"] = hashlib.sha256(data).hexdigest()
             copied += 1
             total += len(data)
     layout = {
@@ -183,16 +242,17 @@ def materialize(
         "commit": commit,
         "resources": dict(manifest["resource_map"]),
         "bundles": [
-            {"id": bundle["id"], "install": bundle["install"]}
+            {"id": bundle["id"], "install": installs[bundle["id"]]}
             for bundle in manifest["bundles"]
         ],
         "file_count": copied,
     }
-    (target / LAYOUT_NAME).write_text(
+    layout_path = target / LAYOUT_NAME
+    layout_path.write_text(
         json.dumps(layout, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    os.chmod(target / LAYOUT_NAME, 0o644)
+    os.chmod(layout_path, RESOURCE_FILE_MODE)
     return {
         "files": copied,
         "bytes": total,

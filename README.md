@@ -52,7 +52,7 @@ python scripts/dev.py test
 | 获取方式 | 包含内容 | 适用场景 |
 |---|---|---|
 | 完整源码包（`git clone` 或 GitHub Release 源码归档） | Python/Node 源码、`vendor/madmodel-proxy`、`runtime/windows`、合成测试 | 云端离线开发、Windows 真实运行、贡献代码 |
-| Python wheel / sdist（`python scripts/package_release.py build` 生成） | Python 包、静态服务目录、兼容命令，以及 `thu_assistant/_bundled/` 内的 Windows 认证辅助、固定上游 Proxy 与许可证 | 静态目录、库调用与认证辅助解析；`node_modules` 与离线测试不在包内，需另行执行 `setup-node` |
+| Python wheel / sdist（`python scripts/package_release.py build` 生成） | Python 包、静态服务目录、兼容命令，以及 `thu_assistant/_bundled/` 内的 Windows 认证辅助、固定上游 Proxy 与许可证 | 静态目录、库调用与认证辅助解析；`node_modules` 与离线测试不在包内，需要时自行 `npm ci --ignore-scripts`，安装后用 `openthu-doctor` 自检 |
 | 云端离线开发检出 | 完整源码、Python 3.12、Node.js 24、Playwright Chromium | `doctor` / `check` / `test` / `smoke`；不访问校园账户，不保存 Windows 凭据 |
 
 真实校园认证目前依赖 Windows DPAPI。云端开发机只做开发与离线验证，不应导入或改用明文凭据。

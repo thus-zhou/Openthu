@@ -49,7 +49,7 @@ python scripts/dev.py doctor
 | 来源 | 内容 | 能做什么 / 不能做什么 |
 |---|---|---|
 | 完整源码包（`git clone` 或 Release 源码归档） | Python/Node 源码、`vendor/madmodel-proxy`、`runtime/windows`、合成测试、开发脚本 | 可做云端离线开发、Windows 真实认证与运行、贡献；真实写入仍需按具体事项验收 |
-| Python wheel / sdist | Python 包、静态服务目录、兼容命令，以及打包进 `thu_assistant/_bundled/` 的 Windows 认证辅助、固定上游 Proxy 与许可证 | 可做静态目录、库调用和认证辅助解析；`node_modules` 与离线测试不在包内，需 `python scripts/dev.py setup-node`（或 `npm ci --ignore-scripts`）补齐 Node 运行依赖 |
+| Python wheel / sdist | Python 包、静态服务目录、兼容命令，以及打包进 `thu_assistant/_bundled/` 的 Windows 认证辅助、固定上游 Proxy 与许可证 | 可做静态目录、库调用和认证辅助解析；`node_modules` 与离线测试不在包内，需要时自行 `npm ci --ignore-scripts`；安装后用 `openthu-doctor` 自检 |
 | 云端离线开发检出 | 完整源码、Python、Node.js 24、Chromium | 可运行 `doctor` / `check` / `smoke` / `test`；不访问校园账户，不保存或导入 Windows 凭据 |
 
 wheel 与源码包的差别只在 `node_modules`、离线测试和开发脚本；认证辅助与固定上游代码由同一份 `build_support/distribution.json` 生成，不再各自维护一份。`doctor` 的 `release-layout` 检查会核对程序版本与包内资源配置是否配套，混装旧版本会直接阻止启动。

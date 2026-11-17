@@ -31,7 +31,7 @@ if str(_SRC) not in sys.path:
 from thu_assistant import configuration as configuration_module  # noqa: E402
 from thu_assistant import paths as path_resolver  # noqa: E402
 
-MIN_PYTHON = (3, 10)
+MIN_PYTHON = (3, 12)
 VALIDATED_PYTHON = (3, 12)
 MIN_NODE = 24
 DEV_PACKAGES = ("pytest", "requests", "playwright", "build", "openthu")
@@ -39,7 +39,7 @@ PINNED_NODE_PACKAGE = "tough-cookie"
 MAX_DIAGNOSTIC_OUTPUT = 4096
 
 FIX_PYTHON = (
-    "安装 Python 3.12（最低 3.10），在项目目录运行 python -m venv .venv，"
+    "安装 Python 3.12 或 3.13，在项目目录运行 python -m venv .venv，"
     "激活后执行 python -m pip install -r requirements-dev.txt 和 python -m pip install -e ."
 )
 FIX_PYTHON_DEPS = "python -m pip install -r requirements-dev.txt；python -m pip install -e ."
@@ -48,8 +48,8 @@ FIX_NODE_DEPS = "python scripts/dev.py setup-node"
 FIX_PLAYWRIGHT = "python -m playwright install chromium"
 FIX_PLAYWRIGHT_LINUX = "python -m playwright install --with-deps chromium"
 FIX_SOURCE = (
-    "使用 GitHub Release 的完整源码包或 git clone；"
-    "Python wheel 不含 vendor/ 与 runtime/windows/。"
+    "完整 wheel 与 sdist 自带 thu_assistant/_bundled/（Windows 认证辅助与固定上游代码）；"
+    "缺失说明安装不完整，请重新安装或改用完整源码包。"
 )
 FIX_WINDOWS_AUTH = (
     "真实登录请在 Windows 完整源码包中运行；"
@@ -284,7 +284,7 @@ def _browser_report(state) -> dict:
     return {"available": bool(state), "reason": "ok" if state else "unavailable"}
 
 
-def _release_layout(package_dir: Path):
+def _release_layout(package_dir: Path, source):
     """Check the installed program files against the bundled layout descriptor.
 
     Mixing an old package tree with a newer resource layout (or the reverse)
@@ -293,12 +293,23 @@ def _release_layout(package_dir: Path):
     """
     layout = path_resolver.bundled_layout(package_root_value=package_dir)
     if layout is None:
+        if source is not None:
+            return _row(
+                "release-layout",
+                "发行布局",
+                "packaging",
+                "pass",
+                "源码检出布局：资源按仓库路径解析，无包内布局描述",
+            )
         return _row(
             "release-layout",
             "发行布局",
             "packaging",
-            "pass",
-            "源码检出布局：资源按仓库路径解析，无包内布局描述",
+            "fail",
+            "安装包缺少包内资源布局（thu_assistant/_bundled/layout.json）；"
+            "该安装不完整，认证辅助不可用",
+            fix=FIX_SOURCE,
+            blocking=True,
         )
     try:
         from thu_assistant.version import __version__ as running_version
@@ -484,9 +495,15 @@ def _source_package(package_dir: Path, source):
             "source-package",
             "源码包完整性",
             "packaging",
-            "warning",
-            "当前是包安装布局；缺少认证辅助与离线测试，不代表安装损坏",
+            "fail",
+            (
+                "安装包缺少认证运行资源：" + "、".join(str(item) for item in source_missing)
+                if source_missing
+                else "安装包没有包内认证运行资源（_bundled 布局缺失）"
+            )
+            + "；请重新安装完整 wheel",
             fix=FIX_SOURCE,
+            blocking=True,
         )
     if source_missing:
         return _row(
@@ -919,7 +936,7 @@ def collect(
 
     checks.append(_windows_auth(package_dir, source, node_ok, platform_name))
     checks.append(_source_package(package_dir, source))
-    checks.append(_release_layout(package_dir))
+    checks.append(_release_layout(package_dir, source))
     checks.append(_config_row(config, config_error))
     checks.append(_storage_row(config, config_error))
 

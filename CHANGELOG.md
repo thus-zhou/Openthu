@@ -2,6 +2,10 @@
 
 ## 0.2.0 — 候选（未发布）
 
+- 6.3 审计修复：迁移按真实状态目录（`actions-v1`、`consent-v1`、`submissions-v1`、`todos-v1`、`events-v1`、`sports-scheduler`、`keys`）分类，未决事务与待提交计划标为 `REVIEW_REQUIRED`，主机授权密钥、待消费 grant 与密钥材料标为 `EXCLUDED_SENSITIVE` 不复制；`apply()` 以兼容性而不是状态判断跳过，DPAPI 密文即使目标同名并选择 `replace` 也不会跨平台复制；计划文件按不可信输入校验（绝对根目录、禁止 `..`/越界、源必须在旧目录内）；Windows 默认状态目录给出 `NO_MIGRATION_NEEDED` 成功空操作；`apply` 增加 `complete` 与未决冲突计数，CLI 退出码随之变化。
+- 6.3 审计修复：`package_release verify` 绑定产物提交与 `HEAD`（`--expected-commit` 可覆盖），核对 `Requires-Python`、`Requires-Dist`、全部入口点、许可证的精确安装路径与 `_bundled` 只读模式；sdist 核对 `PKG-INFO` 版本；构建先写临时目录，成功后才原子替换 `dist/`，失败保留上一份候选；发行清单记录每个随包文件的位置与哈希。
+- 6.3 审计修复：`materialize` 拒绝越界的 `source`/`install`，重建 `_bundled` 以清除陈旧文件，资源以只读模式写入并写进 wheel；`learn-assistant-mcp` 的 `serverInfo` 使用单一版本源；新增 `openthu-doctor`/`thu_assistant.doctor` 供 wheel 用户自检，安装检查同时验证诊断可用且用户状态目录未被改写；`doctor` 将缺少 `_bundled` 的安装判为阻塞，Python 下限文案改为 3.12；CI 增加 3.13 job。
+
 - 完整发行布局：`build_support/distribution.json` 是唯一资源清单，wheel 与源码包由它生成；`setup.py` 在构建时把 Windows 认证辅助、固定上游 `madmodel-proxy`（含 tokenizer 与许可证）复制进 `thu_assistant/_bundled/`，并写出版本、提交与逻辑资源名的 `layout.json`。
 - `thu_assistant.paths` 按安装布局描述解析认证资源：安装包不再依赖 `src/` 的父目录层级，源码检出仍优先使用工作区文件；布局中的绝对路径或越界路径一律拒绝。
 - 版本只有一个来源 `thu_assistant.version.__version__`（0.2.0），Python 包元数据、`learn_assistant`、MCP `serverInfo`、发布清单和候选说明同源；最低 Python 提升到 3.12，Node 仍为 24。

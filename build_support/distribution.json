@@ -26,7 +26,8 @@
       "build": "1.2.2.post1",
       "jsonschema": "4.26.0",
       "playwright": "1.57.0",
-      "wheel": "0.48.0"
+      "wheel": "0.48.0",
+      "setuptools": ">=77"
     },
     "node": {
       "tough-cookie": "6.0.0"
@@ -42,6 +43,7 @@
     "build": "MIT",
     "jsonschema": "MIT",
     "wheel": "MIT",
+    "setuptools": "MIT",
     "tough-cookie": "BSD-3-Clause",
     "madmodel-proxy": "MIT",
     "thu-learn-lib": "MIT"

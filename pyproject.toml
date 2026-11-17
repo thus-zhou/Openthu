@@ -27,6 +27,7 @@ Issues = "https://github.com/thus-zhou/Openthu/issues"
 [project.scripts]
 openthu = "thu_assistant.__main__:main"
 openthu-mcp = "thu_assistant.mcp_stdio:main"
+openthu-doctor = "thu_assistant.doctor:main"
 learn-assistant = "learn_assistant.cli:main"
 learn-assistant-mcp = "learn_assistant.mcp_stdio:main"
 tsinghua-assistant = "thu_assistant.__main__:main"
