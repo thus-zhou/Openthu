@@ -221,35 +221,35 @@
     "bundled_files": 54,
     "sdist_members": 496,
     "source_files": 565,
-    "verify": "ok=true at f8a026f; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
+    "verify": "ok=true at ac94b63; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
     "install_check": "outside the repository; 29 MCP tools, doctor ok, user state unchanged",
     "published": false,
     "record": "交付/候选版本记录.md",
-    "release_gate": "PASS; nine checks true, 0 gaps; run 44177697601",
+    "release_gate": "PASS; nine checks true, 0 gaps; run 44197852215 (push) and 44197861613 (pull_request)",
     "artifact_files": [
       {
         "name": "Openthu-0.2.0-source.tar.gz",
-        "size": 3666642,
-        "sha256": "592a7ff09efddf8262a7826b9307aae30d97d76e5e9c6681aa19d670d203e23d"
+        "size": 3672821,
+        "sha256": "4eccadfd1944a80443575195125c4d8abfaab76969c67dfb4289e58805c8f484"
       },
       {
         "name": "Openthu-0.2.0-source.zip",
-        "size": 4125578,
-        "sha256": "e33fb5ed710cb3783e357d7c1b1fdffd205caf162bbd9918acc8f8893b3464d5"
+        "size": 4132000,
+        "sha256": "563ff4cfcc48265367da3e874883e5815a8664e0d8bfeb07268c1f5467816b5e"
       },
       {
         "name": "openthu-0.2.0-py3-none-any.whl",
-        "size": 2807202,
-        "sha256": "dfc4a99d857c2e65332552defb58fbb09db7a4fb8d061f42160faa1d021e55b2"
+        "size": 2807388,
+        "sha256": "d3ae68a0eaba50711ff8c5b707574a44f1b4fa25b0c29d6a4be46825df615982"
       },
       {
         "name": "openthu-0.2.0.tar.gz",
-        "size": 3436910,
-        "sha256": "70e087c2019b7c17d0998ec21a9022e81cdc88556ed949536ba3e744b060b087"
+        "size": 3439873,
+        "sha256": "3700c74879c7348fd182b0bfcfbce1c666fee3a5334ec3b3be49a6c351d431c2"
       }
     ],
-    "artifact_commit": null,
-    "candidate_head": null,
+    "artifact_commit": "ac94b63d991bafec0b3bf4717b8fb5ae72e1ce35",
+    "candidate_head": "the commit containing this record file (record-only after ac94b63)",
     "note": "code_commit is the last product-code change; artifact_commit/candidate_head are filled by the acceptance record commit."
   }
 }

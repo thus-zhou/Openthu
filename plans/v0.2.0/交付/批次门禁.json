@@ -437,8 +437,8 @@
         ],
         "note": "Historical pre-audit checkpoint kept for traceability; the accepted state is the audit_fix block and the module_acceptance / checks fields.",
         "final_candidate": {
-          "commit": "f8a026f67e59875552216672b8f2c0deabc905ac",
-          "run": 44177697601,
+          "commit": "ac94b63d991bafec0b3bf4717b8fb5ae72e1ce35",
+          "run": 44197852215,
           "artifacts": 4,
           "source_files": 565,
           "wheel_members": 214,
@@ -486,8 +486,9 @@
         "scripts/dev.py check: 568 files, 0 findings, 29 MCP tools",
         "module tests: tests/test_batch8_integration.py 8 passed; related suites 239 passed",
         "Linux: Python 1812 passed/8 platform skips/0 failed (1820 cases) and Node 66 passed; the JUnit report returns PASS with 0 gaps",
-        "candidate build/verify/install-check on the accepted tree",
-        "GitHub Actions on the integration head: ubuntu-24.04, ubuntu-24.04 (3.13), windows-2025 and the release gate"
+        "Windows (CI): Python 1799 passed/21 platform skips/0 failed and Node 66 passed; the platform report returns PASS with 0 gaps",
+        "GitHub Actions push 44197852215 and pull_request 44197861613 at ac94b63: ubuntu-24.04, ubuntu-24.04 (3.13), windows-2025 and the release gate all successful; the gate returns PASS with all nine checks true and 0 gaps",
+        "final candidate rebuilt by the release gate at ac94b63: 4 artifacts, 565 source files, wheel 214 members (54 bundled), sdist 496 members"
       ]
     },
     {

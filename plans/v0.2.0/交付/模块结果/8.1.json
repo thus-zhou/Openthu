@@ -122,18 +122,40 @@
       "command": "python contracts/v0.2/sources/validate.py"
     },
     "candidate_build": {
-      "commit": "9b1bef5",
+      "commit": "ac94b63d991bafec0b3bf4717b8fb5ae72e1ce35",
       "dirty": false,
       "artifacts": 4,
-      "source_files": 559,
+      "source_files": 565,
       "wheel_members": 214,
       "bundled_files": 54,
-      "sdist_members": 493,
+      "sdist_members": 496,
+      "artifact_files": [
+        {
+          "name": "Openthu-0.2.0-source.tar.gz",
+          "size": 3672821,
+          "sha256": "4eccadfd1944a80443575195125c4d8abfaab76969c67dfb4289e58805c8f484"
+        },
+        {
+          "name": "Openthu-0.2.0-source.zip",
+          "size": 4132000,
+          "sha256": "563ff4cfcc48265367da3e874883e5815a8664e0d8bfeb07268c1f5467816b5e"
+        },
+        {
+          "name": "openthu-0.2.0-py3-none-any.whl",
+          "size": 2807388,
+          "sha256": "d3ae68a0eaba50711ff8c5b707574a44f1b4fa25b0c29d6a4be46825df615982"
+        },
+        {
+          "name": "openthu-0.2.0.tar.gz",
+          "size": 3439873,
+          "sha256": "3700c74879c7348fd182b0bfcfbce1c666fee3a5334ec3b3be49a6c351d431c2"
+        }
+      ],
       "verify": "ok=true; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
       "release_status": "candidate-not-released",
       "published": false,
-      "command": "python scripts/package_release.py build",
-      "note": "Local rehearsal at the code delivery commit; the final candidate is rebuilt and verified by the CI release gate at f8a026f (see checks.github_actions.candidate)."
+      "command": "python scripts/package_release.py build (CI release gate at ac94b63)",
+      "note": "Hashes are from the CI release-gate build at ac94b63. The local rebuild verified the same source/sdist bytes and wheel member set; the wheel bytes differ between the local setuptools toolchain and CI, so the CI artifact is authoritative."
     },
     "install_check": {
       "source_root": null,
@@ -142,7 +164,8 @@
       "doctor_ok": true,
       "user_state_unchanged": true,
       "venv": "temporary",
-      "command": "python scripts/package_release.py install-check --dist dist"
+      "command": "python scripts/package_release.py install-check --dist dist",
+      "note": "Run on a local rebuild at ac94b63; source and sdist hashes match CI, wheel bytes differ by toolchain, member list and metadata checks pass."
     },
     "fresh_install": {
       "location": "a new venv outside the repository",
@@ -162,16 +185,18 @@
       },
       "archives": {
         "ok": true,
-        "files_checked": 1825,
-        "findings": 0
+        "files_checked": 1840,
+        "findings": 0,
+        "note": "Final candidate at ac94b63: 565 source members x2 + 214 wheel + 496 sdist = 1,840; the earlier 9b1bef5 rehearsal scanned 1,825."
       },
       "git_diff": "added absolute paths are synthetic test markers (alice/synthetic/example); no real host path, credential or private key block",
       "author_identity": "Openthu Maintainers <maintainers@openthu.invalid>"
     },
     "github_actions": {
-      "commit": "f8a026f67e59875552216672b8f2c0deabc905ac",
-      "run": 44177697601,
+      "commit": "ac94b63d991bafec0b3bf4717b8fb5ae72e1ce35",
+      "run": 44197852215,
       "event": "push",
+      "pull_request_run": 44197861613,
       "status": "completed",
       "conclusion": "success",
       "jobs": {
@@ -183,12 +208,12 @@
       "reports": {
         "linux": {
           "status": "PASS",
-          "passed": 1863,
+          "passed": 1878,
           "skipped": 8,
           "failed": 0,
-          "total": 1871,
+          "total": 1886,
           "python": {
-            "passed": 1797,
+            "passed": 1812,
             "skipped": 8
           },
           "node": {
@@ -198,12 +223,12 @@
         },
         "windows": {
           "status": "PASS",
-          "passed": 1850,
+          "passed": 1865,
           "skipped": 21,
           "failed": 0,
-          "total": 1871,
+          "total": 1886,
           "python": {
-            "passed": 1784,
+            "passed": 1799,
             "skipped": 21
           },
           "node": {
@@ -228,7 +253,7 @@
         }
       },
       "candidate": {
-        "commit": "f8a026f67e59875552216672b8f2c0deabc905ac",
+        "commit": "ac94b63d991bafec0b3bf4717b8fb5ae72e1ce35",
         "artifacts": 4,
         "source_files": 565,
         "wheel_members": 214,
@@ -237,30 +262,30 @@
         "artifact_files": [
           {
             "name": "Openthu-0.2.0-source.tar.gz",
-            "size": 3666642,
-            "sha256": "592a7ff09efddf8262a7826b9307aae30d97d76e5e9c6681aa19d670d203e23d"
+            "size": 3672821,
+            "sha256": "4eccadfd1944a80443575195125c4d8abfaab76969c67dfb4289e58805c8f484"
           },
           {
             "name": "Openthu-0.2.0-source.zip",
-            "size": 4125578,
-            "sha256": "e33fb5ed710cb3783e357d7c1b1fdffd205caf162bbd9918acc8f8893b3464d5"
+            "size": 4132000,
+            "sha256": "563ff4cfcc48265367da3e874883e5815a8664e0d8bfeb07268c1f5467816b5e"
           },
           {
             "name": "openthu-0.2.0-py3-none-any.whl",
-            "size": 2807202,
-            "sha256": "dfc4a99d857c2e65332552defb58fbb09db7a4fb8d061f42160faa1d021e55b2"
+            "size": 2807388,
+            "sha256": "d3ae68a0eaba50711ff8c5b707574a44f1b4fa25b0c29d6a4be46825df615982"
           },
           {
             "name": "openthu-0.2.0.tar.gz",
-            "size": 3436910,
-            "sha256": "70e087c2019b7c17d0998ec21a9022e81cdc88556ed949536ba3e744b060b087"
+            "size": 3439873,
+            "sha256": "3700c74879c7348fd182b0bfcfbce1c666fee3a5334ec3b3be49a6c351d431c2"
           }
         ]
       },
       "notes": [
         "Windows is a CI-only platform; the local host is Linux.",
-        "Three earlier runs were not used as candidate evidence: 44173509428 and 44174931731 failed because the depth-1 checkout could not resolve module commits (fixed with fetch-depth 0 and a shallow-clone guard), and f8a026f's first attempt failed one flaky Windows concurrency case (test_concurrent_execute_dispatches_once); the rerun above is deterministic and green.",
-        "Commits after f8a026f change only plans/ text and the regression-report attribution map (scripts/regression_report.py, not packaged), not product code; rebuild at the final PR head and treat that build as the artifact set for release."
+        "Both the push run and the pull_request run at ac94b63 are green; version PR #2 head moved from 8d0606d to ac94b63.",
+        "The audit remediation commits c81a877 (cursor refusal) and ac94b63 (acceptance records) are ancestors of the PR head."
       ]
     },
     "live_campus_calls": 0,
@@ -334,5 +359,7 @@
       "P2-8: the handoff JSON is regenerated at the final head",
       "P2-9: the contract names the local-session binding and records the account-switch boundary"
     ]
-  }
+  },
+  "artifact_commit": "ac94b63d991bafec0b3bf4717b8fb5ae72e1ce35",
+  "candidate_head": "the commit containing this record file (record-only after ac94b63)"
 }
