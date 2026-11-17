@@ -875,7 +875,10 @@
         "本地只读 API、回环监听、分页和同源安全边界"
       ],
       "integration_order": 18,
-      "status": "pending"
+      "status": "accepted",
+      "delivery_commit": "198aeb1",
+      "accepted_at": "2026-11-17",
+      "audit_fix": "6.2-audit P0=0/P1=3/P2=16"
     },
     {
       "id": "6.3",

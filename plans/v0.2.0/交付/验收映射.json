@@ -730,7 +730,13 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "本地只读 API、回环监听、分页和同源安全边界",
-      "evidence": []
+      "evidence": [
+        "accepted at 198aeb1 after the 6.2-audit (P0=0, P1=3, P2=16 fixed or explicitly scoped)",
+        "162 module tests and 57 related regression tests; 18 audit probes re-run with fixed behaviour; every response validates against result-envelope-v1",
+        "two executor pools keep health/services alive with eight stuck adapters; single-use bootstrap, strict envelope validation, list-shaped link filtering and the 8 MiB response ceiling are covered",
+        "check 505 files/0 findings; Linux full offline suite 1430 passed/7 skipped; Node 66 passed; plan/contract/source validators ok; 0 live campus/model/business calls",
+        "batch-6 reconnection, the real 6.1 facade adapter and two-platform CI remain with the integration owner; no delivery PR, main merge or release"
+      ]
     },
     {
       "id": "6.3",

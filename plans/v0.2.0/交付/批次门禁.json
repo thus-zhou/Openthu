@@ -308,7 +308,7 @@
       ],
       "module_status": {
         "6.1": "accepted",
-        "6.2": "pending",
+        "6.2": "accepted",
         "6.3": "pending"
       },
       "status": "ready",
@@ -321,9 +321,14 @@
           "accepted_at": "2026-11-17",
           "delivery_commit": "aee2559",
           "evidence": "audit 6.1-audit P0=0/P1=8/P2=15 closed or downgraded; 68 module tests, 370 related regression; check 504 files/0 findings; Linux Python 1336/7, Node 66; probes re-run; 0 live calls."
+        },
+        "6.2": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "198aeb1",
+          "evidence": "audit 6.2-audit P0=0/P1=3/P2=16 closed or explicitly scoped; 162 module tests, 57 related regression; 18 audit probes re-run; check 505 files/0 findings; Linux Python 1430/7, Node 66; 0 live calls."
         }
       },
-      "gate_note": "6.1 accepted at aee2559 after the module audit; 6.2 and 6.3 are still pending, so batch 6 remains ready."
+      "gate_note": "6.1 accepted at aee2559 and 6.2 accepted at 198aeb1 after their module audits; 6.3 is still pending, so batch 6 remains ready."
     },
     {
       "batch": 7,
@@ -375,5 +380,5 @@
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     }
   ],
-  "gate_note": "Batches 1-5 accepted and reconnected. Batch 6 is ready: 6.1 accepted at aee2559 after the module audit; 6.2 and 6.3 still pending. No batch is complete beyond batch 5."
+  "gate_note": "Batches 1-5 accepted and reconnected. Batch 6 is ready: 6.1 accepted at aee2559 and 6.2 accepted at 198aeb1 after their module audits; 6.3 still pending. No batch is complete beyond batch 5."
 }
