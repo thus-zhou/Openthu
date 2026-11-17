@@ -769,6 +769,129 @@ def test_trailing_facade_cursor_is_carried_after_local_slices(server, facade, cl
     assert third['display']['completeness']['complete'] is False
 
 
+# Every route that 8.1 declares a request-side cursor for.  ``/query`` is not
+# here because its facade pages natively and the contract always allowed it.
+PAGED_ROUTES = (
+    ('todos', '/api/v1/todos', 'todos', 'agenda', 'todos', {}),
+    ('calendar', '/api/v1/calendar', 'calendar', 'agenda', 'calendar', {}),
+    ('resources', '/api/v1/resources', 'resources', 'resources', 'resources',
+     {'semester': 'SYNTHETIC-TERM'}),
+)
+
+
+def _set_paged_response(facade, facade_name: str, service: str, operation: str) -> None:
+    facade.responses[facade_name] = valid_envelope(
+        service, operation,
+        items=[{'event_id': f'{facade_name.upper()}{index}'} for index in range(5)])
+
+
+def _paged_path(path: str, extra: dict, **values) -> str:
+    query = dict(extra)
+    query.update(values)
+    return path + '?' + urlencode(query)
+
+
+@pytest.mark.parametrize('name,path,facade_name,service,operation,extra', PAGED_ROUTES)
+def test_every_paged_route_slices_and_resumes(name, path, facade_name, service, operation,
+                                              extra, server, facade, client) -> None:
+    _set_paged_response(facade, facade_name, service, operation)
+    status, _headers, first = json_request(
+        server, 'GET', _paged_path(path, extra, page_size=2), headers=auth_headers(client))
+    assert status == 200, name
+    assert len(first['items']) == 2
+    assert first['next_cursor'].startswith(paging.CURSOR_PREFIX + '.')
+    assert first['snapshot_complete'] is False
+    status, _headers, second = json_request(
+        server, 'GET', _paged_path(path, extra, page_size=2, cursor=first['next_cursor']),
+        headers=auth_headers(client))
+    assert status == 200 and len(second['items']) == 2
+    status, _headers, third = json_request(
+        server, 'GET', _paged_path(path, extra, page_size=2, cursor=second['next_cursor']),
+        headers=auth_headers(client))
+    assert status == 200 and len(third['items']) == 1
+    assert third['next_cursor'] is None and third['snapshot_complete'] is True
+    ids = [row['event_id'] for row in first['items'] + second['items'] + third['items']]
+    assert len(ids) == len(set(ids)) == 5
+    assert facade.calls.count(facade_name) == 1
+
+
+@pytest.mark.parametrize('name,path,facade_name,service,operation,extra', PAGED_ROUTES)
+def test_cursor_reuse_with_other_parameters_is_rejected_on_every_paged_route(
+        name, path, facade_name, service, operation, extra, server, facade, client) -> None:
+    _set_paged_response(facade, facade_name, service, operation)
+    _status, _headers, first = json_request(
+        server, 'GET', _paged_path(path, extra, page_size=2), headers=auth_headers(client))
+    if name == 'resources':
+        changed = _paged_path(path, extra, page_size=2, cursor=first['next_cursor'],
+                              semester='OTHER-TERM')
+    else:
+        changed = _paged_path(path, extra, page_size=3, cursor=first['next_cursor'])
+    status, _headers, payload = json_request(server, 'GET', changed, headers=auth_headers(client))
+    assert status == 400, name
+    assert payload['error']['code'] == 'CURSOR_QUERY_MISMATCH'
+
+
+@pytest.mark.parametrize('name,path,facade_name,service,operation,extra', PAGED_ROUTES)
+def test_cursor_is_bound_to_the_session_on_every_paged_route(
+        name, path, facade_name, service, operation, extra, server, facade, client) -> None:
+    _set_paged_response(facade, facade_name, service, operation)
+    _status, _headers, first = json_request(
+        server, 'GET', _paged_path(path, extra, page_size=2), headers=auth_headers(client))
+    second_sid = server._sessions.issue()
+    status, _headers, payload = json_request(
+        server, 'GET', _paged_path(path, extra, page_size=2, cursor=first['next_cursor']),
+        headers={'Cookie': f'{security.COOKIE_NAME}={second_sid}'})
+    assert status == 400, name
+    assert payload['error']['code'] == 'CURSOR_QUERY_MISMATCH'
+
+
+@pytest.mark.parametrize('name,path,facade_name,service,operation,extra', PAGED_ROUTES)
+def test_cursor_expires_after_the_frozen_ttl_on_every_paged_route(
+        name, path, facade_name, service, operation, extra, tmp_path) -> None:
+    clock = FakeClock()
+    facade = FixtureFacade()
+    _set_paged_response(facade, facade_name, service, operation)
+    instance = make_server(facade=facade, state_dir=tmp_path, clock=clock)
+    try:
+        client = LocalApiClient.from_bootstrap(instance.bootstrap_file, clock=FakeWallClock())
+        client.bootstrap()
+        _status, _headers, first = json_request(
+            instance, 'GET', _paged_path(path, extra, page_size=2), headers=auth_headers(client))
+        clock.advance(contract.LIMITS['cursor_ttl_seconds'] + 1)
+        status, _headers, payload = json_request(
+            instance, 'GET', _paged_path(path, extra, page_size=2, cursor=first['next_cursor']),
+            headers=auth_headers(client))
+        assert status == 400, name
+        assert payload['error']['code'] == 'CURSOR_EXPIRED'
+    finally:
+        instance.stop()
+
+
+@pytest.mark.parametrize('name,path,facade_name,service,operation,extra',
+                         [row for row in PAGED_ROUTES if row[0] in ('todos', 'calendar')])
+def test_a_cursor_this_route_never_issued_is_refused(
+        name, path, facade_name, service, operation, extra, server, facade, client) -> None:
+    for value in ('not-a-page-store-cursor', 'c1.deadbeef', 'lac1.'):
+        status, _headers, payload = json_request(
+            server, 'GET', _paged_path(path, extra, page_size=2, cursor=value),
+            headers=auth_headers(client))
+        assert status == 400, (name, value)
+        assert payload['error']['code'] == 'CURSOR_EXPIRED', (name, value)
+    assert facade.calls == []
+
+
+def test_a_cursor_from_another_route_is_refused(server, facade, client) -> None:
+    _set_paged_response(facade, 'calendar', 'agenda', 'calendar')
+    _set_paged_response(facade, 'todos', 'agenda', 'todos')
+    _status, _headers, calendar_first = json_request(
+        server, 'GET', '/api/v1/calendar?page_size=2', headers=auth_headers(client))
+    status, _headers, payload = json_request(
+        server, 'GET', '/api/v1/todos?page_size=2&cursor=' + calendar_first['next_cursor'],
+        headers=auth_headers(client))
+    assert status == 400
+    assert payload['error']['code'] == 'CURSOR_QUERY_MISMATCH'
+
+
 def test_facade_native_paging_is_passed_through(server, facade, client) -> None:
     envelope = valid_envelope('learn', 'courses', items=[{'course_id': 'ONE'}])
     envelope['next_cursor'] = 'facade-cursor'

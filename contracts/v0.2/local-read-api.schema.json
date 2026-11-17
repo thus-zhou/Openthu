@@ -76,7 +76,7 @@
         "start_date": "YYYY-MM-DD",
         "end_date": "YYYY-MM-DD",
         "page_size": "integer 1..200",
-        "cursor": "opaque string returned as next_cursor; bound to account, service, operation, parameters and snapshot (8.1 revision)"
+        "cursor": "opaque string returned as next_cursor; bound to the local dashboard session, route, path, parameters, page size and snapshot; a foreign or expired value is refused instead of restarting page one (8.1 revision)"
       },
       "response": "result-envelope-v1"
     },
@@ -87,7 +87,7 @@
         "start_date": "YYYY-MM-DD",
         "end_date": "YYYY-MM-DD",
         "page_size": "integer 1..200",
-        "cursor": "opaque string returned as next_cursor; same binding as /todos (8.1 revision)"
+        "cursor": "opaque string returned as next_cursor; same local-session binding as /todos; a foreign or expired value is refused (8.1 revision)"
       },
       "response": "result-envelope-v1 with calendar-event-v1 items"
     },
@@ -99,7 +99,7 @@
         "query": "string, max 200 characters",
         "course_id": "string, max 128 characters",
         "page_size": "integer 1..200",
-        "cursor": "opaque string returned as next_cursor; same binding as /todos (8.1 revision)"
+        "cursor": "opaque string returned as next_cursor; same local-session binding as /todos; a foreign or expired value is refused (8.1 revision)"
       },
       "response": "result-envelope-v1 with media/resource references"
     }
@@ -112,7 +112,7 @@
     },
     {
       "module": "8.1",
-      "change": "/todos, /calendar and /resources declare the request-side cursor that pairs with next_cursor; the 6.2 server extension is folded into the frozen list and no route accepts an undeclared parameter.",
+      "change": "/todos, /calendar and /resources declare the request-side cursor that pairs with next_cursor; the 6.2 server extension is folded into the frozen list, no route accepts an undeclared parameter, and a cursor issued by another route or an expired snapshot is refused with CURSOR_EXPIRED/CURSOR_QUERY_MISMATCH.",
       "compatible": true
     }
   ],

@@ -637,6 +637,14 @@ class LocalApiServer:
             body = projection.project(envelope, service_id=service_id, operation=operation,
                                       request_id=request.request_id)
             return self._json(body, request.request_id, route_name=route.name)
+        if cursor and route.name in ('todos', 'calendar'):
+            # These two routes have no facade-native paging, so the only cursor
+            # they issue is the local ``lac1`` token.  A foreign, expired or
+            # fabricated value must be refused instead of silently returning the
+            # first page again.
+            raise contract.LocalApiError(
+                'CURSOR_EXPIRED', http_status=400,
+                message='该游标不属于此路由或已过期，请重新读取第一页。')
         if route.name == 'health':
             envelope = self._health_envelope(request)
         elif route.name == 'services':

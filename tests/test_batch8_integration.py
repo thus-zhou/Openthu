@@ -61,6 +61,9 @@ def test_every_module_and_batch_delivery_is_an_ancestor_of_the_candidate() -> No
     by_batch = {item["batch"]: item for item in gate["batches"]}
 
     commits: dict[str, str] = {}
+    batch_one = by_batch[1].get("delivery_commit") or ""
+    assert re.fullmatch(r"[0-9a-f]{40}", batch_one), batch_one
+    commits["1.1"] = batch_one
     for module in ACCEPTED_MODULES:
         record = _delivery_json(Path("模块结果") / f"{module}.json")
         assert record["status"] == "accepted", module
