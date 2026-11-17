@@ -9,6 +9,7 @@
   "code_commits": [
     "de72370"
   ],
+  "record_commit": "04b5d1c",
   "branch": "hermes/4.2",
   "worktree": "/home/ubuntu/projects/Openthu/.local/worktrees/4.2",
   "version_pr": 2,
