@@ -55,6 +55,8 @@ SEMANTIC_FIELDS = (
 )
 CHANGE_TYPES = ('ADDED', 'MODIFIED', 'CANCELLED', 'DELETED',
                 'SOURCE_UNAVAILABLE', 'SOURCE_INCOMPLETE')
+SCOPE_KEYS = ('start_date', 'end_date', 'sources', 'include_completed',
+              'include_overdue', 'semester', 'allow_stale', 'max_source_pages')
 
 
 def _canonical(value):
@@ -171,14 +173,40 @@ def _diff_fields(previous, current):
     return [key for key in SEMANTIC_FIELDS if previous.get(key) != current.get(key)]
 
 
+def _known_row(known, uid):
+    row = (known or {}).get(uid)
+    if not isinstance(row, dict):
+        return None
+    sequence = row.get('sequence')
+    if type(sequence) is not int or sequence < 0:
+        sequence = 0
+    return {'sequence': sequence, 'digest': row.get('digest')}
+
+
+def _sequence_for(item, before, known):
+    """Monotonic per-UID sequence, independent of a comparable baseline."""
+    uid = item.get('event_uid') or item.get('event_id')
+    digest = semantic_digest(item)
+    remembered = _known_row(known, uid)
+    remembered_sequence = remembered['sequence'] if remembered else 0
+    if remembered and remembered.get('digest') == digest:
+        base = max(remembered_sequence,
+                   max(0, int((before or {}).get('sequence') or 0)))
+        return base
+    if before is not None:
+        base = max(max(0, int(before.get('sequence') or 0)), remembered_sequence)
+        return base + 1 if _diff_fields(before, item) else base
+    return remembered_sequence + 1 if remembered else 0
+
+
 def compare(previous, current, *, account, scope, now=None, canonical_version=VERSION,
-            max_age=DEFAULT_MAX_AGE):
+            max_age=DEFAULT_MAX_AGE, known_sequences=None):
     """Compare one current agenda snapshot with the previous baseline.
 
-    ``previous`` is ``None`` or a persisted snapshot record.  ``current`` is
-    ``{'events': [...], 'sources': [...statuses...], 'checked_at': ...}``.
-    The returned dict includes a private ``snapshot`` record for persistence;
-    callers must remove it before exposing the result.
+    ``known_sequences`` is the account-scoped ``{uid: {'sequence', 'digest'}}``
+    map.  It keeps ICS SEQUENCE monotonic across baseline rebuilds and scope
+    changes.  The returned dict includes a private ``snapshot`` record for
+    persistence; callers must remove it before exposing the result.
     """
     validate_scope(scope)
     now = now or datetime.now(TZ)
@@ -187,9 +215,7 @@ def compare(previous, current, *, account, scope, now=None, canonical_version=VE
         now = parsed or datetime.now(TZ)
     if not isinstance(account, str) or not account:
         raise CampusError('SNAPSHOT_ACCOUNT_MISMATCH')
-    scope_hash = scope_digest({key: scope.get(key) for key in
-                               ('start_date', 'end_date', 'sources', 'include_completed',
-                                'include_overdue', 'semester')})
+    scope_hash = scope_digest({key: scope.get(key) for key in SCOPE_KEYS})
     current_sources = _source_map(current.get('sources'))
     current_events = [item for item in current.get('events') or ()
                       if isinstance(item, dict) and item.get('calendar_valid') is True]
@@ -279,27 +305,26 @@ def compare(previous, current, *, account, scope, now=None, canonical_version=VE
                     carried.append(_carry(item))
     for key, item in sorted(current_by_uid.items(), key=lambda pair: str(pair[0])):
         before = previous_by_uid.get(key)
+        sequence = _sequence_for(item, before, known_sequences)
+        item['sequence'] = sequence
         if before is None:
-            item['sequence'] = 0
             changes.append({
                 'change_id': _change_id(scope_hash, baseline_id, 'ADDED', key),
                 'type': 'ADDED', 'event_uid': key, 'source': item.get('source_id'),
-                'sequence': 0, 'event': deepcopy(item), 'delivery_state': 'NOT_DELIVERED',
+                'sequence': sequence, 'event': deepcopy(item), 'delivery_state': 'NOT_DELIVERED',
             })
             continue
         fields = _diff_fields(before, item)
         if not fields:
-            item['sequence'] = max(0, int(before.get('sequence') or 0))
             continue
         change_type = 'CANCELLED' if (item.get('status') == 'CANCELLED'
                                       and before.get('status') != 'CANCELLED') else 'MODIFIED'
-        item['sequence'] = max(0, int(before.get('sequence') or 0)) + 1
         changes.append({
             'change_id': _change_id(scope_hash, baseline_id, change_type, key,
                                     before=semantic_digest(before),
                                     after=semantic_digest(item)),
             'type': change_type, 'event_uid': key, 'source': item.get('source_id'),
-            'sequence': item['sequence'], 'fields': fields,
+            'sequence': sequence, 'fields': fields,
             'event': deepcopy(item), 'delivery_state': 'NOT_DELIVERED',
         })
     deleted = 0
@@ -352,11 +377,15 @@ def compare(previous, current, *, account, scope, now=None, canonical_version=VE
     counts['carried_forward'] = len(carried)
     complete_all = all((current_sources.get(source) or {}).get('complete') is True
                        for source in scope.get('sources'))
-    status = ('BASELINE_CREATED' if baseline_state == 'CREATED'
-              else 'REBUILT' if baseline_state == 'REBUILT'
-              else 'OK' if complete_all
-              else 'PARTIAL')
-    if status in ('BASELINE_CREATED', 'REBUILT'):
+    if complete_all:
+        status = 'OK' if snapshot_events else 'EMPTY'
+    else:
+        status = 'PARTIAL'
+    if status in ('EMPTY',) and changes:
+        # An incomplete source can still produce changes; EMPTY only when the
+        # complete snapshot has no events.
+        status = 'OK'
+    if baseline_state in ('CREATED', 'REBUILT'):
         changes = []
         counts.update({name.lower(): 0 for name in CHANGE_TYPES})
         counts['carried_forward'] = 0
@@ -366,6 +395,7 @@ def compare(previous, current, *, account, scope, now=None, canonical_version=VE
     return {
         'version': VERSION,
         'status': status,
+        'baseline_state': baseline_state,
         'baseline': baseline_state,
         'baseline_snapshot_id': baseline_id,
         'snapshot_id': snapshot_id,
@@ -375,6 +405,8 @@ def compare(previous, current, *, account, scope, now=None, canonical_version=VE
         'counts': counts,
         'comparison': comparison,
         'warnings': sorted(warnings),
+        'source_complete': complete_all,
+        'complete': complete_all,
         'delivery_state': 'NOT_DELIVERED',
         'delivery_evidence': False,
         'pushed': False,
@@ -436,6 +468,7 @@ class SnapshotStore:
     """
 
     MAGIC = b'THU-EVENTS-1\0'
+    SEQUENCE_SCOPE = 'sequences-v1'
 
     def __init__(self, root=None, *, backend=None, protect=None, unprotect=None):
         self.root = Path(root) if root else None
@@ -513,6 +546,22 @@ class SnapshotStore:
             raise CampusError('SNAPSHOT_CORRUPT')
         return record
 
+    def load_sequences(self, account):
+        record = self.load(account, self.SEQUENCE_SCOPE)
+        if record is None:
+            return {}
+        rows = record.get('sequences') if isinstance(record.get('sequences'), dict) else {}
+        return {key: value for key, value in rows.items()
+                if isinstance(key, str) and isinstance(value, dict)}
+
+    def save_sequences(self, account, sequences):
+        self.save({
+            'version': VERSION, 'canonical_version': VERSION, 'account': account,
+            'scope_digest': self.SEQUENCE_SCOPE, 'scope': {}, 'checked_at': source_state.now_iso(),
+            'snapshot_id': 'sequences', 'events': [], 'sources': {},
+            'sequences': sequences,
+        })
+
 
 class MemoryBackend:
     """In-memory backend for tests and for callers without a secure key."""
@@ -561,19 +610,84 @@ def _default_backend():
 
 
 class IncrementalStore:
-    """On-demand change query; no background polling and no delivery claims."""
+    """On-demand change query; no background polling and no delivery claims.
+
+    The encrypted store is preferred, but a process-local snapshot and sequence
+    map are always kept.  That fallback is what makes repeated ``changes()`` and
+    monotonic ICS sequences work on a Linux default install without a secure key;
+    it is explicitly process-local and never written as plaintext.
+    """
 
     def __init__(self, store=None, cursors=None, now=None):
         self.store = store if store is not None else SnapshotStore(backend=_default_backend())
         self.now = now or (lambda: datetime.now(TZ))
         self.cursors = cursors or CursorRegistry(clock=self.now)
+        self._memory_snapshots = {}
+        self._memory_sequences = {}
+
+    def _scope_hash(self, scope):
+        return scope_digest({key: scope.get(key) for key in SCOPE_KEYS})
+
+    def _load_previous(self, account, scope_hash):
+        key = (account, scope_hash)
+        if key in self._memory_snapshots:
+            return self._memory_snapshots[key]
+        try:
+            return self.store.load(account, scope_hash)
+        except CampusError as error:
+            if error.code == 'SNAPSHOT_CORRUPT':
+                return None
+            raise
+
+    def _load_sequences(self, account):
+        if account in self._memory_sequences:
+            return deepcopy(self._memory_sequences[account])
+        try:
+            rows = self.store.load_sequences(account)
+        except CampusError:
+            rows = {}
+        self._memory_sequences[account] = deepcopy(rows)
+        return deepcopy(rows)
+
+    def _save_sequences(self, account, sequences):
+        self._memory_sequences[account] = deepcopy(sequences)
+        try:
+            self.store.save_sequences(account, sequences)
+        except CampusError:
+            return False
+        return True
+
+    def observe(self, events, *, account):
+        """Assign monotonic sequences without creating or advancing a baseline.
+
+        Used by ``agenda()`` so a pure local export can consume correct
+        SEQUENCE values even when the caller never requested changes.
+        """
+        known = self._load_sequences(account)
+        updated = {}
+        for item in events or ():
+            if not isinstance(item, dict) or item.get('calendar_valid') is not True:
+                continue
+            uid = item.get('event_uid') or item.get('event_id')
+            if not isinstance(uid, str):
+                continue
+            digest = semantic_digest(item)
+            previous = _known_row(known, uid)
+            if previous and previous.get('digest') == digest:
+                sequence = previous['sequence']
+            elif previous:
+                sequence = previous['sequence'] + 1
+            else:
+                sequence = 0
+            item['sequence'] = sequence
+            updated[uid] = {'sequence': sequence, 'digest': digest}
+        self._save_sequences(account, updated)
+        return {uid: row['sequence'] for uid, row in updated.items()}
 
     def query(self, current, *, account, scope, cursor=None, canonical_version=VERSION,
               persist=True):
         validate_scope(scope)
-        scope_hash = scope_digest({key: scope.get(key) for key in
-                                   ('start_date', 'end_date', 'sources', 'include_completed',
-                                    'include_overdue', 'semester')})
+        scope_hash = self._scope_hash(scope)
         now = self.now()
         previous = None
         cursor_used = False
@@ -581,21 +695,18 @@ class IncrementalStore:
             previous = self.cursors.resolve(cursor, account=account, scope_hash=scope_hash)
             cursor_used = True
         else:
-            try:
-                previous = self.store.load(account, scope_hash)
-            except CampusError as error:
-                if error.code == 'SNAPSHOT_CORRUPT':
-                    previous = None
-                else:
-                    raise
+            previous = self._load_previous(account, scope_hash)
+        known = self._load_sequences(account)
         result = compare(previous, current, account=account, scope=scope, now=now,
-                         canonical_version=canonical_version)
+                         canonical_version=canonical_version, known_sequences=known)
         snapshot = result.pop('snapshot')
+        self._memory_snapshots[(account, scope_hash)] = deepcopy(snapshot)
         result['sequences'] = {item.get('event_uid') or item.get('event_id'):
                                max(0, int(item.get('sequence') or 0))
                                for item in snapshot.get('events') or ()}
         result['cursor_used'] = cursor_used
         result['baseline_source'] = 'CURSOR' if cursor_used else 'STORED'
+        result['cursor_scope'] = 'PROCESS_LOCAL'
         warnings = set(result.get('warnings') or ())
         if persist:
             try:
@@ -607,6 +718,16 @@ class IncrementalStore:
                 result['baseline_persisted'] = True
         else:
             result['baseline_persisted'] = False
+        sequence_rows = {}
+        for item in snapshot.get('events') or ():
+            uid = item.get('event_uid') or item.get('event_id')
+            if isinstance(uid, str):
+                sequence_rows[uid] = {
+                    'sequence': max(0, int(item.get('sequence') or 0)),
+                    'digest': semantic_digest(item),
+                }
+        if not self._save_sequences(account, sequence_rows):
+            warnings.add('SNAPSHOT_SEQUENCE_PERSIST_FAILED')
         result['next_cursor'] = self.cursors.issue(account=account, scope_hash=scope_hash,
                                                    snapshot=snapshot)
         result['cursor_version'] = CURSOR_VERSION

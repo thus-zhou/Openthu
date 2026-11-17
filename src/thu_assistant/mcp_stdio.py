@@ -51,7 +51,7 @@ TOOLS=[t for t in LEARN_TOOLS if t['name'] not in ('login','get_login_status')]+
          {'url':S,'destination':S,'max_bytes':{'type':'integer','minimum':1024,'maximum':1073741824}},('url','destination')),
     tool('get_service_status','实时读取指定服务入口并报告实际页面状态，不把 HTTP 200 当作登录成功。',{'service_id':S},('service_id',)),
     tool('list_models','读取学校官方模型目录和能力标注；目录不批量生成探测，历史目录明确标时。',{'refresh':B}),
-    tool('get_todos','按规则汇总未来七天作业、借阅与已有图书馆预约，含未完成逾期项；保留每个来源的失败、读取范围和时间，最多200项一页。默认实时重查，不创建提醒或预约。',todos.PROPERTIES),
+    tool('get_todos','按规则汇总未来七天作业、借阅与已有图书馆预约，含未完成逾期项；学业考试/课表为可选来源，默认阻塞并返回 ADAPTER_REQUIRED。保留每个来源的失败、读取范围和时间，最多200项一页。默认实时重查，不创建提醒或预约。',todos.PROPERTIES),
     tool('model_chat','调用学校模型。prompt/messages 二选一；仅发送指定文本与资料，返回用量和来源映射；支持标准 MCP 取消。',models.PROPERTIES),
     tool('browser_open','用已加密保存的清华会话打开独立浏览器，支持动态网页、子系统及预约表单；仅代表页面观察，不代表提交成功。',
          {**TARGET,'visible':B}),

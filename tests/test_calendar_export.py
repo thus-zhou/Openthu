@@ -187,10 +187,48 @@ def test_write_is_atomic_and_refuses_overwrite_or_relative_paths(tmp_path):
                                      format='pdf', now=NOW)
 
 
+def test_source_incomplete_export_is_marked_or_rejected():
+    text = calendar_export.build_ics([item()], scope=SCOPE, now=NOW,
+                                     source_complete=False,
+                                     warnings=['UPSTREAM_PARTIAL'])
+    assert 'X-OPENTHU-SOURCE-COMPLETE:false' in text
+    assert 'X-OPENTHU-WARNINGS:UPSTREAM_PARTIAL' in text
+    summary = calendar_export.build_summary([item()], scope=SCOPE, now=NOW,
+                                            source_complete=False,
+                                            warnings=['UPSTREAM_PARTIAL'])
+    assert summary['source_complete'] is False
+    assert summary['warnings'] == ['UPSTREAM_PARTIAL']
+
+
+def test_markdown_url_pipe_and_json_formula_are_neutralised():
+    nasty_url = item('1', url='https://example.com/a|b')
+    text = calendar_export.build_markdown([nasty_url], scope=SCOPE, now=NOW)
+    row = next(line for line in text.splitlines() if 'example.com' in line)
+    assert '%7C' in row and row.count('|') == 6
+    formula = item('2', title='=HYPERLINK("http://evil","click")')
+    summary = calendar_export.build_summary([formula], scope=SCOPE, now=NOW)
+    assert summary['events'][0]['title'].startswith("'=HYPERLINK")
+    assert not summary['events'][0]['title'].startswith('=')
+
+
+def test_concurrent_target_creation_is_refused(tmp_path, monkeypatch):
+    target = tmp_path / 'race.ics'
+
+    def render(*args, **kwargs):
+        target.write_text('created by another process', encoding='utf-8')
+        return 'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n'
+
+    monkeypatch.setattr(calendar_export, '_render', render)
+    with pytest.raises(CampusError, match='EXPORT_DESTINATION_EXISTS'):
+        calendar_export.write_export(target, [item()], scope=SCOPE, now=NOW)
+    assert target.read_text(encoding='utf-8') == 'created by another process'
+
+
 def test_write_failure_leaves_no_half_file(tmp_path, monkeypatch):
     def fail(*args, **kwargs):
         raise OSError('synthetic failure')
-    monkeypatch.setattr(calendar_export.os, 'replace', fail)
+    monkeypatch.setattr(calendar_export.os, 'link', fail)
+    monkeypatch.setattr(calendar_export.os, 'open', fail)
     with pytest.raises(CampusError, match='EXPORT_WRITE_FAILED'):
         calendar_export.write_export(tmp_path / 'broken.ics', [item()], scope=SCOPE, now=NOW)
     assert list(tmp_path.iterdir()) == []
@@ -199,13 +237,12 @@ def test_write_failure_leaves_no_half_file(tmp_path, monkeypatch):
 def test_reimport_updates_same_uid_after_a_sequence_bump():
     scope = {'start_date': '2026-11-17', 'end_date': '2026-11-23',
              'sources': ['learn.assignments'], 'include_completed': False,
-             'include_overdue': True, 'semester': None}
+             'include_overdue': True, 'semester': None,
+             'allow_stale': False, 'max_source_pages': 3}
     first = item('1', title='旧')
     snapshot = {'version': snapshot_diff.VERSION, 'canonical_version': snapshot_diff.VERSION,
                 'account': 'A', 'scope_digest': snapshot_diff.scope_digest(
-                    {key: scope.get(key) for key in ('start_date', 'end_date', 'sources',
-                                                     'include_completed', 'include_overdue',
-                                                     'semester')}),
+                    {key: scope.get(key) for key in snapshot_diff.SCOPE_KEYS}),
                 'scope': scope, 'checked_at': CHECK, 'snapshot_id': 'snap_test',
                 'events': [first],
                 'sources': {'learn.assignments': {'status': 'SUCCESS', 'complete': True,

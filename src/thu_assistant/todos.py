@@ -290,7 +290,7 @@ class TodoEngine:
         return [source for source in ACADEMIC_SOURCES
                 if source in services or 'academics' in services]
 
-    def _academic_statuses(self, selected, now, semester=None):
+    def _academic_statuses(self, selected, now, semester=None, expansions=None):
         """Read only explicitly selected, currently available capabilities.
 
         The default academics table blocks exams, timetable and grades.  A
@@ -315,7 +315,7 @@ class TodoEngine:
                 'freshness': 'NOT_READ', 'checked_at': now.isoformat(), 'warnings': [],
                 'errors': [], 'pages_read': 0, 'records_read': 0,
                 'next_upstream_page': None, 'scope': 'REQUESTED_SEMESTER',
-                'parameters': {'semester': semester},
+                'parameters': {'semester': semester, 'expansions': bool(expansions)},
                 'capability_state': spec.get('start_conclusion'),
                 'implementation_state': spec.get('implementation_state'),
                 'runtime_availability': spec.get('runtime_availability'),
@@ -333,7 +333,20 @@ class TodoEngine:
                 statuses.append(status)
                 continue
             try:
-                data = self.academic_bridge.read(capability)
+                data = self.academic_bridge.read(capability, semester=semester,
+                                                 expansions=expansions)
+            except TypeError:
+                # A caller-supplied bridge predating the semester/expansion
+                # forwarding still works; the default bridge accepts both.
+                try:
+                    data = self.academic_bridge.read(capability)
+                except Exception as error:
+                    if code(error) == 'CANCELLED':
+                        raise
+                    status.update(status='FAILED', errors=[{'code': code(error)}],
+                                  warnings=['ACADEMICS_READ_FAILED'])
+                    statuses.append(status)
+                    continue
             except Exception as error:
                 if code(error) == 'CANCELLED':
                     raise
@@ -345,10 +358,15 @@ class TodoEngine:
             rows = [row for row in data.get('events') or () if isinstance(row, dict)]
             excluded = list(data.get('excluded') or ())
             complete = bool(data.get('complete')) and not excluded
+            pages_read = data.get('pages_read')
+            if type(pages_read) is not int or pages_read < 0:
+                pages_read = 1
             status.update(status='OK' if rows else ('EMPTY' if complete else 'UNKNOWN'),
                           complete=complete,
                           freshness='LIVE_AT_CHECKED_AT',
-                          records_read=len(rows) + len(excluded),
+                          pages_read=pages_read,
+                          records_read=data.get('records_read') if type(data.get('records_read')) is int
+                          else len(rows) + len(excluded),
                           warnings=sorted(set(data.get('warnings') or ())
                                           | ({'EVENT_CONVERSION_EXCLUDED'} if excluded else set())),
                           source_version=data.get('source_version') or status['source_version'])
@@ -442,7 +460,7 @@ class TodoEngine:
 
     def get(self, start_date=None, end_date=None, services=None, include_completed=False,
             include_overdue=True, cursor=None, allow_stale=False, max_source_pages=3,
-            semester=None):
+            semester=None, academic_expansions=None):
         if os.environ.get('THU_TODOS', '1') == '0':
             raise CampusError('TODOS_DISABLED')
         now = self.now()
@@ -467,7 +485,8 @@ class TodoEngine:
         # Bind raw optional dates, so continuation remains valid across midnight.
         key = binding('todos', VERSION, {'account': account, 'start': start_date, 'end': end_date,
                       'sources': selected, 'academic': selected_academic,
-                      'semester': semester, 'completed': include_completed,
+                      'semester': semester, 'expansions': bool(academic_expansions),
+                      'completed': include_completed,
                       'overdue': include_overdue, 'stale': allow_stale,
                       'max_pages': max_source_pages}, 200)
         if cursor:
@@ -506,8 +525,14 @@ class TodoEngine:
             all_events.extend(data['items'])
             statuses.append({k: v for k, v in data.items() if k != 'items'})
         academic_statuses, academic_events = self._academic_statuses(
-            selected_academic, now, semester)
+            selected_academic, now, semester, academic_expansions)
         statuses.extend(academic_statuses)
+        academic_events = [
+            entry for entry in academic_events
+            if agenda_events.in_window(entry['event'], start.isoformat(), end.isoformat(),
+                                       include_completed=include_completed,
+                                       include_overdue=include_overdue)
+        ]
         # Never publish or retain data if account selection changed mid-query.
         if self.owner.bridge('action_identity')['account_id'] != account:
             raise CampusError('STATE_ACCOUNT_MISMATCH')
@@ -543,46 +568,73 @@ class TodoEngine:
         return self.snapshots.start(key, result, 'list', events, 200)
 
     def agenda(self, start_date=None, end_date=None, services=None, include_completed=False,
-               include_overdue=True, allow_stale=False, max_source_pages=3, semester=None):
+               include_overdue=True, allow_stale=False, max_source_pages=3, semester=None,
+               academic_expansions=None):
         """Return the unified schedule, views, conflicts and source status.
 
         This is a live, on-demand read: it starts no poller, sends no message
-        and does not mark anything as delivered.
+        and does not mark anything as delivered.  When the underlying todo
+        snapshot has more than one page, every page is collected before views
+        and conflicts are built; a page cap fails closed instead of returning a
+        truncated ``OK`` result.
         """
-        result = self.get(start_date=start_date, end_date=end_date, services=services,
-                          include_completed=include_completed, include_overdue=include_overdue,
-                          allow_stale=allow_stale, max_source_pages=max_source_pages,
-                          semester=semester)
-        checked_at = result['checked_at']
+        first = True
+        page = None
+        items = []
+        for _ in range(50):
+            page = self.get(
+                start_date=start_date, end_date=end_date, services=services,
+                include_completed=include_completed, include_overdue=include_overdue,
+                allow_stale=allow_stale, max_source_pages=max_source_pages,
+                semester=semester, academic_expansions=academic_expansions,
+                cursor=None if first else page.get('next_cursor'))
+            items.extend(page['items'])
+            first = False
+            if not page.get('next_cursor'):
+                break
+        else:
+            raise CampusError('AGENDA_RESULT_TRUNCATED')
+        checked_at = page['checked_at']
         now = datetime.fromisoformat(checked_at)
         pairs = [(entry['source_id'], entry['event'])
-                 for entry in result.get('academic_events', ())
+                 for entry in page.get('academic_events', ())
                  if isinstance(entry, dict) and isinstance(entry.get('event'), dict)]
         built = agenda_events.build_agenda(
-            result['items'], pairs, statuses=result['sources_status'],
-            now=now, window=result['window'], checked_at=checked_at)
+            items, pairs, statuses=page['sources_status'],
+            now=now, window=page['window'], checked_at=checked_at)
+        account = self.owner.bridge('action_identity')['account_id']
+        sequences = self.incremental.observe(built['calendar_events'], account=account)
+        for item in built['calendar_events']:
+            uid = item.get('event_uid')
+            if uid in sequences:
+                item['sequence'] = max(int(item.get('sequence') or 0), sequences[uid])
         return {
-            'status': result['status'],
+            'status': page['status'],
+            'source': {'service_id': 'agenda', 'operation': 'agenda',
+                       'adapter_version': agenda_events.VERSION},
             'adapter_version': agenda_events.VERSION,
             'checked_at': checked_at,
-            'timezone': result['timezone'],
+            'verification_level': 'NONE',
+            'complete': page['source_complete'],
+            'next_cursor': None,
+            'timezone': page['timezone'],
             'window': built['window'],
             'as_of': built['as_of'],
-            'sources_status': result['sources_status'],
-            'source_complete': result['source_complete'],
-            'scope_notes': result['scope_notes'],
-            'selection': result['selection'],
+            'sources_status': page['sources_status'],
+            'source_complete': page['source_complete'],
+            'scope_notes': page['scope_notes'],
+            'selection': page['selection'],
             'items': built['items'],
             'calendar_events': built['calendar_events'],
             'undated': built['undated'],
             'excluded': built['excluded'],
-            'warnings': sorted(set(result.get('warnings') or ()) | set(built['warnings'])),
+            'warnings': sorted(set(page.get('warnings') or ()) | set(built['warnings'])),
             'views': built['views'],
             'conflicts': built['conflicts'],
             'pagination': {
-                'total_items': result.get('total_items'),
-                'returned_items': result.get('returned_items'),
-                'next_cursor': result.get('next_cursor'),
+                'total_items': page.get('total_items'),
+                'returned_items': len(items),
+                'next_cursor': None,
             },
             'background_polling': False,
             'message_delivery': False,
@@ -591,19 +643,18 @@ class TodoEngine:
 
     def changes(self, cursor=None, start_date=None, end_date=None, services=None,
                 include_completed=False, include_overdue=True, allow_stale=False,
-                max_source_pages=3, semester=None):
+                max_source_pages=3, semester=None, academic_expansions=None):
         """Return one on-demand incremental change set.
 
-        The baseline is the persisted snapshot or the snapshot behind the
-        supplied opaque cursor.  Producing a change set never marks an event as
-        delivered.
+        The baseline is the persisted/in-memory snapshot or the snapshot behind
+        the supplied opaque cursor.  Producing a change set never marks an event
+        as delivered.
         """
         agenda = self.agenda(start_date=start_date, end_date=end_date, services=services,
                              include_completed=include_completed,
                              include_overdue=include_overdue, allow_stale=allow_stale,
-                             max_source_pages=max_source_pages, semester=semester)
-        if agenda['pagination'].get('next_cursor'):
-            raise CampusError('AGENDA_RESULT_TRUNCATED')
+                             max_source_pages=max_source_pages, semester=semester,
+                             academic_expansions=academic_expansions)
         sources = [row['source'] for row in agenda['sources_status']]
         scope = {
             'start_date': agenda['window']['start_date'],
@@ -612,12 +663,17 @@ class TodoEngine:
             'include_completed': include_completed,
             'include_overdue': include_overdue,
             'semester': semester,
+            'allow_stale': allow_stale,
+            'max_source_pages': max_source_pages,
         }
         account = self.owner.bridge('action_identity')['account_id']
         current = {'events': agenda['calendar_events'],
                    'sources': agenda['sources_status'],
                    'checked_at': agenda['checked_at']}
         result = self.incremental.query(current, account=account, scope=scope, cursor=cursor)
+        result['source'] = {'service_id': 'agenda', 'operation': 'changes',
+                            'adapter_version': snapshot_diff.VERSION}
+        result['verification_level'] = 'NONE'
         result['agenda'] = {
             'status': agenda['status'],
             'as_of': agenda['as_of'],
@@ -630,55 +686,47 @@ class TodoEngine:
         }
         return result
 
-    def export_calendar(self, path, *, format='ics', start_date=None, end_date=None,
-                        services=None, include_completed=False, include_overdue=True,
-                        allow_stale=False, max_source_pages=3, semester=None,
-                        overwrite=False):
-        """Write one explicit scope to a local file with snapshot sequences.
+    def export_calendar(self, path, events, *, scope, source_complete=True, warnings=(),
+                        allow_partial=False, format='ics', overwrite=False, now=None):
+        """Write already-built agenda events to a local file.
 
-        The scope must name both dates; there is no "export everything" mode.
-        The incremental baseline supplies the ICS sequence, so a later export
-        of the same event updates the same UID instead of creating a duplicate.
+        This is a pure local export: it performs no campus read and advances no
+        incremental baseline.  Call ``agenda()`` first if a live read is
+        intended, or use ``export_agenda()`` as the explicit convenience path.
         """
+        if scope is None:
+            raise CampusError('EXPORT_SCOPE_REQUIRED')
+        if events is None:
+            raise CampusError('EXPORT_EVENTS_REQUIRED')
+        if not source_complete and not allow_partial:
+            raise CampusError('EXPORT_SOURCE_INCOMPLETE')
+        return calendar_export.write_export(
+            path, events, scope=scope, source_complete=source_complete,
+            warnings=warnings, format=format, overwrite=overwrite, now=now)
+
+    def export_agenda(self, path, *, start_date=None, end_date=None, services=None,
+                      include_completed=False, include_overdue=True, allow_stale=False,
+                      max_source_pages=3, semester=None, academic_expansions=None,
+                      format='ics', overwrite=False, allow_partial=False, now=None):
+        """Explicit read-then-export convenience; the read is visible here."""
         if start_date is None or end_date is None:
             raise CampusError('EXPORT_SCOPE_REQUIRED')
         agenda = self.agenda(start_date=start_date, end_date=end_date, services=services,
                              include_completed=include_completed,
                              include_overdue=include_overdue, allow_stale=allow_stale,
-                             max_source_pages=max_source_pages, semester=semester)
-        if agenda['pagination'].get('next_cursor'):
-            raise CampusError('EXPORT_TOO_LARGE')
+                             max_source_pages=max_source_pages, semester=semester,
+                             academic_expansions=academic_expansions)
         sources = [row['source'] for row in agenda['sources_status']]
-        scope = {
-            'start_date': agenda['window']['start_date'],
-            'end_date': agenda['window']['end_date'],
-            'sources': sources,
-            'include_completed': include_completed,
-            'include_overdue': include_overdue,
-            'semester': semester,
-        }
-        account = self.owner.bridge('action_identity')['account_id']
-        diff = self.incremental.query(
-            {'events': agenda['calendar_events'], 'sources': agenda['sources_status'],
-             'checked_at': agenda['checked_at']},
-            account=account, scope=scope)
-        sequences = diff.get('sequences') or {}
-        events = []
-        for original in agenda['calendar_events']:
-            item = deepcopy(original)
-            item['sequence'] = max(0, int(sequences.get(item.get('event_uid'),
-                                                        item.get('sequence') or 0)))
-            events.append(item)
-        written = calendar_export.write_export(
-            path, events,
+        written = self.export_calendar(
+            path, agenda['calendar_events'],
             scope={'start_date': agenda['window']['start_date'],
                    'end_date': agenda['window']['end_date'],
                    'sources': sources},
-            format=format, overwrite=overwrite)
-        written['incremental'] = {
-            'status': diff['status'], 'baseline': diff['baseline'],
-            'counts': diff['counts'], 'delivery_state': 'NOT_DELIVERED',
-        }
+            source_complete=agenda['source_complete'], warnings=agenda['warnings'],
+            allow_partial=allow_partial, format=format, overwrite=overwrite, now=now)
+        written['source_complete'] = agenda['source_complete']
+        written['source_status'] = agenda['status']
+        written['delivery_state'] = 'NOT_DELIVERED'
         return written
 
     def describe_agenda(self):

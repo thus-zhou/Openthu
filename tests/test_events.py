@@ -260,9 +260,7 @@ def test_agenda_does_not_poll_or_send_messages():
 
 
 def test_snapshot_views_and_change_ids_are_repeatable():
-    scope = {'start_date': '2026-11-17', 'end_date': '2026-11-23',
-             'sources': ['learn.assignments'], 'include_completed': False,
-             'include_overdue': True, 'semester': None}
+    scope = _scope()
     previous = _snapshot([events.from_todo(todo_row('1'))])
     current = _snapshot([events.from_todo(todo_row('2'))])
     first = snapshot_diff.compare(previous, deepcopy(current), account='A', scope=scope, now=NOW)
@@ -333,12 +331,12 @@ def test_scope_version_and_account_changes_never_compare():
     changed_scope = {**scope, 'sources': ['library.loans']}
     result = snapshot_diff.compare(baseline, _snapshot([]), account='A',
                                    scope=changed_scope, now=NOW)
-    assert result['status'] == 'REBUILT' and result['changes'] == []
+    assert result['baseline_state'] == 'REBUILT' and result['changes'] == []
     with pytest.raises(CampusError, match='SNAPSHOT_ACCOUNT_MISMATCH'):
         snapshot_diff.compare(baseline, _snapshot([]), account='B', scope=scope, now=NOW)
     result = snapshot_diff.compare(baseline, _snapshot([]), account='A', scope=scope,
                                    now=NOW, canonical_version='other-version')
-    assert result['status'] == 'REBUILT' and result['changes'] == []
+    assert result['baseline_state'] == 'REBUILT' and result['changes'] == []
 
 
 def test_cursor_is_opaque_versioned_scoped_and_expiring():
@@ -351,6 +349,7 @@ def test_cursor_is_opaque_versioned_scoped_and_expiring():
     first = store.query(current, account='A', scope=scope)
     assert first['next_cursor'].startswith('evc1.')
     assert '2026' not in first['next_cursor']
+    assert first['cursor_scope'] == 'PROCESS_LOCAL'
     second = store.query(current, account='A', scope=scope, cursor=first['next_cursor'])
     assert second['baseline_source'] == 'CURSOR'
     with pytest.raises(CampusError, match='EVENT_CURSOR_SCOPE_MISMATCH'):
@@ -411,6 +410,7 @@ def test_every_5_4_error_code_is_registered():
         'SNAPSHOT_TOO_LARGE': 'COMPLETENESS', 'EVENT_CURSOR_INVALID': 'INPUT',
         'EVENT_CURSOR_EXPIRED': 'COMPLETENESS', 'EVENT_CURSOR_SCOPE_MISMATCH': 'CONFLICT',
         'EXPORT_SCOPE_REQUIRED': 'INPUT', 'EXPORT_SCOPE_INVALID': 'INPUT',
+        'EXPORT_EVENTS_REQUIRED': 'INPUT', 'EXPORT_SOURCE_INCOMPLETE': 'COMPLETENESS',
         'EXPORT_EVENT_INVALID': 'INPUT', 'EXPORT_DUPLICATE_UID': 'CONFLICT',
         'EXPORT_DESTINATION_REQUIRED': 'INPUT', 'EXPORT_DESTINATION_INVALID': 'INPUT',
         'EXPORT_DESTINATION_EXISTS': 'CONFLICT', 'EXPORT_WRITE_FAILED': 'INTERNAL',
@@ -454,7 +454,7 @@ def test_expired_baseline_rebuilds_instead_of_inventing_changes():
     baseline['checked_at'] = '2026-11-01T09:00:00+08:00'
     result = snapshot_diff.compare(baseline, _snapshot([events.from_todo(todo_row('1'))]),
                                    account='A', scope=scope, now=NOW)
-    assert result['status'] == 'REBUILT' and result['changes'] == []
+    assert result['baseline_state'] == 'REBUILT' and result['changes'] == []
     assert 'BASELINE_EXPIRED' in result['warnings']
 
 
@@ -482,21 +482,271 @@ def test_export_calendar_assigns_snapshot_sequences(tmp_path):
                                    'checked_at': CHECK, 'next_cursor': None}}
     engine = _engine(responses)
     target = tmp_path / 'loans.ics'
-    first = engine.export_calendar(target, start_date='2026-11-17',
-                                   end_date='2026-11-23',
-                                   services=['library.loans'])
+    first = engine.export_agenda(target, start_date='2026-11-17',
+                                 end_date='2026-11-23',
+                                 services=['library.loans'])
     assert first['event_count'] == 1
-    assert first['incremental']['status'] == 'BASELINE_CREATED'
+    assert first['source_complete'] is True
     responses['library.loans']['items'] = [{**rows[0], 'title': '借阅（更新）'}]
-    second = engine.export_calendar(target, start_date='2026-11-17',
-                                    end_date='2026-11-23',
-                                    services=['library.loans'], overwrite=True)
-    assert second['incremental']['status'] == 'OK'
-    assert second['incremental']['counts']['modified'] == 1
+    second = engine.export_agenda(target, start_date='2026-11-17',
+                                  end_date='2026-11-23',
+                                  services=['library.loans'], overwrite=True)
+    assert second['source_complete'] is True
     text = target.read_text(encoding='utf-8').replace('\r\n ', '')
     assert 'SEQUENCE:1' in text and '借阅（更新）' in text
     with pytest.raises(CampusError, match='EXPORT_SCOPE_REQUIRED'):
-        engine.export_calendar(target, services=['library.loans'])
+        engine.export_agenda(target, services=['library.loans'])
+
+
+def test_export_calendar_is_pure_and_does_not_advance_changes(tmp_path):
+    calls = []
+    responses = {'library.loans': {'items': [], 'status': 'OK',
+                                   'source_complete': True, 'complete': True,
+                                   'checked_at': CHECK, 'next_cursor': None}}
+
+    def query(service, operation, parameters, **kwargs):
+        calls.append((service, operation))
+        return responses['library.loans']
+
+    engine = _engine(query)
+    before = engine.changes(start_date='2026-11-17', end_date='2026-11-23',
+                            services=['library.loans'])
+    calls.clear()
+    event = events.from_todo(todo_row('1', source='library.loans',
+                                      due_at='2026-11-20', title='事项'))
+    written = engine.export_calendar(tmp_path / 'pure.ics', [event],
+                                     scope={'start_date': '2026-11-17',
+                                            'end_date': '2026-11-23'})
+    assert written['event_count'] == 1
+    assert calls == []
+    after = engine.changes(start_date='2026-11-17', end_date='2026-11-23',
+                           services=['library.loans'])
+    assert after['baseline_state'] == 'COMPARABLE'
+    assert after['changes'] == before['changes'] == []
+
+
+def test_academic_events_outside_the_window_are_not_in_agenda_or_changes():
+    class Bridge:
+        def capabilities(self):
+            return {'exams': {'implementation_state': 'READY',
+                              'runtime_availability': 'AVAILABLE',
+                              'start_conclusion': 'CONTRACT_READY'}}
+
+        def read(self, capability, **kwargs):
+            return {'events': [calendar_event(date='2026-12-30')],
+                    'excluded': [], 'complete': True, 'warnings': [],
+                    'checked_at': CHECK, 'pages_read': 1}
+
+    engine = _engine(academic_bridge=Bridge())
+    built = engine.agenda(start_date='2026-11-17', end_date='2026-11-23',
+                          services=['academics.exams'])
+    assert built['calendar_events'] == []
+    assert built['views']['upcoming']['count'] == 0
+    assert built['status'] != 'OK'
+    engine.changes(start_date='2026-11-17', end_date='2026-11-23',
+                   services=['academics.exams'])
+    changed = engine.changes(start_date='2026-11-17', end_date='2026-11-23',
+                             services=['academics.exams'])
+    assert not [c for c in changed['changes']
+                if c['type'] in ('ADDED', 'DELETED')]
+
+
+def test_agenda_collects_every_snapshot_page_instead_of_truncating():
+    rows = [{'course_id': 'c', 'base_id': str(i), 'title': f'a{i}',
+             'deadline': '2026-11-20', 'submitted': False} for i in range(201)]
+    engine = _engine({'learn.assignments': {'items': rows, 'status': 'OK',
+                                            'source_complete': True, 'complete': True,
+                                            'checked_at': CHECK, 'next_cursor': None}})
+    built = engine.agenda(start_date='2026-11-17', end_date='2026-11-23',
+                          services=['learn'])
+    assert len(built['calendar_events']) == 201
+    assert built['status'] == 'OK' and built['source_complete'] is True
+    assert built['pagination']['next_cursor'] is None
+    changes = engine.changes(start_date='2026-11-17', end_date='2026-11-23',
+                             services=['learn'])
+    assert changes['status'] in ('OK', 'EMPTY')
+
+
+def test_cross_midnight_interval_on_the_last_window_day_is_upcoming():
+    row = todo_row('seat', source='library.seat', due_at=None,
+                   start_at='2026-11-23T23:00:00+08:00',
+                   end_at='2026-11-24T01:00:00+08:00', status='SCHEDULED',
+                   precision='minute')
+    built = agenda([row], now=NOW)
+    assert len(built['calendar_events']) == 1
+    assert built['views']['upcoming']['count'] == 1
+
+
+def test_invalid_calendar_events_are_excluded_without_native_exceptions():
+    bad_events = [
+        calendar_event(time={'kind': 'DATE', 'date': '2026-13-45',
+                             'timezone': 'Asia/Shanghai'}),
+        calendar_event(time=interval(start='2026-11-20T11:00:00+08:00',
+                                     end='2026-11-20T10:00:00+08:00')),
+        {**calendar_event(), 'title': ''},
+        {**calendar_event(), 'last_modified': None},
+        {**calendar_event(), 'account_domain': 'ATTACKER'},
+    ]
+    built = events.build_agenda([], [('academics.exams', value) for value in bad_events],
+                                now=NOW, window={'start_date': '2026-11-17',
+                                                 'end_date': '2026-11-23'})
+    assert built['calendar_events'] == []
+    assert len(built['excluded']) == len(bad_events)
+    assert all(row['reason'] in ('EVENT_INVALID_RECORD', 'EVENT_INVALID_TIME')
+               for row in built['excluded'])
+
+
+def test_bad_sequence_and_non_dict_todo_rows_degrade_to_excluded():
+    item = events.from_todo(todo_row('1', sequence='not-an-int'))
+    assert item['sequence'] == 0 and 'SEQUENCE_INVALID' in item['warnings']
+    built = events.build_agenda(['not-a-row'], now=NOW,
+                                window={'start_date': '2026-11-17',
+                                        'end_date': '2026-11-23'})
+    assert built['items'] == []
+    assert built['excluded'][0]['reason'] == 'EVENT_INVALID_RECORD'
+
+
+def test_agenda_and_changes_validate_against_the_result_envelope():
+    import jsonschema
+    root = Path(__file__).resolve().parents[1]
+    schema = json.loads((root / 'contracts/v0.2/result-envelope.schema.json').read_text(
+        encoding='utf-8'))
+    engine = _engine({'learn.assignments': {'items': [todo_row('1')], 'status': 'OK',
+                                            'source_complete': True, 'complete': True,
+                                            'checked_at': CHECK, 'next_cursor': None}})
+    built = engine.agenda(start_date='2026-11-17', end_date='2026-11-23',
+                          services=['learn'])
+    jsonschema.validate(built, schema)
+    changes = engine.changes(start_date='2026-11-17', end_date='2026-11-23',
+                             services=['learn'])
+    jsonschema.validate(changes, schema)
+
+
+def test_default_incremental_store_keeps_a_process_local_baseline_without_a_key(tmp_path):
+    store = snapshot_diff.SnapshotStore(tmp_path, protect=lambda value: None)
+    engine = snapshot_diff.IncrementalStore(store=store, now=lambda: NOW)
+    current = _snapshot([events.from_todo(todo_row('1'))])
+    first = engine.query(current, account='A', scope=_scope())
+    second = engine.query(current, account='A', scope=_scope())
+    assert first['baseline_state'] == 'CREATED'
+    assert second['baseline_state'] == 'COMPARABLE'
+    assert second['baseline_persisted'] is False
+
+
+def test_cursor_is_explicitly_process_local():
+    backend = snapshot_diff.MemoryBackend()
+    scope = _scope()
+    current = _snapshot([events.from_todo(todo_row('1'))])
+    first = snapshot_diff.IncrementalStore(
+        store=snapshot_diff.SnapshotStore(backend=backend), now=lambda: NOW)
+    token = first.query(current, account='A', scope=scope)['next_cursor']
+    second = snapshot_diff.IncrementalStore(
+        store=snapshot_diff.SnapshotStore(backend=backend), now=lambda: NOW)
+    with pytest.raises(CampusError, match='EVENT_CURSOR_EXPIRED'):
+        second.query(current, account='A', scope=scope, cursor=token)
+
+
+def test_academic_bridge_forwards_semester_and_expansions(monkeypatch):
+    calls = {}
+
+    class Reader:
+        def read(self, capability, **kwargs):
+            calls.update(capability=capability, kwargs=kwargs)
+            return {'items': [], 'implementation_state': 'READY', 'complete': True,
+                    'checked_at': CHECK, 'read_scope': {'pages_read': 2},
+                    'warnings': []}
+
+    monkeypatch.setattr('thu_assistant.academics.reader.AcademicsReader', Reader)
+    result = events.AcademicBridge().read('timetable', semester='2026-FALL',
+                                          expansions={'c1': {}})
+    assert calls == {'capability': 'timetable',
+                     'kwargs': {'semester': '2026-FALL'}}
+    assert result['pages_read'] == 2
+
+
+def test_export_agenda_rejects_an_incomplete_source_unless_allowed(tmp_path):
+    responses = {'library.loans': {'items': [], 'status': 'FAILED',
+                                   'source_complete': False, 'complete': False,
+                                   'checked_at': CHECK, 'next_cursor': None,
+                                   'source_errors': [{'code': 'AUTH_REQUIRED'}]}}
+    engine = _engine(responses)
+    with pytest.raises(CampusError, match='EXPORT_SOURCE_INCOMPLETE'):
+        engine.export_agenda(tmp_path / 'failed.ics', start_date='2026-11-17',
+                             end_date='2026-11-23', services=['library.loans'])
+    written = engine.export_agenda(tmp_path / 'partial.ics', start_date='2026-11-17',
+                                   end_date='2026-11-23', services=['library.loans'],
+                                   allow_partial=True)
+    assert written['source_complete'] is False
+    assert 'X-OPENTHU-SOURCE-COMPLETE:false' in (tmp_path / 'partial.ics').read_text(
+        encoding='utf-8')
+
+
+def test_sequence_does_not_reset_after_expiry_scope_change_or_no_key(tmp_path):
+    import re
+    times = [NOW]
+    responses = {'library.loans': {'items': [{'loan_id': '1', 'title': 'old',
+                                               'due_date': '2026-11-20', 'due_time': None}],
+                                    'status': 'OK', 'source_complete': True,
+                                    'complete': True, 'checked_at': CHECK,
+                                    'next_cursor': None}}
+    engine = _engine(responses)
+    engine.now = lambda: times[0]
+    engine.incremental.now = lambda: times[0]
+    engine.incremental.cursors.clock = lambda: times[0]
+    target = tmp_path / 'seq.ics'
+    engine.export_agenda(target, start_date='2026-11-17', end_date='2026-11-23',
+                         services=['library.loans'])
+    assert 'SEQUENCE:0' in target.read_text(encoding='utf-8').replace('\r\n ', '')
+    responses['library.loans']['items'][0]['title'] = 'new'
+    times[0] = NOW.replace(minute=10)
+    engine.export_agenda(target, start_date='2026-11-17', end_date='2026-11-23',
+                         services=['library.loans'], overwrite=True)
+    first = int(re.search(r'SEQUENCE:(\d+)', target.read_text(encoding='utf-8')).group(1))
+    assert first >= 1
+    engine.export_agenda(target, start_date='2026-11-18', end_date='2026-11-24',
+                         services=['library.loans'], overwrite=True)
+    shifted = int(re.search(r'SEQUENCE:(\d+)', target.read_text(encoding='utf-8')).group(1))
+    assert shifted >= first
+    times[0] = NOW.replace(day=25)
+    engine.export_agenda(target, start_date='2026-11-17', end_date='2026-11-23',
+                         services=['library.loans'], overwrite=True)
+    expired = int(re.search(r'SEQUENCE:(\d+)', target.read_text(encoding='utf-8')).group(1))
+    assert expired >= shifted
+
+    no_key = _engine(responses)
+    no_key.incremental = snapshot_diff.IncrementalStore(
+        store=snapshot_diff.SnapshotStore(tmp_path / 'nokey',
+                                          protect=lambda value: None),
+        now=lambda: NOW)
+    path = tmp_path / 'nokey.ics'
+    no_key.export_agenda(path, start_date='2026-11-17', end_date='2026-11-23',
+                         services=['library.loans'])
+    responses['library.loans']['items'][0]['title'] = 'newer'
+    no_key.export_agenda(path, start_date='2026-11-17', end_date='2026-11-23',
+                         services=['library.loans'], overwrite=True)
+    assert int(re.search(r'SEQUENCE:(\d+)', path.read_text(encoding='utf-8')).group(1)) >= 1
+
+
+def test_partial_academic_read_is_source_incomplete_not_unavailable():
+    class Bridge:
+        def capabilities(self):
+            return {'exams': {'implementation_state': 'READY',
+                              'runtime_availability': 'AVAILABLE',
+                              'start_conclusion': 'CONTRACT_READY'}}
+
+        def read(self, capability, **kwargs):
+            return {'events': [calendar_event()], 'excluded': [],
+                    'complete': False, 'warnings': [], 'checked_at': CHECK,
+                    'pages_read': 1}
+
+    engine = _engine(academic_bridge=Bridge())
+    engine.changes(start_date='2026-11-17', end_date='2026-11-23',
+                   services=['academics.exams'])
+    changed = engine.changes(start_date='2026-11-17', end_date='2026-11-23',
+                             services=['academics.exams'])
+    types = [change['type'] for change in changed['changes']]
+    assert 'SOURCE_INCOMPLETE' in types
+    assert 'SOURCE_UNAVAILABLE' not in types
 
 
 # --------------------------------------------------------------------------
@@ -543,7 +793,8 @@ def _engine(responses=None, academic_bridge=None, now=NOW):
 def _scope():
     return {'start_date': '2026-11-17', 'end_date': '2026-11-23',
             'sources': ['learn.assignments'], 'include_completed': False,
-            'include_overdue': True, 'semester': None}
+            'include_overdue': True, 'semester': None,
+            'allow_stale': False, 'max_source_pages': 3}
 
 
 def _source_record(source='learn.assignments', complete=True, status='SUCCESS', pages=1):
@@ -554,10 +805,8 @@ def _source_record(source='learn.assignments', complete=True, status='SUCCESS', 
 def _snapshot(items, *, complete=True, status='SUCCESS', source='learn.assignments',
               scope=None, account='A', version=snapshot_diff.VERSION):
     scope = scope or _scope()
-    scope_hash = snapshot_diff.scope_digest({key: scope.get(key) for key in
-                                             ('start_date', 'end_date', 'sources',
-                                              'include_completed', 'include_overdue',
-                                              'semester')})
+    scope_hash = snapshot_diff.scope_digest({key: scope.get(key)
+                                             for key in snapshot_diff.SCOPE_KEYS})
     return {'version': snapshot_diff.VERSION, 'canonical_version': version,
             'account': account, 'scope_digest': scope_hash, 'scope': scope,
             'checked_at': CHECK, 'snapshot_id': 'snap_test',

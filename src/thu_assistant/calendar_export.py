@@ -48,6 +48,13 @@ def _text(value, limit=500):
     return events.clean_text(value, limit)
 
 
+def _safe_sequence(value):
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def validate_scope(scope):
     if not isinstance(scope, dict) or not scope:
         raise CampusError('EXPORT_SCOPE_REQUIRED')
@@ -84,7 +91,11 @@ def _date_span(item):
     if time_value.get('kind') == 'DATE':
         value = time_value.get('date')
         if isinstance(value, str) and _DATE.fullmatch(value):
-            return date.fromisoformat(value), date.fromisoformat(value)
+            try:
+                parsed = date.fromisoformat(value)
+            except ValueError:
+                return None
+            return parsed, parsed
         return None
     if time_value.get('kind') == 'DATE_TIME':
         try:
@@ -198,7 +209,10 @@ def _event_lines(item, *, now):
     uid = _uid(item)
     time_value = item.get('time') if isinstance(item.get('time'), dict) else {}
     status, unknown_status = _ics_status(item)
-    sequence = max(0, int(item.get('sequence') or 0))
+    try:
+        sequence = max(0, int(item.get('sequence') or 0))
+    except (TypeError, ValueError):
+        sequence = 0
     last_modified = _utc_stamp(item.get('last_modified') or item.get('checked_at'))
     lines = ['BEGIN:VEVENT', f'UID:{uid}', f'DTSTAMP:{_utc_stamp(now)}',
              f'LAST-MODIFIED:{last_modified}', f'SEQUENCE:{sequence}', f'STATUS:{status}']
@@ -255,10 +269,13 @@ def _timezone_block():
     ]
 
 
-def build_ics(items, *, scope, now=None, calendar_name='Openthu 日程'):
+def build_ics(items, *, scope, now=None, calendar_name='Openthu 日程',
+              source_complete=True, warnings=()):
     """Return deterministic iCalendar text for the explicitly scoped events."""
     selected = select_events(items, scope)
     now = now or datetime.now(TZ)
+    warning_codes = sorted({value for value in warnings or ()
+                            if isinstance(value, str) and re.fullmatch(r'[A-Z][A-Z0-9_]{0,100}', value)})
     lines = [
         'BEGIN:VCALENDAR', 'VERSION:2.0', f'PRODID:{PRODID}', 'CALSCALE:GREGORIAN',
         'METHOD:PUBLISH', 'X-WR-CALNAME:' + _ics_escape(_text(calendar_name, 120)),
@@ -267,6 +284,9 @@ def build_ics(items, *, scope, now=None, calendar_name='Openthu 日程'):
         'X-OPENTHU-GENERATED-AT:' + _utc_stamp(now),
         'X-OPENTHU-EVENT-COUNT:' + str(len(selected['included'])),
         'X-OPENTHU-EXCLUDED-COUNT:' + str(len(selected['excluded'])),
+        'X-OPENTHU-SOURCE-COMPLETE:' + ('true' if source_complete else 'false'),
+        'X-OPENTHU-WARNINGS:' + _ics_escape(','.join(warning_codes)) if warning_codes else
+        'X-OPENTHU-WARNINGS:',
         'X-OPENTHU-SCOPE:' + _ics_escape(
             f"{selected['scope']['start_date']}..{selected['scope']['end_date']}"),
         *_timezone_block(),
@@ -291,7 +311,9 @@ def _md_link(url):
     safe = source_state.sanitize_url(url)
     if not safe or not safe.startswith('https://'):
         return ''
-    safe = safe.replace('<', '%3C').replace('>', '%3E').replace(' ', '%20')
+    for old, new in (('<', '%3C'), ('>', '%3E'), (' ', '%20'), ('|', '%7C'),
+                     ('\\', '%5C'), ('(', '%28'), (')', '%29')):
+        safe = safe.replace(old, new)
     return f'[来源](<{safe}>)'
 
 
@@ -338,9 +360,14 @@ def _summary_event(item):
     time_value = item.get('time') if isinstance(item.get('time'), dict) else {}
     source = item.get('source') if isinstance(item.get('source'), dict) else {}
     safe_url = source_state.sanitize_url(item.get('source_url'))
+
+    def neutral(value, limit=500):
+        text = _text(value, limit)
+        return "'" + text if _FORMULA.match(text) else text
+
     return {
         'event_uid': item.get('event_uid'),
-        'title': _text(item.get('title'), 500),
+        'title': neutral(item.get('title'), 500),
         'time': {
             'kind': time_value.get('kind'),
             **({'date': time_value.get('date')} if time_value.get('kind') == 'DATE' else
@@ -351,19 +378,19 @@ def _summary_event(item):
         'time_precision': item.get('time_precision'),
         'status': item.get('status'),
         'business_status': item.get('business_status'),
-        'sequence': max(0, int(item.get('sequence') or 0)),
+        'sequence': _safe_sequence(item.get('sequence')),
         'source': item.get('source_id'),
         'source_kind': source.get('kind'),
-        'source_record_id': _text(source.get('record_id'), 240),
+        'source_record_id': neutral(source.get('record_id'), 240),
         'checked_at': item.get('checked_at'),
-        'location': _text(item.get('location'), 300) or None,
+        'location': neutral(item.get('location'), 300) or None,
         'source_url': safe_url if safe_url and safe_url.startswith('https://') else None,
         'warnings': sorted(value for value in item.get('warnings') or ()
                            if isinstance(value, str) and re.fullmatch(r'[A-Z][A-Z0-9_]{0,100}', value)),
     }
 
 
-def build_summary(items, *, scope, now=None):
+def build_summary(items, *, scope, now=None, source_complete=True, warnings=()):
     """Return a machine-readable, sanitised summary."""
     selected = select_events(items, scope)
     now = now or datetime.now(TZ)
@@ -377,6 +404,9 @@ def build_summary(items, *, scope, now=None):
         'generated_at': now.isoformat(timespec='seconds'),
         'timezone': TZID,
         'scope': selected['scope'],
+        'source_complete': bool(source_complete),
+        'warnings': sorted({value for value in warnings or ()
+                            if isinstance(value, str) and re.fullmatch(r'[A-Z][A-Z0-9_]{0,100}', value)}),
         'counts': {
             'included': len(summary_events),
             'excluded': len(selected['excluded']),
@@ -390,19 +420,51 @@ def build_summary(items, *, scope, now=None):
     }
 
 
-def _render(items, *, scope, format, now, calendar_name):
+def _render(items, *, scope, format, now, calendar_name, source_complete=True, warnings=()):
     if format in ('ics', 'ical'):
-        return build_ics(items, scope=scope, now=now, calendar_name=calendar_name)
+        return build_ics(items, scope=scope, now=now, calendar_name=calendar_name,
+                         source_complete=source_complete, warnings=warnings)
     if format in ('md', 'markdown'):
         return build_markdown(items, scope=scope, now=now)
     if format in ('json', 'summary'):
-        return json.dumps(build_summary(items, scope=scope, now=now),
+        return json.dumps(build_summary(items, scope=scope, now=now,
+                                        source_complete=source_complete,
+                                        warnings=warnings),
                           ensure_ascii=False, indent=2, sort_keys=True) + '\n'
     raise CampusError('EXPORT_FORMAT_UNSUPPORTED')
 
 
+def _claim_or_replace(temp, target, overwrite):
+    """Atomically claim a new target, or replace it only when allowed."""
+    if overwrite:
+        os.replace(temp, target)
+        return
+    try:
+        os.link(temp, target)
+        temp.unlink(missing_ok=True)
+        return
+    except FileExistsError:
+        raise CampusError('EXPORT_DESTINATION_EXISTS') from None
+    except OSError:
+        pass
+    # Hard links are unavailable on some filesystems; an exclusive create is
+    # still an atomic claim.  Replace only after this process owns the name.
+    try:
+        handle = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        raise CampusError('EXPORT_DESTINATION_EXISTS') from None
+    except OSError:
+        raise CampusError('EXPORT_WRITE_FAILED') from None
+    os.close(handle)
+    try:
+        os.replace(temp, target)
+    except OSError:
+        target.unlink(missing_ok=True)
+        raise CampusError('EXPORT_WRITE_FAILED') from None
+
+
 def write_export(path, items, *, scope, format='ics', overwrite=False, now=None,
-                 calendar_name='Openthu 日程'):
+                 calendar_name='Openthu 日程', source_complete=True, warnings=()):
     """Write one export atomically to an explicit local destination."""
     if not isinstance(path, (str, os.PathLike)):
         raise CampusError('EXPORT_DESTINATION_REQUIRED')
@@ -421,7 +483,8 @@ def write_export(path, items, *, scope, format='ics', overwrite=False, now=None,
         raise CampusError('EXPORT_DESTINATION_EXISTS')
     items = list(items or ())
     content = _render(items, scope=scope, format=format, now=now,
-                      calendar_name=calendar_name)
+                      calendar_name=calendar_name, source_complete=source_complete,
+                      warnings=warnings)
     payload = content.encode('utf-8')
     temp = parent / ('.' + target.name + '.' + uuid.uuid4().hex + '.tmp')
     try:
@@ -429,7 +492,9 @@ def write_export(path, items, *, scope, format='ics', overwrite=False, now=None,
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temp, target)
+        _claim_or_replace(temp, target, overwrite)
+    except CampusError:
+        raise
     except OSError:
         raise CampusError('EXPORT_WRITE_FAILED') from None
     finally:
@@ -444,6 +509,9 @@ def write_export(path, items, *, scope, format='ics', overwrite=False, now=None,
         'event_count': len(selected['included']),
         'excluded': selected['excluded'],
         'scope': selected['scope'],
+        'source_complete': bool(source_complete),
+        'warnings': sorted({value for value in warnings or ()
+                            if isinstance(value, str) and re.fullmatch(r'[A-Z][A-Z0-9_]{0,100}', value)}),
         'atomic': True,
         'overwrite': bool(overwrite),
         'remote_fetch': False,
