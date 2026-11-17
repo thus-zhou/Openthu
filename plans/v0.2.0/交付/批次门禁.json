@@ -184,7 +184,7 @@
       "entry_condition": "all batch 3 modules accepted and integrated",
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
       "acceptance_record": "the commit containing this accepted record",
-      "gate_note": "4.1 accepted at bbe620a; 4.2 at c66ee2e; 4.3 at e14c11c; 4.4 at cf255de plus the follow-up ec21045 (consent authorize re-export); 4.5 at 2df5772. The single batch-4 integration commit 2cc1c05 records the joint check, the full offline suite and the seam fixes X1-X3. Push and PR CI at that SHA must be green on both platforms. Batch 5 is ready.",
+      "gate_note": "4.1 accepted at bbe620a; 4.2 at c66ee2e; 4.3 at e14c11c; 4.4 at cf255de plus the follow-up ec21045 (consent authorize re-export); 4.5 at 2df5772. The single batch-4 integration commit 2cc1c05 records the joint check, the full offline suite and the seam fixes X1-X5; the CI head 4e07357 adds only the pytest budget fix. Push 44013830566 and PR 44013836023 are green on both platforms. Batch 5 is ready.",
       "module_acceptance": {
         "4.1": {
           "accepted_at": "2026-11-17",
@@ -219,9 +219,13 @@
         "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures",
         "scripts/dev.py check: 460 files, 0 findings, 29 MCP tools",
         "Linux: Python 1005 passed/7 skipped/0 failed; Node 66 passed/0 failed",
+        "Windows: Python 1000 passed/12 skipped/0 failed; Node 66 passed/0 failed (run 44013830566)",
         "tests/test_batch4_integration.py: 4 seam tests (registry, classification, ledger, media purpose)",
         "live campus/model/business calls: 0/0/0",
-        "GitHub Actions at 2cc1c05: ubuntu-24.04 and windows-2025 push and pull_request runs"
+        "GitHub Actions at 4e07357: push 44013830566 and pull_request 44013836023; ubuntu-24.04 and windows-2025 both success"
+      ],
+      "ci_heads": [
+        "4e073578d964407c10b7c94ed8b3fa64c8332036"
       ]
     },
     {
