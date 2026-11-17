@@ -97,8 +97,8 @@
   },
   "modules": {
     "total": 24,
-    "accepted": 22,
-    "implemented": 1,
+    "accepted": 23,
+    "implemented": 0,
     "pending": 1,
     "ownership_file": "交付/模块负责表.json",
     "acceptance_file": "交付/验收映射.json"
@@ -120,9 +120,9 @@
   "batches": {
     "total": 9,
     "current": 8,
-    "current_status": "ready",
-    "module_status_note": "Batches 1-7 accepted and reconnected. 8.1 is implemented on hermes/8.1 at 9b1bef5: the local-read-api request-side cursor revision, the actions.py docstring and the source-matrix difference register are folded into the candidate tree, and the v0.2.0 candidate is built, verified and restored outside the repository. Batch 8 stays ready until the review phase writes accepted; batch 9 stays locked.",
-    "next": 8,
+    "current_status": "accepted",
+    "module_status_note": "Batches 1-8 accepted; 8.1 accepted after the 8.1-audit remediation and merged into hermes/1-install-diagnostics at 5ec73d9. Batch 9 is ready for the Codex review; version PR #2 now contains the candidate.",
+    "next": 9,
     "gate_file": "交付/批次门禁.json",
     "status_model": "accepted prefix -> one ready -> locked remainder; all accepted only at version completion",
     "gate_validation": {
@@ -209,7 +209,7 @@
   },
   "candidate": {
     "status": "candidate-not-released",
-    "code_commit": "f8a026f67e59875552216672b8f2c0deabc905ac",
+    "code_commit": "c81a8771a08d63ee88ad5325e10ea4b2b0d3776a",
     "artifacts": 4,
     "artifact_names": [
       "Openthu-0.2.0-source.tar.gz",
@@ -247,6 +247,9 @@
         "size": 3436910,
         "sha256": "70e087c2019b7c17d0998ec21a9022e81cdc88556ed949536ba3e744b060b087"
       }
-    ]
+    ],
+    "artifact_commit": null,
+    "candidate_head": null,
+    "note": "code_commit is the last product-code change; artifact_commit/candidate_head are filled by the acceptance record commit."
   }
 }

@@ -923,7 +923,10 @@
         "contracts/v0.2/local-read-api.schema.json",
         "src/thu_assistant/local_api/contract.py",
         "src/thu_assistant/local_api/samples.py",
-        "src/thu_assistant/actions.py"
+        "src/thu_assistant/local_api/server.py",
+        "src/thu_assistant/actions.py",
+        "scripts/regression_report.py",
+        ".github/workflows/ci.yml"
       ],
       "contracts": [
         "result-envelope-v1",
@@ -938,7 +941,8 @@
       ],
       "tests": [
         "tests/test_batch8_integration.py",
-        "tests/test_local_api.py"
+        "tests/test_local_api.py",
+        "tests/release_regression/"
       ],
       "docs": [
         "plans/v0.2.0/交付/集成清单.md",
@@ -956,11 +960,10 @@
       ],
       "completion_standard": "全版本集成、候选构建、恢复安装验证和交审说明",
       "evidence": [
-        "Module 8.1 integrates batches 1-7 on hermes/8.1; every module delivery commit and every accepted batch integration commit is verified as an ancestor of the candidate tree.",
-        "local-read-api-v1 revision 8.1 declares the request-side cursor on /todos, /calendar and /resources; the runtime router matches the frozen list exactly and no QUERY_EXTENSION remains.",
-        "Candidate build at 9b1bef5: 4 artifacts, verify ok, wheel 214 members (54 bundled), sdist 493 members; install-check outside the repository passes with 29 tools and unchanged user state.",
-        "A fresh wheel installed outside the repository serves the dashboard shell, refuses /api/v1/health without a local session, fails doctor on a missing bundled resource and reports SECURE_KEY_NOT_CONFIGURED without a key.",
-        "Batch 8 is ready with 8.1 implemented; status accepted is written by the review phase, not here."
+        "8.1-audit P0=0/P1=3/P2=9 closed; delivery commit c81a877 contains the cursor refusal, the pagination matrix, the CI fetch-depth fix and the batch attribution",
+        "foreign or expired cursors on /todos and /calendar return 400 CURSOR_EXPIRED; a cursor from another route returns 400 CURSOR_QUERY_MISMATCH",
+        "module tests 8 passed; related suites 239 passed; Linux Python 1812/8 and Node 66; candidate build/verify/install-check pass",
+        "batch 8 merged into the integration branch at 5ec73d9; version PR #2 head now contains the candidate"
       ]
     },
     {

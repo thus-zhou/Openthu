@@ -3,12 +3,17 @@
   "title": "全版本集成、候选构建与交审",
   "batch": 8,
   "owner": "Hermes",
-  "status": "implemented",
+  "status": "accepted",
   "baseline_commit": "8d0606daf9bc121f3db1c5a5dba7ca62d343d0d8",
-  "integration_parent_commit": "8d0606daf9bc121f3db1c5a5dba7ca62d343d0d8",
-  "delivery_commit": "9b1bef59685bab1be1922219f6fc53f67f1601ad",
+  "integration_parent_commit": "fb6edb1e4071f574430ef5d0259d918b67f3b0dc",
+  "delivery_commit": "c81a8771a08d63ee88ad5325e10ea4b2b0d3776a",
   "implementation_commits": [
-    "9b1bef5"
+    "9b1bef5",
+    "e98f42b",
+    "0149c37",
+    "6e45eb0",
+    "16e6b27",
+    "c81a877"
   ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/8.1",
@@ -37,7 +42,8 @@
     "handoffs/v020-candidate.md",
     "handoffs/v0.2.0-candidate.json",
     ".github/workflows/ci.yml",
-    "scripts/regression_report.py"
+    "scripts/regression_report.py",
+    "src/thu_assistant/local_api/server.py"
   ],
   "contracts": [
     "result-envelope-v1",
@@ -70,20 +76,20 @@
       }
     },
     "related_tests": {
-      "passed": 224,
+      "passed": 239,
       "failed": 0,
       "command": "python -m pytest -o addopts='' -q tests/test_local_api.py tests/test_facade_audit.py tests/test_batch6_integration.py tests/test_batch7_integration.py tests/test_docs_consistency.py"
     },
     "full_offline_suite_linux": {
-      "python_passed": 1797,
+      "python_passed": 1812,
       "python_skipped": 8,
       "python_failed": 0,
       "python_errors": 0,
-      "python_total": 1805,
+      "python_total": 1820,
       "node_passed": 66,
       "node_failed": 0,
-      "command": "python -m pytest -o addopts='' -q -p no:cacheprovider --junitxml=.local/junit-clean.xml; python scripts/dev.py test",
-      "note": "Python totals come from the JUnit cases; scripts/regression_report.py adds the 66 Node cases into its own totals (1871), so its total is Python plus Node.",
+      "command": "python -m pytest -o addopts='' -q -p no:cacheprovider --junitxml=.local/junit-a.xml; python scripts/dev.py test",
+      "note": "Python totals come from the JUnit cases; scripts/regression_report.py adds the 66 Node cases into its own totals (1878), so its total is Python plus Node.",
       "live_campus_calls": 0,
       "model_calls": 0,
       "business_submissions": 0
@@ -300,5 +306,33 @@
     "9.1: rebuild and re-verify the candidate at the final merged head before tagging; do not reuse the local artifact hashes blindly.",
     "7.2 (.github/workflows/ci.yml): the test job now checks out the full history so the batch-8 ancestry test can resolve module commits in CI; job names, matrix and the release gate are unchanged.",
     "7.2 (scripts/regression_report.py): the batch-7 and batch-8 integration test files are registered in MODULE_BY_FILE so their cases are attributed to batch-7/batch-8 instead of unmapped; report semantics are unchanged."
-  ]
+  ],
+  "accepted_at": "2026-11-18",
+  "integration_parent_note": "fb6edb1 is the batch-7 integration commit; 8d0606d is the branch point / record correction that 8.1 actually starts from.",
+  "verification_commit": "the commit containing this record file",
+  "branch_head": "the head of hermes/8.1 after the integration fast-forward",
+  "integration_branch": "hermes/1-install-diagnostics",
+  "integration_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed",
+  "audit": {
+    "report": "8.1-audit",
+    "P0": 0,
+    "P1": 3,
+    "P2": 9,
+    "closed": 12,
+    "open": 0,
+    "items": [
+      "P1-1: hermes/8.1 merged into hermes/1-install-diagnostics at 5ec73d9; version PR #2 head now contains the candidate",
+      "P1-2: delivery_commit c81a877 contains the module tests, the CI fetch-depth fix and the report attribution; implementation_commits lists the chain and verification_commit is separate",
+      "P1-3: /todos and /calendar refuse a cursor they never issued (400 CURSOR_EXPIRED) and a cursor from another route (400 CURSOR_QUERY_MISMATCH)",
+      "P2-1: privacy counts are recorded for both the local rehearsal and the final candidate",
+      "P2-2: fb6edb1 and 8d0606d are named as integration commit and branch point",
+      "P2-3: 7.1/7.3 ownership handoffs are marked resolved",
+      "P2-4: the integration checklist names the real 8.1 commits",
+      "P2-5: the gate test requires accepted for batch 8 and ready for batch 9",
+      "P2-6: pagination cases cover todos/calendar/resources; the ancestry check includes 1.1",
+      "P2-7: candidate code_commit, artifact_commit and candidate_head are separate fields",
+      "P2-8: the handoff JSON is regenerated at the final head",
+      "P2-9: the contract names the local-session binding and records the account-switch boundary"
+    ]
+  }
 }

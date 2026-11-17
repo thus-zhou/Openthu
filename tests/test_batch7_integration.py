@@ -111,9 +111,11 @@ def test_batch7_records_ownership_and_gate_agree():
         assert all(state == "accepted" for state in batch["module_status"].values())
         assert re.fullmatch(r"[0-9a-f]{40}", batch["integration_commit"] or "")
         assert batch["accepted_at"]
-        assert by_batch[8]["status"] in ("ready", "locked")
+        assert by_batch[8]["status"] in ("ready", "accepted", "locked")
         if by_batch[8]["status"] == "ready":
             assert by_batch[9]["status"] == "locked"
+        elif by_batch[8]["status"] == "accepted":
+            assert by_batch[9]["status"] == "ready"
 
 
 def test_the_user_documents_describe_the_wired_dashboard_and_candidate_status():

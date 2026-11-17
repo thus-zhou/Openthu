@@ -81,18 +81,18 @@ def test_every_module_and_batch_delivery_is_an_ancestor_of_the_candidate() -> No
         assert result.returncode == 0, f"{label} {commit} is not an ancestor of HEAD"
 
 
-def test_the_batch_gate_ends_in_one_ready_batch_with_8_1_implemented() -> None:
+def test_the_batch_gate_accepts_batch_8_and_opens_batch_9() -> None:
     gate = _delivery_json("批次门禁.json")
     batches = {item["batch"]: item for item in gate["batches"]}
     assert sorted(batches) == list(range(1, 10))
-    assert all(batches[number]["status"] == "accepted" for number in range(1, 8))
-    assert batches[8]["status"] == "ready"
-    assert batches[9]["status"] == "locked"
-    assert batches[8]["mode"] == "serial_gate"
+    assert all(batches[number]["status"] == "accepted" for number in range(1, 9))
+    assert batches[9]["status"] == "ready"
+    assert batches[9]["mode"] == "serial_gate"
     assert batches[8]["modules"] == ["8.1"]
-    state = batches[8]["module_status"]["8.1"]
-    # `accepted` belongs to the review phase; batch 8 must not claim it here.
-    assert state in ("implemented", "accepted")
+    # 8.1 is accepted only after the audit remediation and the integration merge.
+    assert batches[8]["module_status"]["8.1"] == "accepted"
+    assert re.fullmatch(r"[0-9a-f]{40}", batches[8]["integration_commit"] or "")
+    assert batches[8]["accepted_at"]
     assert gate["batches"][-1]["batch"] == 9
 
 
@@ -205,7 +205,10 @@ def test_the_integration_and_candidate_records_exist() -> None:
     candidate = (DELIVERY / "候选版本记录.md").read_text(encoding="utf-8")
     record = _delivery_json(Path("模块结果") / "8.1.json")
     assert record["module"] == "8.1"
-    assert record["status"] == "implemented"
+    # The review phase writes `accepted`; the module record must agree with the
+    # batch gate and carry the acceptance date.
+    assert record["status"] == "accepted"
+    assert record["accepted_at"]
     assert record["branch"] == "hermes/8.1"
     assert record["worktree"].startswith("~") or record["worktree"].startswith("/")
     for module in ("1.1",) + ACCEPTED_MODULES + ("8.1", "9.1"):

@@ -1009,7 +1009,7 @@
       "cross_module_handoffs": [
         "src/thu_assistant/__main__.py (6.1): 7.1 adds the two `static_dir=web_assets.static_dir()` arguments; command names, output shape and exit codes are unchanged.",
         "pyproject.toml and MANIFEST.in (6.3): 7.1 adds the web_assets package-data patterns and the recursive MANIFEST include; dependency pins and entry points are unchanged.",
-        "contracts local-read-api-v1 (1.1/8.1): the request-side `cursor` is still not in the frozen list; 7.1 follows next_cursor/cursor and the revision stays with the contract owner.",
+        "contracts local-read-api-v1 (1.1/8.1): resolved in 8.1; the three dashboard routes declare the request-side cursor, the runtime mirror matches, and a foreign or expired cursor is refused.",
         "tests/test_web_assets.py (7.2): the browser matrix entry for 7.1 is now covered; Firefox/Safari Sec-Fetch-Mode remains a 7.2 cross-engine check."
       ]
     },
@@ -1118,7 +1118,7 @@
       "cross_module_handoffs": [
         "src/thu_assistant/facade/core.py and __main__.py (6.1): 7.3 fixes the _local_failure binding and forwards --semester on agenda export; tool schemas and registrations are unchanged.",
         "README.md, docs/, CHANGELOG.md, integrations/, CONTRIBUTING.md (7.3): the docs module owns the public wording; 7.2's MAINTENANCE section and 7.1's dashboard shell are described, not reimplemented.",
-        "docs/contracts/source-matrix.md (2.3): the historical wording row is still registered for 2.3/8.1; 7.3 does not edit the source-evidence document."
+        "docs/contracts/source-matrix.md (2.3): resolved in 8.1; the difference register now records the 8.1 confirmation and the retained v0.1 preview boundary."
       ]
     },
     {
@@ -1154,14 +1154,16 @@
         "全版本集成、候选构建、恢复安装验证和交审说明"
       ],
       "integration_order": 23,
-      "status": "implemented",
-      "delivery_commit": "9b1bef59685bab1be1922219f6fc53f67f1601ad",
+      "status": "accepted",
+      "delivery_commit": "c81a8771a08d63ee88ad5325e10ea4b2b0d3776a",
       "evidence": [
-        "All batches 1-7 accepted and reconnected; 8.1 folds the local-read-api request-side cursor revision, the actions.py docstring and the source-matrix difference register into one candidate tree.",
-        "Candidate build and verify at 9b1bef5: 4 artifacts, 214 wheel members (54 bundled), 493 sdist members, release status candidate-not-released.",
-        "install-check and a fresh wheel install outside the repository: 29 MCP tools, doctor ok, dashboard shell served from the installed package, missing resource and missing key both fail closed.",
-        "Batch 8 remains ready with 8.1 implemented; the review phase owns accepted."
-      ]
+        "audit 8.1-audit P0=0/P1=3/P2=9 closed; the delivery commit contains the module tests, the CI fetch-depth fix and the report attribution",
+        "foreign paging cursors on /todos and /calendar return 400 CURSOR_EXPIRED; pagination cases cover todos, calendar and resources",
+        "module tests 8 passed, related suites 239 passed, Linux Python 1812/8 and Node 66; candidate build/verify/install-check pass",
+        "batch 8 merged into hermes/1-install-diagnostics at 5ec73d9, so version PR #2 contains 8.1"
+      ],
+      "accepted_at": "2026-11-18",
+      "integration_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed"
     },
     {
       "id": "9.1",
@@ -1192,7 +1194,7 @@
         "Codex 独立审查、必要修复、正式合并、标签和 Release 验证"
       ],
       "integration_order": 24,
-      "status": "pending"
+      "status": "ready"
     }
   ],
   "gate_note": "Batch 4 accepted: 4.1 bbe620a, 4.2 c66ee2e, 4.3 e14c11c, 4.4 cf255de, 4.5 2df5772; single batch integration commit recorded in 批次门禁.json."
