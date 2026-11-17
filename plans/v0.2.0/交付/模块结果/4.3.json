@@ -7,12 +7,13 @@
   "baseline_commit": "323a98b",
   "integration_parent_commit": "323a98b",
   "audit_baseline_commit": "15b66d2",
-  "delivery_commit": "dc66a64",
+  "delivery_commit": "e14c11c",
+  "audit_fix_commits": ["dc66a64", "e14c11c"],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/4.3",
   "version_pr": null,
   "batch_state": "module accepted; batch 4 integration remains with the integration owner",
-  "evidence_tree": "clean checkout of dc66a64 after `python scripts/dev.py setup-node` (or an equivalent src/thu_assistant/node_modules link); otherwise dev.py check stops on the missing tough-cookie runtime dependency",
+  "evidence_tree": "clean checkout of e14c11c after `python scripts/dev.py setup-node` (or an equivalent src/thu_assistant/node_modules link); otherwise dev.py check stops on the missing tough-cookie runtime dependency",
   "audit_report": ".local/audits/4.3-audit.md",
   "paths": [
     "src/thu_assistant/precheck.py",
@@ -110,7 +111,7 @@
       "node_passed": 66,
       "node_failed": 0,
       "command": "python scripts/dev.py test",
-      "evidence_tree": "clean checkout of dc66a64 after setup-node"
+      "evidence_tree": "clean checkout of e14c11c after setup-node"
     },
     "live_campus_calls": 0,
     "model_calls": 0,
@@ -136,7 +137,7 @@
       },
       {
         "id": "P1-4",
-        "fix": "module record now reports the actual 52/277/700/66/410 evidence from dc66a64 and the setup-node prerequisite",
+        "fix": "module record now reports the actual 52/277/700/66/410 evidence from e14c11c and the setup-node prerequisite",
         "verification": "the commands in checks"
       }
     ],
@@ -156,7 +157,7 @@
       "P2-13 ROOM_RULE_UNVERIFIED registered in the contract and runtime mirror",
       "P2-14 source-registry code_refs, acceptance mapping, ownership table and docs index synchronized",
       "P2-15 record path/count evidence corrected",
-      "P2-16 unused constants, duplicate occupancy redaction, checked_at fallback, snapshot version and fees-state documentation cleaned up"
+      "P2-16 unused constants and the DAY branch, duplicate occupancy redaction, checked_at fallback, snapshot version and fees/rules-state documentation cleaned up"
     ]
   },
   "verified_cases": [
@@ -197,6 +198,7 @@
     "5.1/5.2: keep write paths on strict pagination checks; if partial results are used, record uncertainty explicitly and never replay.",
     "5.1: find_room must treat ROOM_RULE_UNVERIFIED as a rule-read gap requiring recheck, not as unlimited or ROOM_NOT_OPEN.",
     "6.1: precheck is additive; preserve the 29 legacy tools, pass through or summarize it, and keep the ROOM_RULE_UNVERIFIED classification.",
+    "3.2/6.1: 4.3 touched src/thu_assistant/queries.py only in result assembly (precheck/retrieval, cursor freshness, read_scope); query cache keys, cursor format and result-envelope semantics are unchanged. Register it as a shared 3.2/4.3 change and recheck the exclusive-path claim during integration.",
     "7.3: update the capability table's read-precheck evidence wording; docs/contracts/README.md is already indexed by this module.",
     "2.3/integration: source-registry code_refs were refreshed for library.py, spaces.py and sports.py; recheck if later edits move the ranges again."
   ]
