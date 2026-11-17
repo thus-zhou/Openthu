@@ -1,10 +1,15 @@
 """Stable, leak-free errors for the read-only academics adapters.
 
 Codes are module-local until the business facade (6.1) registers them in
-``contracts/v0.2/error-classification.json``.  Each entry already uses the
-frozen category policy values, so registration is mechanical.  Detail strings
-are restricted to short enum-like tokens: a source URL, an exception text, a
-student identifier or a grade value must never appear in an error message.
+``contracts/v0.2/error-classification.json``; that file belongs to the frozen
+contract owner (2.3), so this module ships an explicit category map that must be
+used before ``source_state.classify_error``.  ``classification_map`` keeps the
+mapping inspectable and stops a module error from being collapsed into
+``UNKNOWN``/``INTERNAL``.
+
+Detail strings are restricted to short enum-like tokens: a source URL, an
+exception text, a student identifier or a grade value must never appear in an
+error message.
 """
 from __future__ import annotations
 
@@ -17,10 +22,6 @@ CODES = {
     'ACADEMICS_ERROR': (
         'INTERNAL', False, 'CONTACT_SUPPORT',
         '学业读取发生未分类的本地错误，操作未完成。',
-    ),
-    'ACADEMICS_SOURCE_BLOCKED': (
-        'NOT_IMPLEMENTED', False, 'CONTACT_SUPPORT',
-        '该学业能力的来源契约尚未核对，当前版本不提供生产读取。',
     ),
     'ACADEMICS_PRODUCTION_TRANSPORT_BLOCKED': (
         'NOT_IMPLEMENTED', False, 'CONTACT_SUPPORT',
@@ -46,21 +47,13 @@ CODES = {
         'UPSTREAM_CONTRACT', False, 'CHECK_REMOTE_RECORD',
         '周次、单双周或节次字段不符合已登记的形状，保留原始周期。',
     ),
-    'ACADEMICS_INVALID_GRADE_RECORD': (
-        'UPSTREAM_CONTRACT', False, 'CHECK_REMOTE_RECORD',
-        '成绩字段无法按规范成绩模型表示，未生成替代值。',
-    ),
-    'ACADEMICS_INVALID_EXAM_RECORD': (
-        'UPSTREAM_CONTRACT', False, 'CHECK_REMOTE_RECORD',
-        '考试字段无法按规范考试模型表示，未补造时间或状态。',
-    ),
     'ACADEMICS_CALENDAR_MISMATCH': (
         'UPSTREAM_CONTRACT', False, 'CHECK_REMOTE_RECORD',
         '校历、节次时间表或学期不一致，未展开为具体日期。',
     ),
     'ACADEMICS_EVENT_UNSUPPORTED': (
         'INPUT', False, 'FIX_INPUT',
-        '该记录缺少生成事件所需的日期或稳定标识。',
+        '该记录缺少生成事件所需的日期、时间或稳定标识。',
     ),
     'ACADEMICS_GRADE_NOT_EVENT': (
         'INPUT', False, 'FIX_INPUT',
@@ -74,7 +67,7 @@ CODES = {
 
 
 class AcademicsError(Exception):
-    """Base error; callers read ``code`` and ``as_error()``."""
+    """Base error; callers read ``code``/``category`` and ``as_error()``."""
 
     code = 'ACADEMICS_ERROR'
 
@@ -82,7 +75,7 @@ class AcademicsError(Exception):
         if code is not None:
             self.code = code
         if self.code not in CODES:
-            raise KeyError('UNREGISTERED_ACADEMICS_ERROR')
+            self.code = 'ACADEMICS_ERROR'
         self.category, self.retryable, self.user_action, self.message = CODES[self.code]
         self.detail = detail if _DETAIL.fullmatch(detail or '') else 'DETAIL_REDACTED'
         super().__init__(self.code)
@@ -94,7 +87,7 @@ class AcademicsError(Exception):
 def error_object(code):
     """Classified error object for a registered academics code."""
     if code not in CODES:
-        raise KeyError('UNREGISTERED_ACADEMICS_ERROR')
+        code = 'ACADEMICS_ERROR'
     category, retryable, user_action, message = CODES[code]
     return {
         'code': code,
@@ -106,4 +99,22 @@ def error_object(code):
     }
 
 
-__all__ = ['AcademicsError', 'CODES', 'error_object']
+def classification_map():
+    """``code -> category`` for facades that must not call the frozen classifier."""
+    return {code: rule[0] for code, rule in CODES.items()}
+
+
+def classify(value):
+    """Classify an academics exception or code without copying its text.
+
+    A foreign exception becomes ``ACADEMICS_ERROR``/``INTERNAL``; it is never
+    re-raised with its original message and never treated as a source success.
+    """
+    if isinstance(value, AcademicsError):
+        return value.as_error()
+    if isinstance(value, str) and value in CODES:
+        return error_object(value)
+    return error_object('ACADEMICS_ERROR')
+
+
+__all__ = ['AcademicsError', 'CODES', 'classification_map', 'classify', 'error_object']

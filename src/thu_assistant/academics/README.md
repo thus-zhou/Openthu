@@ -47,15 +47,21 @@
   `course_uid`，并标注 `COURSE_NOT_IN_SOURCE_INDEX`。
 - 课表条目：保留教学周、单双周、星期、节次、日期区间、地点、平台时间和教学班/
   重修字段。条目编号为模块内稳定键 `<source>:TIMETABLE:<semester>:<record>`；
-  缺少记录号时保留条目但 `identity_state=MISSING_STABLE_ID`。
+  缺少记录号但已有课程/教学班与星期节次时，生成确定性的来源内临时键
+  `<source>:TEMPORARY_TIMETABLE:<semester>:<digest>` 并标注
+  `identity_state=TEMPORARY_SCOPED` 与 `TEMPORARY_SCOPED_IDENTITY`，标题不参与；
+  连课程与星期节次都没有时保留条目但 `identity_state=MISSING_STABLE_ID`。
 - 周次展开（`week-expansion-v1`）：只有显式校历才产生日期，只有显式节次表才产生
-  时刻；缺校历保留原始周期，缺节次表只给日期且不给虚构时刻；节假日跳过、调课日
-  按声明的有效星期与替换日期处理；教学周以外的日期不补造。展开结果带
+  时刻；缺校历保留原始周期，缺节次表只给日期且不给虚构时刻；节假日、调课替换和
+  来源声明的 `date_range` 之外日期属于正常跳过（记录在 `skipped`，不把状态降为
+  `PARTIAL`），教学周以外的意外缺口才降级；调课日只在所属周被选中或替换本 pattern
+  的自身日期时参与；校历与节次表学期不一致直接 `CALENDAR_MISMATCH`。展开结果带
   `derivation`（规则版本、日期/时刻来源、`not_a_source_fact=true`）。
 - 考试：保留考试编号、课程关联、日期、开始/结束时间、地点、座位、状态精度和
-  发布状态。只有日期时 `time_precision=date`，不补午夜；补考、缓考、改期、取消
-  是独立状态；来源未声明覆盖全部考试时结果 `complete=false` 并给出
-  `EXAM_COVERAGE_NOT_DECLARED`。
+  发布状态。只有日期时 `time_precision=date`，不补午夜；只有结束时间、只有时刻
+  没有日期、结束早于开始都失败关闭；补考、缓考、改期、取消是独立状态；来源未声明
+  覆盖全部考试时结果 `complete=false` 并给出 `EXAM_COVERAGE_NOT_DECLARED`。缺少
+  考试号但已有课程与日期/开始时间时生成 `TEMPORARY_EXAM` 临时键。
 - 成绩：严格输出 `grade-v1`。未发布为 `UNGRADED`，扣留为 `WITHHELD`，未知为
   `UNKNOWN`；零分是 `GRADED` + `0`；等级制与通过制保留文本；未知制式保留来源值
   并标注。不计算 GPA、学分合计或排名，也不把作业成绩当课程成绩。
@@ -76,16 +82,23 @@
 `calendar-event-v1`。考试状态由 `state` 与 `release_state` 按
 `exam-event-v1` 推导：已发布且正常才 `CONFIRMED`，补考/缓考/改期为
 `TENTATIVE`，取消保持 `CANCELLED`，未知状态只能是 `UNKNOWN`。课表 occurrence
-为 `TENTATIVE`，日期有而节次表缺失时使用 `time.kind=DATE`。
-`calendar_events('grades', ...)` 直接抛出 `ACADEMICS_GRADE_NOT_EVENT`。
+为 `TENTATIVE`，日期有而节次表缺失时使用 `time.kind=DATE`。`PARTIAL` 展开只要
+仍有 `occurrences` 就继续转换，并把 `skipped` 原样返回；时间不是合法对象时转换器
+失败关闭。事件 `record_id` 直接使用既有 `exam_uid`/`entry_uid`/`temporary_uid`
+或 `<source>:<record>`，不做有损替换；重复 `event_uid` 会进入 `excluded` 并给出
+`EVENT_UID_CONFLICT`。`calendar_events('grades', ...)` 直接抛出
+`ACADEMICS_GRADE_NOT_EVENT`。
 
 ## 公共接线
 
 本包不修改 `queries.py` 注册、`todos.py` 或 MCP 工具。`operation_schemas()` 给出
-只读参数（学期、课程、业务范围、分页上限），由 6.1 统一登记；`describe()` 提供
-能力启用表和规则版本。解除阻塞需要按 `docs/contracts/academic-sources.md` 取得
-脱敏来源证据，更新 `source-registry.json` 与 `adapter-readiness.json` 后再接生产
-传输。
+只读参数（学期、课程、业务范围、分页上限），由 6.1 统一登记；`scope` 只有
+`SEMESTER` 与 `COURSE`，`COURSE` 必须携带 `course`，按 `course_id`/
+`teaching_class_id`/`title` 精确过滤；`limit` 真正截断并在 `read_scope.limit`、
+`truncated` 与 `RESULT_LIMIT_REACHED` 中体现。`describe()` 提供能力启用表和规则
+版本；`errors.classification_map()`/`classify()` 给 6.1 提供冻结契约登记前的分类
+桥接。解除阻塞需要按 `docs/contracts/academic-sources.md` 取得脱敏来源证据，更新
+`source-registry.json` 与 `adapter-readiness.json` 后再接生产传输。
 
 ## 测试
 

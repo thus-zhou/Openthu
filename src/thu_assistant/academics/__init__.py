@@ -18,7 +18,7 @@ Nothing here performs I/O, reads credentials or registers a public operation;
 from __future__ import annotations
 
 from . import events, models, rules, sensitivity
-from .errors import CODES, AcademicsError, error_object
+from .errors import CODES, AcademicsError, classification_map, classify, error_object
 from .events import calendar_events, exam_event, timetable_events
 from .models import (
     CourseIndex,
@@ -54,6 +54,8 @@ __all__ = [
     'blocked_result',
     'calendar_events',
     'capability_report',
+    'classification_map',
+    'classify',
     'collect_pages',
     'describe',
     'error_object',

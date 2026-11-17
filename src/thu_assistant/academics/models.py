@@ -22,6 +22,7 @@ Key rules:
 from __future__ import annotations
 
 from datetime import date, datetime
+import hashlib
 import html
 import re
 
@@ -35,6 +36,7 @@ VERSION = 'academics-models-v1'
 SOURCE_ID = re.compile(r'^[a-z][a-z0-9_.-]{2,120}$')
 PART = re.compile(r'^[A-Za-z0-9_.:+-]{1,240}$')
 UID = re.compile(r'^[a-z][a-z0-9_.-]{1,80}:[A-Z]+:[A-Za-z0-9_.:+-]{1,180}$')
+TEMP_UID = re.compile(r'^[a-z][a-z0-9_.-]{1,80}:[A-Z_]{3,40}:[A-Za-z0-9_.:+-]{1,180}$')
 CONTROL = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 CLOCK = re.compile(r'^(?:[01][0-9]|2[0-3]):[0-5][0-9]$')
 
@@ -105,6 +107,25 @@ def _stable_uid(source_id, kind, *parts):
     return {'uid': uid, 'identity_state': 'STABLE'}
 
 
+def _temporary_uid(source_id, kind, semester_id, *materials):
+    """A deterministic, source-scoped temporary identity for a missing record id.
+
+    It is explicitly *not* a stable source identity: callers must keep the
+    ``TEMPORARY_SCOPED`` state and must not use it for cross-semester joins.
+    Titles never participate; an empty material list yields ``None``.
+    """
+    if not isinstance(source_id, str) or not SOURCE_ID.fullmatch(source_id):
+        return None
+    semester = _part(semester_id)
+    values = [part for part in (_part(material) for material in materials) if part is not None]
+    if semester is None or len(values) < 2:
+        return None
+    material = '|'.join(values)
+    digest = hashlib.sha256(material.encode('utf-8', 'replace')).hexdigest()[:24]
+    uid = f'{source_id}:{kind}:{semester}:{digest}'
+    return uid if len(uid) <= 280 and TEMP_UID.fullmatch(uid) else None
+
+
 def _date_only(value):
     if value is None or value == '':
         return None, None
@@ -124,14 +145,16 @@ def _observed(value):
 
 
 def normalize_semester(row, *, source_id='learn.semesters', synthetic=True):
-    """Normalise one semester row; a missing id is kept without an identity."""
+    """Normalise one semester row; the id is the identity, the title is display."""
     if not isinstance(row, dict):
         raise RecordError('INVALID_RECORD', 'row')
-    title = domain_models.require_title(_first(row.get('title'), row.get('name'), row.get('semester_name')))
+    title = _first(row.get('title'), row.get('name'), row.get('semester_name'))[:500]
     semester_id = _first(row.get('semester_id'), row.get('id'), row.get('term'))[:80]
     warnings = []
-    starts_on, start_issue = _date_only(row.get('starts_on', row.get('start_date')))
-    ends_on, end_issue = _date_only(row.get('ends_on', row.get('end_date')))
+    if not title:
+        warnings.append('SEMESTER_TITLE_MISSING')
+    starts_on, start_issue = _date_only(rules.first_value(row, 'starts_on', 'start_date'))
+    ends_on, end_issue = _date_only(rules.first_value(row, 'ends_on', 'end_date'))
     for issue in (start_issue, end_issue):
         if issue:
             warnings.append(issue)
@@ -335,10 +358,24 @@ def normalize_timetable_entry(row, *, semester_id, observed_at, source_evidence_
     evidence = _text(source_evidence_id)[:120]
     if not evidence:
         raise RecordError('MISSING_SOURCE_EVIDENCE_ID', 'source_evidence_id')
-    platform_times, platform_warnings = _platform_times(row)
-    warnings = set(pattern.get('warnings') or []) | set(association['warnings']) | set(platform_warnings)
+    temporary = None
     if ident['identity_state'] == 'MISSING_STABLE_ID':
-        warnings.add('MISSING_STABLE_ID')
+        temporary = _temporary_uid(
+            source_id, 'TEMPORARY_TIMETABLE', semester,
+            _first(row.get('course_id'), row.get('id_course')),
+            _first(row.get('teaching_class_id'), row.get('class_id')),
+            pattern.get('weekday'),
+            '-'.join(str(value) for value in pattern.get('periods') or ()),
+            '-'.join(str(value) for value in pattern.get('weeks') or ()),
+            pattern.get('parity'))
+        if temporary is None:
+            warnings = set(pattern.get('warnings') or []) | {'MISSING_STABLE_ID'}
+        else:
+            warnings = set(pattern.get('warnings') or []) | {'TEMPORARY_SCOPED_IDENTITY'}
+    else:
+        warnings = set(pattern.get('warnings') or [])
+    platform_times, platform_warnings = _platform_times(row)
+    warnings |= set(association['warnings']) | set(platform_warnings)
     teachers = row.get('teacher_names') or row.get('teachers')
     if isinstance(teachers, str):
         teachers = [teachers]
@@ -349,7 +386,8 @@ def normalize_timetable_entry(row, *, semester_id, observed_at, source_evidence_
         'source_id': source_id,
         'source_record_id': record_id or None,
         'entry_uid': ident['uid'],
-        'identity_state': ident['identity_state'],
+        'temporary_uid': temporary,
+        'identity_state': ('TEMPORARY_SCOPED' if temporary else ident['identity_state']),
         'dedupe_state': 'NOT_DEDUPED',
         'semester_id': semester or None,
         'account_scope': account_scope,
@@ -358,8 +396,8 @@ def normalize_timetable_entry(row, *, semester_id, observed_at, source_evidence_
         'course_candidates': association['candidates'],
         'title': title,
         'teacher_names': [_text(value)[:200] for value in teachers if _text(value)][:40],
-        'teaching_class_id': _part(row.get('teaching_class_id') or row.get('class_id')),
-        'attempt_id': _part(row.get('attempt_id') or row.get('attempt')),
+        'teaching_class_id': _part(rules.first_value(row, 'teaching_class_id', 'class_id')),
+        'attempt_id': _part(rules.first_value(row, 'attempt_id', 'attempt')),
         'week_pattern': pattern,
         'location': _first(row.get('location'), row.get('room'), row.get('dd'))[:300] or None,
         'platform_times': platform_times,
@@ -384,11 +422,11 @@ def normalize_exam(row, *, semester_id, observed_at, source_evidence_id,
     association = _association(course_index, row, semester, title_hint)
     title = domain_models.require_title(_first(title_hint, association.get('title')))
     warnings = set(association['warnings'])
-    if ident['identity_state'] == 'MISSING_STABLE_ID':
-        warnings.add('MISSING_STABLE_ID')
     evidence = _text(source_evidence_id)[:120]
+    if not evidence:
+        raise RecordError('MISSING_SOURCE_EVIDENCE_ID', 'source_evidence_id')
 
-    raw_date = row.get('date', row.get('exam_date'))
+    raw_date = rules.first_value(row, 'date', 'exam_date')
     exam_date = None
     start_time = _text(row.get('start_time'))
     end_time = _text(row.get('end_time'))
@@ -404,6 +442,8 @@ def normalize_exam(row, *, semester_id, observed_at, source_evidence_id,
             start_time = start_time or parsed['value'][11:16]
     if start_time and exam_date is None:
         raise RecordError('EXAM_TIME_WITHOUT_DATE', 'date')
+    if end_time and not start_time:
+        raise RecordError('END_WITHOUT_START', 'end_time')
     if start_time and not CLOCK.fullmatch(start_time):
         raise RecordError('INVALID_EXAM_TIME', 'start_time')
     if end_time and not CLOCK.fullmatch(end_time):
@@ -414,17 +454,19 @@ def normalize_exam(row, *, semester_id, observed_at, source_evidence_id,
         precision = 'minute'
     elif exam_date:
         precision = 'date'
-        if end_time:
-            raise RecordError('END_WITHOUT_START', 'end_time')
 
-    if not evidence:
-        raise RecordError('MISSING_SOURCE_EVIDENCE_ID', 'source_evidence_id')
-    state = domain_models.mapped_status(row.get('state', row.get('status')), EXAM_STATE_MAP)
+    state = domain_models.mapped_status(
+        rules.first_value(row, 'state', 'status'), EXAM_STATE_MAP)
     release = domain_models.mapped_status(
-        row.get('release_state', row.get('release')), RELEASE_STATE_MAP)
-    warnings = set(association['warnings'])
+        rules.first_value(row, 'release_state', 'release'), RELEASE_STATE_MAP)
+    temporary = None
     if ident['identity_state'] == 'MISSING_STABLE_ID':
-        warnings.add('MISSING_STABLE_ID')
+        temporary = _temporary_uid(
+            source_id, 'TEMPORARY_EXAM', semester,
+            _first(row.get('course_id'), row.get('id_course')),
+            _first(row.get('teaching_class_id'), row.get('class_id')),
+            exam_date, start_time)
+        warnings.add('TEMPORARY_SCOPED_IDENTITY' if temporary else 'MISSING_STABLE_ID')
     if state['source_status_digest']:
         warnings.add('EXAM_STATE_UNKNOWN:' + state['source_status_digest'])
     if release['source_status_digest']:
@@ -434,7 +476,8 @@ def normalize_exam(row, *, semester_id, observed_at, source_evidence_id,
         'source_id': source_id,
         'source_record_id': record_id or None,
         'exam_uid': ident['uid'],
-        'identity_state': ident['identity_state'],
+        'temporary_uid': temporary,
+        'identity_state': ('TEMPORARY_SCOPED' if temporary else ident['identity_state']),
         'dedupe_state': 'NOT_DEDUPED',
         'semester_id': semester or None,
         'account_scope': account_scope,
@@ -478,7 +521,7 @@ def normalize_grade(row, *, semester_id, observed_at, source_evidence_id,
     if ident['identity_state'] == 'MISSING_STABLE_ID':
         warnings.add('MISSING_STABLE_ID')
 
-    value = row.get('grade_value', row.get('score'))
+    value = rules.first_value(row, 'grade_value', 'score')
     if isinstance(value, bool) or (value is not None and not isinstance(value, (int, float))):
         raise RecordError('GRADE_VALUE_TYPE', 'grade_value')
     text = _first(row.get('grade_text'), row.get('grade'))
@@ -489,14 +532,17 @@ def normalize_grade(row, *, semester_id, observed_at, source_evidence_id,
         # a text that merely repeats the number is redundant and ambiguous.
         if text == str(value):
             text = ''
-    scale = domain_models.mapped_status(
-        row.get('grade_scale', row.get('scale')), GRADE_SCALE_MAP, unknown='UNKNOWN')
+    raw_scale = rules.first_value(row, 'grade_scale', 'scale')
+    scale = domain_models.mapped_status(raw_scale, GRADE_SCALE_MAP, unknown='UNKNOWN')
     scale_value = scale['status'] if scale['mapping_state'] == 'MAPPED' else 'UNKNOWN'
-    if scale_value == 'UNKNOWN' and row.get('grade_scale') not in (None, ''):
-        warnings.add('GRADE_SCALE_UNKNOWN:' + (scale['source_status_digest'] or ''))
+    if scale_value == 'UNKNOWN':
+        if raw_scale not in (None, ''):
+            warnings.add('GRADE_SCALE_UNKNOWN:' + (scale['source_status_digest'] or ''))
+        elif value is not None or text:
+            warnings.add('GRADE_SCALE_MISSING')
     warnings = {warning for warning in warnings if warning}
 
-    raw_state = row.get('state', row.get('status'))
+    raw_state = rules.first_value(row, 'state', 'status')
     if raw_state in (None, ''):
         if value is not None or text:
             state = 'GRADED'
@@ -552,7 +598,7 @@ def normalize_grade(row, *, semester_id, observed_at, source_evidence_id,
 
 
 def _uid_key(record):
-    for key in ('entry_uid', 'exam_uid', 'grade_uid', 'course_uid'):
+    for key in ('entry_uid', 'exam_uid', 'temporary_uid', 'grade_uid', 'course_uid'):
         if key in record:
             return key
     return None
@@ -607,7 +653,7 @@ def merge_records(records):
             groups.pop(uid, None)
             warnings.add('SOURCE_RECORD_CONFLICT')
     for record in groups.values():
-        if record.get('identity_state') == 'STABLE':
+        if record.get('identity_state') in ('STABLE', 'TEMPORARY_SCOPED'):
             record['dedupe_state'] = 'UNIQUE'
         unique[id(record)] = record
     kept = list(unique.values())

@@ -8,10 +8,14 @@ nothing else:
 * an event status is derived from the source state and release state with an
   explicit rule version, and an unfamiliar state can only become ``UNKNOWN``;
 * course grades are never converted into events or todos;
-* an entry without a stable identifier or a date produces no event and is
-  reported in ``excluded`` instead of receiving a fabricated UID.
+* an entry without any usable identifier or without a date produces no event
+  and is reported in ``excluded`` instead of receiving a fabricated UID;
+* a partially expanded week pattern (holiday or makeup day) still yields every
+  valid occurrence, and the skipped dates stay visible.
 """
 from __future__ import annotations
+
+import re
 
 from .. import domain_models
 from .errors import AcademicsError
@@ -21,6 +25,7 @@ EXAM_RULE = 'exam-event-v1'
 TIMETABLE_RULE = 'timetable-event-v1'
 SERVICE_DOMAIN = 'UNKNOWN'
 ACCOUNT_DOMAIN = 'CAMPUS'
+RECORD_ID = re.compile(r'^[A-Za-z0-9_.:+-]{1,240}$')
 
 EXAM_EVENT_STATUS = {
     'SCHEDULED': 'TENTATIVE',
@@ -32,11 +37,24 @@ EXAM_EVENT_STATUS = {
 }
 
 
+def _identity_value(record):
+    """The most specific identity a record already carries, if any."""
+    for key in ('exam_uid', 'entry_uid', 'temporary_uid'):
+        value = record.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
 def _record_id(record):
+    """An injective ``calendar-event-v1`` record id (never a lossy rewrite)."""
+    identity = _identity_value(record)
+    if identity is not None:
+        return identity if RECORD_ID.fullmatch(identity) else None
     source = str(record.get('source_id') or '')
     value = str(record.get('source_record_id') or '')
-    combined = (source.replace('.', '_') + '_' + value).strip('_')
-    return combined if value and len(combined) <= 240 else None
+    combined = f'{source}:{value}' if source and value else ''
+    return combined if combined and RECORD_ID.fullmatch(combined) else None
 
 
 def _event_kind(record):
@@ -55,6 +73,8 @@ def _base(record, *, title, time_value, status, sequence, derivation, warnings):
     record_id = _record_id(record)
     if record_id is None or not title:
         return None
+    if not isinstance(time_value, dict) or time_value.get('kind') not in ('DATE', 'DATE_TIME'):
+        raise AcademicsError('ACADEMICS_EVENT_UNSUPPORTED', 'time')
     uid = _event_uid(record, '0' if record['kind'] == 'EXAM' else derivation['occurrence'])
     if uid is None:
         return None
@@ -65,7 +85,7 @@ def _base(record, *, title, time_value, status, sequence, derivation, warnings):
             'service_domain': SERVICE_DOMAIN,
             'kind': _event_kind(record),
             'record_id': record_id,
-            'stable_resource_uid': record.get('exam_uid') or record.get('entry_uid') or record_id,
+            'stable_resource_uid': _identity_value(record) or record_id,
         },
         'title': title,
         'time': time_value,
@@ -88,13 +108,15 @@ def exam_event(exam, *, sequence=0):
         raise AcademicsError('ACADEMICS_EVENT_UNSUPPORTED', 'exam')
     if not exam.get('date'):
         raise AcademicsError('ACADEMICS_EVENT_UNSUPPORTED', 'date')
-    if not exam.get('exam_uid'):
+    if _record_id(exam) is None:
         raise AcademicsError('ACADEMICS_EVENT_UNSUPPORTED', 'identity')
     title = str(exam.get('title') or '')[:500]
     if exam.get('time_precision') == 'minute' and exam.get('start_time'):
         start = f"{exam['date']}T{exam['start_time']}:00"
         end = f"{exam['date']}T{exam['end_time']}:00" if exam.get('end_time') else None
         time_value = domain_models.calendar_time(start, end)
+        if time_value is None:
+            raise AcademicsError('ACADEMICS_EVENT_UNSUPPORTED', 'time')
     else:
         time_value = {'kind': 'DATE', 'date': exam['date'],
                       'timezone': domain_models.TIMEZONE_NAME}
@@ -112,6 +134,8 @@ def exam_event(exam, *, sequence=0):
     warnings = []
     if state == 'UNKNOWN':
         warnings.append('EXAM_STATE_UNKNOWN_FOR_EVENT')
+    if exam.get('identity_state') == 'TEMPORARY_SCOPED':
+        warnings.append('TEMPORARY_SCOPED_IDENTITY')
     event = _base(exam, title=title, time_value=time_value, status=status,
                   sequence=max(0, int(sequence or 0)), derivation=derivation,
                   warnings=warnings)
@@ -121,16 +145,22 @@ def exam_event(exam, *, sequence=0):
 
 
 def timetable_events(entry, expansion, *, sequence=0):
-    """Convert expanded timetable occurrences; returns an event list."""
+    """Convert every valid occurrence of a (possibly partial) expansion."""
     if not isinstance(entry, dict) or entry.get('kind') != 'TIMETABLE_ENTRY':
         raise AcademicsError('ACADEMICS_EVENT_UNSUPPORTED', 'timetable_entry')
-    if not isinstance(expansion, dict) or expansion.get('state') not in ('EXPANDED', 'EXPANDED_DATE_ONLY'):
+    if not isinstance(expansion, dict):
+        return {'events': [], 'excluded': [{'reason': 'NOT_EXPANDED', 'state': None}],
+                'skipped': [], 'warnings': []}
+    occurrences = expansion.get('occurrences') or []
+    skipped = list(expansion.get('skipped') or [])
+    if not occurrences:
         return {'events': [], 'excluded': [{'reason': 'NOT_EXPANDED',
-                                            'state': (expansion or {}).get('state')}],
-                'warnings': []}
+                                            'state': expansion.get('state')}],
+                'skipped': skipped, 'warnings': []}
     title = str(entry.get('title') or '')[:500]
     events, excluded = [], []
-    for occurrence in expansion.get('occurrences') or ():
+    warnings = {'PARTIAL_EXPANSION'} if expansion.get('state') == 'PARTIAL' else set()
+    for occurrence in occurrences:
         derivation = {
             'kind': 'DERIVED',
             'rule_version': TIMETABLE_RULE,
@@ -152,8 +182,9 @@ def timetable_events(entry, expansion, *, sequence=0):
                              'date': occurrence.get('date')})
         else:
             events.append(event)
-    return {'events': events, 'excluded': excluded,
-            'warnings': sorted({warning for event in events for warning in event['warnings']})}
+    warnings |= {warning for event in events for warning in event['warnings']}
+    return {'events': events, 'excluded': excluded, 'skipped': skipped,
+            'warnings': sorted(warnings)}
 
 
 def calendar_events(capability, records, *, expansions=None, sequence=0):
@@ -162,6 +193,7 @@ def calendar_events(capability, records, *, expansions=None, sequence=0):
         raise AcademicsError('ACADEMICS_GRADE_NOT_EVENT')
     rows = [row for row in records or () if isinstance(row, dict)]
     events, excluded, warnings = [], [], set()
+    skipped = []
     if capability == 'exams':
         for row in rows:
             try:
@@ -173,11 +205,12 @@ def calendar_events(capability, records, *, expansions=None, sequence=0):
     elif capability == 'timetable':
         mapping = expansions
         if isinstance(mapping, (list, tuple)):
-            mapping = {row.get('entry_uid'): expansion
+            mapping = {(_identity_value(row) or row.get('source_record_id')): expansion
                        for row, expansion in zip(rows, mapping)}
         mapping = mapping or {}
         for row in rows:
-            expansion = mapping.get(row.get('entry_uid'))
+            key = _identity_value(row) or row.get('source_record_id')
+            expansion = mapping.get(key)
             if expansion is None:
                 excluded.append({'reason': 'NOT_EXPANDED',
                                  'source_record_id': row.get('source_record_id')})
@@ -185,11 +218,22 @@ def calendar_events(capability, records, *, expansions=None, sequence=0):
             converted = timetable_events(row, expansion, sequence=sequence)
             events.extend(converted['events'])
             excluded.extend(converted['excluded'])
+            skipped.extend(converted['skipped'])
             warnings |= set(converted['warnings'])
     else:
         raise AcademicsError('ACADEMICS_UNKNOWN_CAPABILITY', str(capability))
-    return {'events': events, 'excluded': excluded, 'warnings': sorted(warnings),
-            'rule_version': VERSION,
+    unique, conflicts = [], []
+    seen = set()
+    for event in events:
+        if event['event_uid'] in seen:
+            conflicts.append({'reason': 'EVENT_UID_CONFLICT',
+                              'event_uid': event['event_uid']})
+            warnings.add('EVENT_UID_CONFLICT')
+            continue
+        seen.add(event['event_uid'])
+        unique.append(event)
+    return {'events': unique, 'excluded': excluded + conflicts, 'skipped': skipped,
+            'warnings': sorted(warnings), 'rule_version': VERSION,
             'grades_excluded': True}
 
 

@@ -81,13 +81,30 @@ CAPABILITIES = {
     },
 }
 
-SCOPES = ('SEMESTER', 'COURSE', 'ALL')
+SCOPES = ('SEMESTER', 'COURSE')
 ALLOWED_PARAMETERS = {'semester', 'course', 'scope', 'limit'}
 COURSE_FIELDS = {'course_id', 'title', 'teaching_class_id'}
 
 
 def _checked(value):
     return source_state.normalize_timestamp(value, source_state.now_iso())
+
+
+def _course_matches(row, course):
+    """Exact-match a row against the registered course fields (never fuzzy)."""
+    fields = {
+        'course_id': ('course_id', 'id_course'),
+        'teaching_class_id': ('teaching_class_id', 'class_id'),
+        'title': ('title', 'course_name'),
+    }
+    for key, aliases in fields.items():
+        if key not in course:
+            continue
+        expected = str(course[key]).strip()
+        actual = rules.first_value(row, *aliases)
+        if actual is None or str(actual).strip() != expected:
+            return False
+    return True
 
 
 def validate_parameters(capability, *, semester=None, course=None, scope='SEMESTER', limit=50):
@@ -111,6 +128,10 @@ def validate_parameters(capability, *, semester=None, course=None, scope='SEMEST
                 raise AcademicsError('ACADEMICS_INVALID_ARGUMENTS', 'course.' + key)
     if scope not in SCOPES:
         raise AcademicsError('ACADEMICS_INVALID_ARGUMENTS', 'scope')
+    if scope == 'COURSE' and course is None:
+        raise AcademicsError('ACADEMICS_INVALID_ARGUMENTS', 'course_required_for_scope')
+    if scope != 'COURSE' and course is not None:
+        raise AcademicsError('ACADEMICS_INVALID_ARGUMENTS', 'course_requires_course_scope')
     if type(limit) is not int or not 1 <= limit <= 200:
         raise AcademicsError('ACADEMICS_INVALID_ARGUMENTS', 'limit')
     return {'semester': semester, 'course': course, 'scope': scope, 'limit': limit}
@@ -195,8 +216,13 @@ def blocked_result(capability, *, checked_at=None):
     return result
 
 
-def collect_pages(pages, *, missing_pages=(), errors=()):
-    """Collect source pages without turning a failed page into a complete read."""
+def collect_pages(pages, *, missing_pages=(), errors=(), expected_pages=None):
+    """Collect source pages without turning a gap into a complete read.
+
+    Page numbers are contiguous by contract.  A missing middle page (for
+    example pages 1 and 3 without page 2) is recorded as a gap instead of being
+    treated as a complete list.
+    """
     rows, read, missing, problems = [], [], set(), set()
     declared = 0
     for page in pages or ():
@@ -226,7 +252,16 @@ def collect_pages(pages, *, missing_pages=(), errors=()):
             problems.add(code)
         elif code not in (None, ''):
             problems.add('SOURCE_ERROR')
-    expected = max([declared, *sorted(missing), *read]) if declared or missing else None
+    if expected_pages is not None:
+        if type(expected_pages) is not int or expected_pages < 1:
+            problems.add('ACADEMICS_INVALID_ARGUMENTS')
+        else:
+            missing |= set(range(1, expected_pages + 1)) - set(read)
+    expected = max([declared, *sorted(missing), *read,
+                    expected_pages if type(expected_pages) is int else 0]) \
+        if declared or missing or expected_pages else None
+    if expected:
+        missing |= set(range(1, expected + 1)) - set(read)
     source_complete = bool(declared) and not missing and not problems
     return {
         'rows': rows,
@@ -240,9 +275,15 @@ def collect_pages(pages, *, missing_pages=(), errors=()):
 
 
 def _call_transport(transport, capability, parameters):
-    if hasattr(transport, 'read'):
-        return transport.read(capability, parameters)
-    return transport(capability, parameters)
+    """Call a synthetic transport; never let its exception text escape."""
+    try:
+        if hasattr(transport, 'read'):
+            return transport.read(capability, parameters)
+        return transport(capability, parameters)
+    except AcademicsError:
+        raise
+    except Exception:  # noqa: BLE001 - normalized to a stable module error
+        raise AcademicsError('ACADEMICS_ERROR', 'transport') from None
 
 
 def _declared_synthetic(transport):
@@ -305,15 +346,19 @@ class AcademicsReader:
 
         semester_selection = None
         semester_id = parameters['semester']
+        semester_rejected = 0
         if capability in ('timetable', 'exams', 'grades'):
             semester_rows = []
             for row in raw.get('semesters') or ():
                 if not isinstance(row, dict):
+                    semester_rejected += 1
                     continue
                 try:
                     semester_rows.append(models.normalize_semester(row, synthetic=True))
                 except domain_models.RecordError:
-                    continue
+                    semester_rejected += 1
+            if semester_rejected:
+                warnings.add('SEMESTER_ROWS_REJECTED')
             semester_selection = models.select_semester(semester_rows, semester_id)
             if semester_selection['state'] != 'SELECTED':
                 raise AcademicsError('ACADEMICS_INVALID_SEMESTER', semester_selection['state'])
@@ -333,6 +378,12 @@ class AcademicsReader:
             raw.get('courses') or (), source_id=raw.get('course_source_id') or 'learn.courses',
             observed_at=checked, source_evidence_id=raw.get('course_source_id') or 'learn.courses',
             account_scope=self.account_scope, synthetic=True)
+        if index.rejected:
+            warnings.add('COURSE_INDEX_INCOMPLETE')
+        course_filter = parameters.get('course')
+        if course_filter:
+            collected['rows'] = [row for row in collected['rows']
+                                 if _course_matches(row, course_filter)]
 
         records, rejected, record_warnings = [], [], set()
         if capability == 'timetable':
@@ -366,14 +417,22 @@ class AcademicsReader:
             rejected = outcome['rejected']
             record_warnings |= set(outcome['warnings']) | set(merged['warnings'])
         warnings |= record_warnings
+        support_ok = semester_rejected == 0 and not index.rejected
+        matched_total = len(records)
+        truncated = matched_total > parameters['limit']
+        items = records[:parameters['limit']]
+        if truncated:
+            warnings.add('RESULT_LIMIT_REACHED')
 
-        source_complete = collected['source_complete'] and coverage_declared and coverage_complete
-        failure = bool(collected['missing_pages'] or collected['source_errors'] or rejected)
+        source_complete = (collected['source_complete'] and coverage_declared
+                           and coverage_complete and support_ok)
+        failure = bool(collected['missing_pages'] or collected['source_errors']
+                       or rejected or not support_ok)
         if failure:
             status = 'PARTIAL'
         elif not coverage_declared or not coverage_complete:
-            status = 'PARTIAL' if capability == 'exams' else ('OK' if records else 'UNKNOWN')
-        elif records:
+            status = 'PARTIAL' if capability == 'exams' else ('OK' if items else 'UNKNOWN')
+        elif items:
             status = 'OK'
         else:
             # An empty list is EMPTY only when the source was actually read and
@@ -389,21 +448,25 @@ class AcademicsReader:
             flags = source_state.completeness(status, source_complete, True,
                                               collected['missing_pages'],
                                               collected['source_errors'], warnings)
+        if truncated:
+            flags['complete'] = False
+            flags['partial_reasons'] = sorted(set(flags['partial_reasons']) | {'RESULT_LIMIT_REACHED'})
         scope = source_state.read_scope(
-            'FULL_LIST' if parameters['scope'] in ('SEMESTER', 'ALL') else 'WINDOW',
-            offset=0, limit=max(1, len(records)), pages_read=collected['pages_read'],
+            'WINDOW' if truncated or parameters['scope'] == 'COURSE' else 'FULL_LIST',
+            offset=0, limit=parameters['limit'] if truncated else max(1, len(items)),
+            pages_read=collected['pages_read'],
             expected_pages=collected['expected_pages'], query_time=checked, window=None)
         evidence = source_state.source_evidence(
             source_id=spec['source_id'], service=spec['source_id'],
             operation=spec['operation'], adapter_version=raw.get('adapter_version') or VERSION,
-            checked_at=checked, state=status, scope=scope, row_count=len(records),
+            checked_at=checked, state=status, scope=scope, row_count=len(items),
             upstream_total=raw.get('upstream_total'),
-            deduplicated_entries=max(0, len(collected['rows']) - len(records)),
+            deduplicated_entries=max(0, len(collected['rows']) - matched_total),
             source_complete=source_complete, complete=flags['complete'],
             missing_pages=collected['missing_pages'], warnings=sorted(flags['warnings']),
             verification_level='NONE', synthetic=True, url=raw.get('url'),
             http_status=raw.get('http_status'), auth_state='UNKNOWN',
-            rows=None if capability == 'grades' else records)
+            rows=None if capability == 'grades' else items)
         result = {
             'status': status,
             'source': {'service_id': spec['source_id'], 'operation': spec['operation'],
@@ -428,8 +491,10 @@ class AcademicsReader:
             'synthetic': True,
             'rehearsal': {'synthetic': True, 'purpose': 'SYNTHETIC_FIXTURE',
                           'production_blocked': True},
-            'items': records,
-            'total_items': len(records),
+            'items': items,
+            'total_items': len(items),
+            'matched_items': matched_total,
+            'truncated': truncated,
             'rejected': rejected,
             'semester_selection': (None if semester_selection is None else
                                    {'state': semester_selection['state'],
@@ -443,7 +508,7 @@ class AcademicsReader:
             result['error'] = source_state.public_error(status)
         if capability == 'grades':
             result['audit'] = sensitivity.audit_record(
-                semester_id=semester_id, records=records, checked_at=checked,
+                semester_id=semester_id, records=items, checked_at=checked,
                 source_id=spec['source_id'], explicit_request=True)
         return result
 

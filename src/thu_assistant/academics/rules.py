@@ -90,6 +90,22 @@ def _int(value):
     return number if 1 <= number <= 60 else None
 
 
+def first_value(row, *keys):
+    """Return the first present, non-empty value; a null primary never hides an alias."""
+    if not isinstance(row, dict):
+        return None
+    for key in keys:
+        if key not in row:
+            continue
+        value = row[key]
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return None
+
+
 class PeriodTable:
     """Explicit section start/end times for one semester."""
 
@@ -196,8 +212,8 @@ def _week_list(row):
         if not numbers or any(value is None for value in numbers):
             return []
         return sorted(set(numbers))
-    start = _int(row.get('start_week', row.get('week_start')))
-    end = _int(row.get('end_week', row.get('week_end')))
+    start = _int(first_value(row, 'start_week', 'week_start'))
+    end = _int(first_value(row, 'end_week', 'week_end'))
     if start is None or end is None or end < start:
         return []
     return list(range(start, end + 1))
@@ -216,14 +232,14 @@ def normalize_week_pattern(row):
     weeks = _week_list(row)
     if not weeks:
         warnings.append('WEEK_RANGE_MISSING')
-    parity_value = row.get('parity', row.get('week_type'))
+    parity_value = first_value(row, 'parity', 'week_type')
     if parity_value in (None, ''):
         parity = 'ALL'
     else:
         parity = PARITY.get(str(parity_value).strip().casefold(), 'UNKNOWN')
         if parity == 'UNKNOWN':
             warnings.append('WEEK_PARITY_UNKNOWN')
-    weekday = _parse_weekday(row.get('weekday', row.get('day_of_week')))
+    weekday = _parse_weekday(first_value(row, 'weekday', 'day_of_week'))
     if weekday is None:
         warnings.append('WEEKDAY_MISSING')
     periods = []
@@ -293,13 +309,27 @@ def expand(pattern, calendar=None, period_table=None, *,
     if period_table is not None and isinstance(period_table, dict):
         period_table = PeriodTable.from_mapping(period_table)
     expected_semester = semester_id or pattern.get('semester_id')
-    for source, label in ((calendar, 'calendar'), (period_table, 'period_table')):
-        if source is None:
-            continue
-        if expected_semester and source.semester_id != expected_semester:
-            result['state'] = 'CALENDAR_MISMATCH'
-            result['warnings'] = sorted(set(warnings) | {'SEMESTER_MISMATCH:' + label.upper()})
-            return result
+    sources = [(source, label) for source, label in
+               ((calendar, 'calendar'), (period_table, 'period_table')) if source is not None]
+    semester_check = {'expected': expected_semester, 'state': 'UNVERIFIED'}
+    if expected_semester:
+        for source, label in sources:
+            if source.semester_id != expected_semester:
+                result['state'] = 'CALENDAR_MISMATCH'
+                result['semester_check'] = {'expected': expected_semester, 'state': 'MISMATCH',
+                                            'source': label}
+                result['warnings'] = sorted(set(warnings) | {'SEMESTER_MISMATCH:' + label.upper()})
+                return result
+        semester_check['state'] = 'VERIFIED'
+    elif len(sources) == 2 and calendar.semester_id != period_table.semester_id:
+        result['state'] = 'CALENDAR_MISMATCH'
+        result['semester_check'] = {'expected': None, 'state': 'MISMATCH',
+                                    'source': 'calendar_vs_period_table'}
+        result['warnings'] = sorted(set(warnings) | {'CALENDAR_PERIOD_TABLE_SEMESTER_MISMATCH'})
+        return result
+    elif len(sources) == 1:
+        warnings = sorted(set(warnings) | {'SEMESTER_UNVERIFIED'})
+    result['semester_check'] = semester_check
     if calendar is None:
         result['warnings'] = sorted(set(warnings) | {'CALENDAR_UNAVAILABLE'})
         return result
@@ -314,11 +344,18 @@ def expand(pattern, calendar=None, period_table=None, *,
                 or (pattern['parity'] == 'ODD' and week % 2 == 1)
                 or (pattern['parity'] == 'EVEN' and week % 2 == 0)]
     weekday = pattern['weekday']
-    candidates = {calendar.date_for(week, weekday) for week in selected}
+    natural = {calendar.date_for(week, weekday) for week in selected}
+    candidates = set(natural)
     for makeup in calendar.makeup_days:
-        if makeup['weekday'] == weekday:
+        if makeup['weekday'] != weekday:
+            continue
+        week = calendar.week_of(makeup['date'])
+        # A makeup day belongs to this pattern only when its week was selected
+        # or when it explicitly replaces one of this pattern's own dates.
+        if week in selected or set(makeup['replaces']) & natural:
             candidates.add(makeup['date'])
     occurrences, skipped = [], []
+    declared_range = pattern.get('date_range')
     for day in sorted(candidates):
         week = calendar.week_of(day)
         if day in calendar._suspended:
@@ -329,6 +366,9 @@ def expand(pattern, calendar=None, period_table=None, *,
             continue
         if week < 1 or week > calendar.teaching_weeks:
             skipped.append({'date': day.isoformat(), 'week': week, 'reason': 'OUTSIDE_TEACHING_WEEKS'})
+            continue
+        if declared_range and not (declared_range['start'] <= day.isoformat() <= declared_range['end']):
+            skipped.append({'date': day.isoformat(), 'week': week, 'reason': 'OUTSIDE_DECLARED_RANGE'})
             continue
         if week not in selected:
             skipped.append({'date': day.isoformat(), 'week': week, 'reason': 'WEEK_NOT_SELECTED'})
@@ -353,11 +393,16 @@ def expand(pattern, calendar=None, period_table=None, *,
     result['occurrences'] = occurrences
     result['skipped'] = skipped
     reasons = {row['reason'] for row in skipped}
-    if not occurrences and not skipped:
-        result['state'] = 'NO_OCCURRENCES'
-    elif skipped:
+    # Holidays, makeup replacements and a source-declared date range are normal
+    # business facts, not incomplete reads.  Only an unexpected gap (a week the
+    # calendar cannot explain) degrades the expansion state.
+    normal_skips = {'HOLIDAY', 'REPLACED_BY_MAKEUP_DAY', 'OUTSIDE_DECLARED_RANGE'}
+    anomalous = reasons - normal_skips
+    if not occurrences:
+        result['state'] = 'PARTIAL' if anomalous else 'NO_OCCURRENCES'
+    elif anomalous:
         result['state'] = 'PARTIAL'
-    elif occurrences and all(row['time'] is not None for row in occurrences):
+    elif all(row['time'] is not None for row in occurrences):
         result['state'] = 'EXPANDED'
     else:
         result['state'] = 'EXPANDED_DATE_ONLY'

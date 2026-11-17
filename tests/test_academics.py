@@ -12,7 +12,7 @@ from pathlib import Path
 import jsonschema
 import pytest
 
-from thu_assistant import academics, domain_models, queries
+from thu_assistant import academics, domain_models, queries, source_state
 from thu_assistant.academics import (
     CAPABILITIES, AcademicsReader, CourseIndex, PeriodTable, SchoolCalendar,
     calendar_events, expand, merge_records, normalize_exam, normalize_grade,
@@ -324,7 +324,9 @@ def test_holiday_is_skipped_and_makeup_day_replaces_the_suspended_date():
     assert '2026-10-08' not in dates          # replaced by the makeup day
     assert '2026-10-10' in dates              # Saturday makeup for Thursday
     assert len(dates) == 15
-    assert result['state'] == 'PARTIAL'
+    # Holidays and makeup replacements are normal calendar facts, not an
+    # incomplete expansion; only unexplained gaps degrade the state.
+    assert result['state'] == 'EXPANDED'
     reasons = {item['reason'] for item in result['skipped']}
     assert {'HOLIDAY', 'REPLACED_BY_MAKEUP_DAY'} <= reasons
     assert 'SKIPPED_HOLIDAY' in result['warnings']
@@ -456,13 +458,15 @@ def test_exam_end_before_start_is_rejected():
     assert codes == ['END_BEFORE_START', 'EXAM_TIME_WITHOUT_DATE']
 
 
-def test_exam_without_an_id_keeps_no_fabricated_uid():
+def test_exam_without_an_id_gets_a_scoped_temporary_identity():
     item = exam('')
     assert item['exam_uid'] is None
-    assert item['identity_state'] == 'MISSING_STABLE_ID'
-    assert 'MISSING_STABLE_ID' in item['warnings']
-    with pytest.raises(AcademicsError):
-        academics_events.exam_event(item)
+    assert item['temporary_uid'].startswith('academics.exams:TEMPORARY_EXAM:2026-2027-1:')
+    assert item['identity_state'] == 'TEMPORARY_SCOPED'
+    assert 'TEMPORARY_SCOPED_IDENTITY' in item['warnings']
+    event = academics_events.exam_event(item)
+    validate_contract('calendar-event.schema.json', event)
+    assert 'TEMPORARY_SCOPED_IDENTITY' in event['warnings']
 
 
 def test_exam_coverage_undeclared_cannot_claim_all_sessions():
@@ -765,7 +769,8 @@ def test_timetable_events_follow_expanded_occurrences():
     validate_contract('calendar-event.schema.json', first)
     assert first['source']['kind'] == 'COURSE'
     assert first['status'] == 'TENTATIVE'
-    assert first['event_uid'] == 'CAMPUS:UNKNOWN:COURSE:academics_timetable_TT-1:2026-09-14'
+    assert first['event_uid'] == ('CAMPUS:UNKNOWN:COURSE:'
+                                  'academics.timetable:TIMETABLE:2026-2027-1:TT-1:2026-09-14')
     assert len({event['event_uid'] for event in converted['events']}) == 16
 
 
@@ -828,6 +833,8 @@ def test_same_title_teaching_classes_have_distinct_entries():
 def test_unindexed_course_id_keeps_source_and_semester_scope():
     item = entry('')
     assert item['entry_uid'] is None
+    assert item['temporary_uid'].startswith('academics.timetable:TEMPORARY_TIMETABLE:2026-2027-1:')
+    assert item['identity_state'] == 'TEMPORARY_SCOPED'
     assert item['course_association'] == 'UNINDEXED_SOURCE_ID'
     assert item['course_uid'] == 'learn.courses:COURSE:2026-2027-1:SYNTH-UNKNOWN'
     assert 'COURSE_NOT_IN_SOURCE_INDEX' in item['warnings']
@@ -910,3 +917,253 @@ def test_date_only_events_use_date_kind():
     assert all(event['time']['kind'] == 'DATE' for event in converted['events'])
     assert [event['time']['date'] for event in converted['events']] == \
         [occurrence['date'] for occurrence in date_only['occurrences']]
+
+
+# ------------------------------------------------- audit remediation (P1/P2)
+
+def test_page_number_gap_is_a_partial_source():
+    transport = synthetic_transport([
+        {'number': 1, 'rows': [row(exam_rows(), 'exam_id', 'EX-1')]},
+        {'number': 3, 'rows': [row(exam_rows(), 'exam_id', 'EX-2')]},
+    ])
+    result = AcademicsReader().read_synthetic('exams', transport, semester=SEMESTER)
+    assert result['status'] == 'PARTIAL'
+    assert result['source_complete'] is False
+    assert result['complete'] is False
+    assert result['missing_pages'] == [2]
+    assert len(result['items']) == 2
+    validate_contract('result-envelope.schema.json', result)
+
+
+def test_partial_expansion_still_yields_all_valid_timetable_events():
+    item = entry('TT-2')
+    expanded = expansion('TT-2')
+    assert expanded['state'] == 'EXPANDED'
+    converted = calendar_events('timetable', [item], expansions=[expanded])
+    assert len(converted['events']) == 15
+    assert converted['excluded'] == []
+    assert {row['reason'] for row in converted['skipped']} == {'HOLIDAY', 'REPLACED_BY_MAKEUP_DAY'}
+    forced = dict(expanded, state='PARTIAL')
+    converted = calendar_events('timetable', [item], expansions=[forced])
+    assert len(converted['events']) == 15
+    assert 'PARTIAL_EXPANSION' in converted['warnings']
+
+
+def test_course_scope_filters_and_limit_reports_truncation():
+    transport = synthetic_transport([{'number': 1, 'rows': timetable_rows()}])
+    reader = AcademicsReader()
+    result = reader.read_synthetic('timetable', transport, semester=SEMESTER,
+                                   course={'course_id': 'SYNTH-COURSE-B'},
+                                   scope='COURSE', limit=1)
+    assert len(result['items']) == 1
+    assert result['matched_items'] == 2
+    assert result['truncated'] is True
+    assert result['complete'] is False
+    assert 'RESULT_LIMIT_REACHED' in result['warnings']
+    assert 'RESULT_LIMIT_REACHED' in result['partial_reasons']
+    assert result['read_scope']['kind'] == 'WINDOW'
+    assert result['read_scope']['limit'] == 1
+    assert {item['title'] for item in result['items']} == {'合成操作系统'}
+    validate_contract('source-evidence.schema.json', result['source_evidence'])
+    full = reader.read_synthetic('timetable', transport, semester=SEMESTER,
+                                 course={'course_id': 'SYNTH-COURSE-B'},
+                                 scope='COURSE', limit=10)
+    assert len(full['items']) == 2 and full['truncated'] is False
+    assert full['complete'] is True and full['read_scope']['limit'] == 2
+
+
+def test_course_scope_and_course_parameter_must_agree():
+    reader = AcademicsReader()
+    transport = synthetic_transport([{'number': 1, 'rows': timetable_rows()}])
+    with pytest.raises(AcademicsError):
+        reader.read_synthetic('timetable', transport, semester=SEMESTER, scope='COURSE')
+    with pytest.raises(AcademicsError):
+        reader.read_synthetic('timetable', transport, semester=SEMESTER,
+                              course={'course_id': 'SYNTH-COURSE-A'}, scope='SEMESTER')
+    with pytest.raises(AcademicsError):
+        reader.read_synthetic('timetable', transport, semester=SEMESTER, scope='ALL')
+
+
+def test_end_time_without_start_is_rejected_before_the_date_branch():
+    with pytest.raises(domain_models.RecordError) as caught:
+        normalize_exam({'exam_id': 'EX-ODD', 'semester': SEMESTER, 'title': '仅结束时间',
+                        'end_time': '10:00'},
+                       semester_id=SEMESTER, observed_at=CHECKED,
+                       source_evidence_id='academics.exams', source_id='academics.exams')
+    assert caught.value.code == 'END_WITHOUT_START'
+
+
+def test_invalid_exam_date_keeps_its_warning():
+    record = normalize_exam(dict(row(exam_rows(), 'exam_id', 'EX-1'), date='2027-13-45'),
+                            semester_id=SEMESTER, observed_at=CHECKED,
+                            source_evidence_id='academics.exams', source_id='academics.exams')
+    assert record['date'] is None and record['time_precision'] == 'unknown'
+    assert 'EXAM_DATE_INVALID' in record['warnings']
+
+
+def test_makeup_day_outside_the_selected_week_is_not_a_skipped_occurrence():
+    pattern = normalize_week_pattern({'weekday': 4, 'periods': [3, 4],
+                                      'start_week': 1, 'end_week': 16, 'parity': 'odd'})
+    result = expand(pattern, calendar(), period_table(), semester_id=SEMESTER)
+    assert result['state'] == 'EXPANDED'
+    assert len(result['occurrences']) == 7
+    assert {row['reason'] for row in result['skipped']} == {'HOLIDAY'}
+    assert not any(row['reason'] == 'WEEK_NOT_SELECTED' for row in result['skipped'])
+
+
+def test_declared_date_range_bounds_the_expansion():
+    item = normalize_timetable_entry(
+        {'entry_id': 'TT-R', 'semester': SEMESTER, 'title': '范围课', 'weekday': 1,
+         'periods': [1], 'start_week': 1, 'end_week': 4,
+         'date_range': {'start': '2026-09-14', 'end': '2026-09-28'}},
+        semester_id=SEMESTER, observed_at=CHECKED,
+        source_evidence_id='academics.timetable', source_id='academics.timetable')
+    result = expand(item['week_pattern'], calendar(), period_table(), semester_id=SEMESTER)
+    assert [row['date'] for row in result['occurrences']] == ['2026-09-14', '2026-09-21', '2026-09-28']
+    assert result['state'] == 'EXPANDED'
+    assert any(row['reason'] == 'OUTSIDE_DECLARED_RANGE' for row in result['skipped'])
+
+
+def test_calendar_and_period_table_semesters_must_agree_without_a_request():
+    other = PeriodTable('2026-2027-2', [{'period': 1, 'start': '08:00', 'end': '08:45'}])
+    result = expand(normalize_week_pattern({'weekday': 1, 'weeks': [1], 'periods': [1]}),
+                    calendar(), other)
+    assert result['state'] == 'CALENDAR_MISMATCH'
+    assert 'CALENDAR_PERIOD_TABLE_SEMESTER_MISMATCH' in result['warnings']
+
+
+def test_null_primary_fields_do_not_hide_populated_aliases():
+    record = normalize_exam(
+        {'exam_id': 'EX-N', 'semester': SEMESTER, 'title': '空状态', 'date': '2027-01-05',
+         'state': None, 'status': 'cancelled'},
+        semester_id=SEMESTER, observed_at=CHECKED,
+        source_evidence_id='academics.exams', source_id='academics.exams')
+    assert record['state'] == 'CANCELLED'
+    pattern = normalize_week_pattern({'weekday': None, 'day_of_week': 1,
+                                      'weeks': [1, 2], 'periods': [1]})
+    assert pattern['weekday'] == 1 and pattern['complete'] is True
+    weeks = normalize_week_pattern({'weekday': 1, 'start_week': None,
+                                    'week_start': 1, 'end_week': 16, 'periods': [1]})
+    assert weeks['weeks'] == list(range(1, 17))
+    aliased = normalize_grade(
+        {'grade_id': 'G-ALIAS', 'semester': SEMESTER, 'course_id': 'SYNTH-COURSE-A',
+         'grade_value': None, 'score': 88, 'grade_scale': None, 'scale': '百分制',
+         'state': None, 'status': 'graded', 'credits': 3},
+        semester_id=SEMESTER, observed_at=CHECKED,
+        source_evidence_id='academics.grades', course_index=course_index(),
+        source_id='academics.grades')
+    assert (aliased['grade_value'], aliased['grade_scale'], aliased['state']) == (88, 'NUMERIC_100', 'GRADED')
+
+
+def test_distinct_source_record_ids_keep_distinct_event_uids():
+    first = normalize_exam(dict(row(exam_rows(), 'exam_id', 'EX-1'), exam_id='EX'),
+                           semester_id=SEMESTER, observed_at=CHECKED,
+                           source_evidence_id='academics.exams', source_id='academics.exams')
+    second = normalize_exam(dict(row(exam_rows(), 'exam_id', 'EX-1'), exam_id='EX_'),
+                            semester_id=SEMESTER, observed_at=CHECKED,
+                            source_evidence_id='academics.exams', source_id='academics.exams')
+    first_event = academics_events.exam_event(first)
+    second_event = academics_events.exam_event(second)
+    assert first_event['event_uid'] != second_event['event_uid']
+    validate_contract('calendar-event.schema.json', first_event)
+    validate_contract('calendar-event.schema.json', second_event)
+
+
+def test_exam_event_rejects_a_malformed_time():
+    raw = {'kind': 'EXAM', 'title': '坏时间', 'date': '2027-01-05',
+           'time_precision': 'minute', 'start_time': '99:99', 'end_time': None,
+           'state': 'SCHEDULED', 'release_state': 'PUBLISHED',
+           'exam_uid': 'academics.exams:EXAM:2026-2027-1:EX-1',
+           'source_id': 'academics.exams', 'source_record_id': 'EX-1',
+           'observed_at': CHECKED, 'source_evidence_id': 'academics.exams'}
+    with pytest.raises(AcademicsError) as caught:
+        academics_events.exam_event(raw)
+    assert caught.value.code == 'ACADEMICS_EVENT_UNSUPPORTED'
+
+
+def test_semester_without_a_title_is_still_selectable_by_id():
+    row_value = normalize_semester({'semester_id': '2026-2027-X'})
+    assert row_value['semester_id'] == '2026-2027-X'
+    assert row_value['title'] == ''
+    assert 'SEMESTER_TITLE_MISSING' in row_value['warnings']
+    selected = select_semester([row_value], '2026-2027-X')
+    assert selected['state'] == 'SELECTED' and selected['basis'] == 'SOURCE_ID'
+
+
+def test_course_index_rejection_reduces_completeness():
+    transport = synthetic_transport(
+        [{'number': 1, 'rows': [row(timetable_rows(), 'entry_id', 'TT-1')]}],
+        courses=[{'course_id': 'SYNTH-COURSE-A'}])
+    result = AcademicsReader().read_synthetic('timetable', transport, semester=SEMESTER)
+    assert result['status'] == 'PARTIAL'
+    assert result['complete'] is False
+    assert 'COURSE_INDEX_INCOMPLETE' in result['warnings']
+
+
+def test_semester_row_rejection_is_visible():
+    transport = synthetic_transport(
+        [{'number': 1, 'rows': [row(timetable_rows(), 'entry_id', 'TT-1')]}],
+        semesters=semester_rows() + ['not-a-row'])
+    result = AcademicsReader().read_synthetic('timetable', transport, semester=SEMESTER)
+    assert result['status'] == 'PARTIAL'
+    assert result['complete'] is False
+    assert 'SEMESTER_ROWS_REJECTED' in result['warnings']
+
+
+def test_module_error_classification_map_is_complete_and_typed():
+    frozen = contract('error-classification.json')['categories']
+    mapping = academics.classification_map()
+    assert set(mapping) == set(CODES)
+    for code, category in mapping.items():
+        assert category in frozen
+        classified = academics.classify(code)
+        assert classified['code'] == code and classified['category'] == category
+    # The frozen contract still lacks these module-local codes; the module map
+    # is the documented bridge until 2.3/6.1 registers them.
+    for code in mapping:
+        assert source_state.public_error(code)['code'] in ('UNKNOWN', code)
+
+
+def test_transport_exception_is_normalized_without_its_text():
+    class Boom:
+        synthetic = True
+
+        def __call__(self, capability, parameters):
+            raise RuntimeError('token=SYNTHETIC https://example.invalid/page')
+
+    with pytest.raises(AcademicsError) as caught:
+        AcademicsReader().read_synthetic('exams', Boom(), semester=SEMESTER)
+    assert caught.value.code == 'ACADEMICS_ERROR'
+    assert 'token' not in str(caught.value)
+    assert 'example.invalid' not in str(caught.value)
+    assert academics.classify(caught.value)['category'] == 'INTERNAL'
+
+
+def test_temporary_identity_is_deterministic_and_pattern_scoped():
+    first = entry('')
+    second = entry('')
+    assert first['temporary_uid'] == second['temporary_uid']
+    changed = normalize_timetable_entry(
+        dict(row(timetable_rows(), 'entry_id', ''), periods=[5, 6]),
+        semester_id=SEMESTER, observed_at=CHECKED,
+        source_evidence_id='academics.timetable', course_index=course_index())
+    assert changed['temporary_uid'] != first['temporary_uid']
+    assert '合成无编号课程' not in first['temporary_uid']
+
+
+def test_grade_without_an_id_stays_missing_because_grade_v1_has_no_temporary_slot():
+    item = grade('')
+    assert item['grade_uid'] is None
+    assert item['identity_state'] == 'MISSING_STABLE_ID'
+    assert 'temporary_uid' not in item
+    validate_contract('sources/data-models/grade.schema.json', item)
+
+
+def test_duplicate_event_uids_are_reported_as_conflicts():
+    item = entry('TT-1')
+    expanded = expansion('TT-1')
+    converted = calendar_events('timetable', [item, dict(item)], expansions=[expanded, expanded])
+    assert len(converted['events']) == 16
+    assert converted['excluded']
+    assert all(row['reason'] == 'EVENT_UID_CONFLICT' for row in converted['excluded'])
+    assert 'EVENT_UID_CONFLICT' in converted['warnings']
