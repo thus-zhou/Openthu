@@ -8,7 +8,7 @@
   "baseline_commit": "323a98b",
   "delivery_commit": "8a36186",
   "branch": "hermes/4.4",
-  "worktree": "/home/ubuntu/projects/Openthu/.local/worktrees/4.4",
+  "worktree": ".local/worktrees/4.4",
   "version_pr": 2,
   "paths": [
     "src/thu_assistant/actions.py",
@@ -286,5 +286,6 @@
   ],
   "blockers": [],
   "rollback": "Stop issuing grants and executing new plans; keep actions-v1, consent-v1 and every pending journal, and revert only code and local pointers. The retained runtime must still read the new record format; deleting local journals is never a remote cancellation.",
-  "next_step": "The batch integrator reconnects 4.1-4.5 on one batch commit, runs the batch-level check, full offline suite and contract linkage, and only then marks batch 4 accepted. This module does not create a PR, merge main, tag or publish."
+  "next_step": "The batch integrator reconnects 4.1-4.5 on one batch commit, runs the batch-level check, full offline suite and contract linkage, and only then marks batch 4 accepted. This module does not create a PR, merge main, tag or publish.",
+  "worktree_note": "Linked worktree relative to the repository root; the absolute home path is intentionally not committed (privacy rule)."
 }
