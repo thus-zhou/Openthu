@@ -806,7 +806,6 @@
       "exclusive_paths": [
         "src/thu_assistant/mcp_stdio.py",
         "src/thu_assistant/queries.py",
-        "src/thu_assistant/gateway.js",
         "src/thu_assistant/__main__.py",
         "src/thu_assistant/facade/",
         "src/thu_assistant/local_ops.py",
