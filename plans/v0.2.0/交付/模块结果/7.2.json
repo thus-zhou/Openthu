@@ -444,7 +444,7 @@
     "report and gate return nonzero for a failing suite; only the explicit diagnostic mode returns zero"
   ],
   "limits": [
-    "7.1 is a same-batch module that is not integrated in this worktree. The matrix marks tests/test_web_assets.py as pending_same_batch; 7.2 proves the 6.2 local API protocol and process boundary, not the 7.1 dashboard UI. The matrix state must change to covered after 7.1 reconnection.",
+    "7.1 is integrated: the coverage matrix marks tests/test_web_assets.py as `covered` and the batch integration test proves no same-batch module remains pending. 7.2 proves the 6.2 local API protocol and process boundary as well as the dashboard's same-origin GET surface.",
     "7.3 is documentation-only and 8.1/9.1 are future serial gates; the matrix marks them explicitly and invents no tests for them.",
     "This host is Linux. Windows DPAPI, Windows ACL and Windows session migration cases are skipped with explicit platform reasons. A real Windows result must come from the windows-2025 CI job at the same commit; a skipped case is not a pass and the release gate correctly fails with platform_report_missing on this host.",
     "The real local release-gate run has only the Linux report and is therefore FAIL; the other eight checks (source privacy, archive privacy, marker archives, report markers, dependencies, defaults, candidate) pass. This is fail-closed evidence, not a release pass.",
@@ -460,8 +460,8 @@
   "rollback": "Revert to c98154d: delete scripts/regression_report.py, tests/release_regression/ and tests/security_regression/, and restore .github/workflows/ci.yml, scripts/privacy_scan.py and docs/MAINTENANCE.md. There is no store or data-format migration. Local dist/, artifacts/ and .local/ are untracked build/runtime output and can be deleted. Per the module plan, a CI-rule rollback must keep the discovered security regression cases instead of restoring a rule that ignores them.",
   "next": "Batch 7 reconnects 7.1, 7.2 and 7.3. 7.2 implementation, audit fixes and module tests are accepted. 8.1 must run the real two-platform CI at the integration commit, aggregate the actual Linux and Windows reports with --expected-commit and --require-python-matrix, build the candidate and run release-gate with marker_set.json and --require-dist; it must not cite this Linux evidence or the rejected Windows shape report as a Windows run.",
   "cross_module_requests": [
-    "7.1: after reconnection add tests/test_web_assets.py and change the matrix 7.1 state from pending_same_batch to covered; keep display.state, single-use bootstrap and LOCAL_API_BUSY semantics.",
-    "8.1: run both-platform CI at the integration commit, aggregate the real reports with --expected-commit and --require-python-matrix, build the candidate and run release-gate with marker_set.json and --require-dist; update 验收映射.json evidence for 7.2 and resolve the 7.1 pending state.",
+    "7.1: resolved in the batch integration. tests/test_web_assets.py is present, the matrix 7.1 state is `covered`, and display.state / single-use bootstrap / LOCAL_API_BUSY semantics are unchanged.",
+    "8.1: run both-platform CI at the integration commit, aggregate the real reports with --expected-commit and --require-python-matrix, build the candidate and run release-gate with marker_set.json and --require-dist; update 验收映射.json evidence for 7.2.",
     "7.3: reference the report, aggregate and release-gate commands, required markers and skip semantics from docs/MAINTENANCE.md in the user-facing manual; this module does not edit the manual body.",
     "2.1/6.3: no change required. 7.2 reuses scripts/privacy_scan.py and scripts/package_release.py; exact marker scanning is additive inside regression_report.py.",
     "6.2: no change required. 7.2 reuses its local API timeout, process-instance session and read-only route contract."

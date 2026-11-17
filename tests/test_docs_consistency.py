@@ -395,13 +395,22 @@ def test_legacy_dpapi_and_image_error_codes_are_distinguished():
     assert "只有宿主注入媒体管道" in guide
 
 
-def test_dashboard_shell_wording_matches_the_unwired_cli():
+def test_dashboard_shell_wording_matches_the_wired_cli():
     guide = (ROOT / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
     capabilities = (ROOT / "docs" / "CAPABILITIES.md").read_text(encoding="utf-8")
+    entry = (ROOT / "src" / "thu_assistant" / "__main__.py").read_text(encoding="utf-8")
+    shell = ROOT / "src" / "thu_assistant" / "web_assets" / "index.html"
+
+    # The shell ships with the package and the CLI hands its directory to the
+    # local API; the docs must describe that wiring instead of a pending task.
+    assert shell.is_file()
+    assert entry.count("static_dir=web_assets.static_dir()") == 2
     for text in (guide, capabilities):
-        assert "LOCAL_API_UI_NOT_INSTALLED" in text
-        assert "8.1" in text
-        assert "随看板模块安装" not in text
+        assert "LOCAL_API_UI_NOT_INSTALLED" in text  # documented failure mode
+        assert "随包安装" in text
+        assert "待 8.1 接线" not in text
+        assert "还需要 8.1" not in text
+        assert "接线完成前" not in text
 
 
 def test_linux_key_creation_is_documented_with_the_real_format():

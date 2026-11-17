@@ -87,9 +87,12 @@ def test_every_referenced_feature_case_exists():
             assert _node_exists(index, case), (name, case)
 
 
-def test_only_the_same_batch_dashboard_module_is_pending():
+def test_only_documentation_and_future_gates_are_not_covered():
+    # Batch 7 is the last executable batch: after it is integrated no module may
+    # stay in the same-batch pending state, and only the document module and the
+    # serial 8/9 gates are outside the executable coverage matrix.
     pending = {row["id"] for row in MATRIX["modules"] if row["state"] == "pending_same_batch"}
-    assert pending == {"7.1"}
+    assert pending == set()
     documentation = {row["id"] for row in MATRIX["modules"] if row["state"] == "documentation_only"}
     future = {row["id"] for row in MATRIX["modules"] if row["state"] == "future_gate"}
     assert documentation == {"7.3"}

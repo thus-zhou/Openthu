@@ -6,7 +6,7 @@
   "status": "accepted",
   "baseline_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
   "integration_parent_commit": "c98154dc6910e565cf09de9c7aec94441637bdcf",
-  "delivery_commit": "9726535",
+  "delivery_commit": "97265350445c2ae0c04f7aafafa828c9ad5c1dc6",
   "implementation_commits": [
     "e5e0af6",
     "f7564a9",
@@ -22,7 +22,7 @@
   "worktree": "~/projects/Openthu/.local/worktrees/7.3",
   "worktree_note": "Recorded relative to the user home because contracts/v0.2/validate.py rejects absolute home-directory paths under plans/; the absolute path stays in the execution session and the pushed branch.",
   "version_pr": null,
-  "batch_state": "batch 6 accepted at c98154d; batch 7 open; 7.3 accepted after the audit remediation, batch reconnect still outstanding",
+  "batch_state": "batch 7 is reconnected on the version integration branch; the batch gate records the integration commit. 7.3 opens no PR, merges nothing and publishes nothing.",
   "audit_report": "~/projects/Openthu/.local/audits/7.3-audit.md",
   "audit_findings": {
     "P0": 0,
@@ -214,7 +214,7 @@
     "Linux was executed locally; Windows command compatibility and document readability are covered by the windows-2025 CI job, not reproduced on a local Windows host.",
     "No real campus login, write, payment, submission or model image transfer was performed; the docs record existing evidence and blockers only.",
     "local.resources remains RESOURCE_PROVIDER_UNAVAILABLE in the default CLI, MCP and dashboard; the manual shows the host API without claiming a public entry.",
-    "The dashboard HTML shell belongs to the parallel 7.1 module; the CLI still does not pass static_dir, so / returns LOCAL_API_UI_NOT_INSTALLED until 8.1 wires it.",
+    "The dashboard HTML shell ships with 7.1 in the same package and both CLI construction paths pass static_dir, so `/` serves the shell once installed; the documented LOCAL_API_UI_NOT_INSTALLED case is now only the missing or unreadable-asset failure mode.",
     "src/thu_assistant/actions.py still carries the pre-0.2 module docstring 'No campus write adapter is enabled in block 5'; that file belongs to 4.4 and was not modified.",
     "docs/contracts/source-matrix.md belongs to 2.3 and was not modified; its historical row assigning wording reconciliation to 4.4/7.3 remains for the source owner or 8.1 to update.",
     "The candidate build was run to a temporary dist directory to verify the changelog and package metadata; it is not the integrated candidate, and install-check remains with 8.1 on the final tree.",
@@ -223,10 +223,10 @@
   "rollback": "Restore the documentation and integration paths to c98154d: README, CHANGELOG, CONTRIBUTING, the eight updated docs, the two new docs (delete USER_GUIDE.md and TOOLS.md), the Codex plugin metadata and skills, and delete tests/test_docs_consistency.py and tests/test_facade_failure_envelopes.py. Restore the code fixes to the pre-9726535 state: facade/core.py _local_failure as a static method and export_agenda without semester, and __main__.py without the export semester argument. Document rollback does not touch user state, keys, sessions, downloads or pending transactions; code rollback reintroduces the /resources 502 defect, so it should only be used when the dashboard failure envelopes are not needed.",
   "next": "Batch 7 reconnects 7.1, 7.2 and 7.3, runs the full offline suite and both-platform CI, then 8.1 builds and verifies the candidate on the integrated tree. No PR, merge, tag or release is opened by this module.",
   "cross_module_requests": [
-    "7.1: after the dashboard shell lands, re-check the 'provided by 7.1, wired by 8.1' wording and the actual / behaviour; register any new static route in the 6.2 read-only route table.",
+    "7.1: resolved in the batch integration. USER_GUIDE and CAPABILITIES describe the wired shell; no new static route was added beyond `/` and `/assets/<name>`.",
     "7.2: re-run the documentation consistency, failure-envelope and link checks on Windows and adjust the CI budget for the added checks.",
     "4.4: correct the stale actions.py module docstring so it agrees with the registered create/cancel operations.",
     "2.3/8.1: update the source-matrix row that still assigns wording reconciliation to 4.4/7.3; if the registry changes, regenerate the capability matrix and let the docs test enforce it.",
-    "8.1: on the final integrated tree run dev.py test, the candidate build/verify/install-check, wire static_dir for the dashboard shell, and re-check CHANGELOG candidate notes, README version status and the capability matrix against the registry."
+    "8.1: on the final integrated tree run dev.py test, the candidate build/verify/install-check, and re-check CHANGELOG candidate notes, README version status and the capability matrix against the registry; the static_dir wiring is already in the integrated tree."
   ]
 }

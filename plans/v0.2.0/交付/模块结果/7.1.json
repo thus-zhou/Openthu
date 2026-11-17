@@ -23,7 +23,7 @@
   "worktree": "~/projects/Openthu/.local/worktrees/7.1",
   "worktree_note": "Recorded with ~ for the user home because contracts/v0.2/validate.py rejects absolute home-directory paths inside plans/; the absolute path stays in the execution session. The branch was created from the batch-6 ledger commit c98154d and never touched the integration branch or another worktree.",
   "version_pr": null,
-  "batch_state": "batch 7 is open; this module opens no PR, merges nothing and publishes nothing",
+  "batch_state": "batch 7 is reconnected on the version integration branch; the batch gate records the integration commit. This module opens no PR, merges nothing and publishes nothing.",
   "paths": [
     "src/thu_assistant/web_assets/",
     "tests/test_web_assets.py"
@@ -220,12 +220,12 @@
   "cross_module_requests": [
     {
       "to": "7.2",
-      "request": "Include `tests/test_web_assets.py` in the cross-platform regression and check `Sec-Fetch-Mode` for same-origin static subresources on Firefox/Safari equivalents; if `no-cors` is still sent, ask 6.2 to accept same-origin no-cors on static routes while keeping cross-site refused.",
+      "request": "Include `tests/test_web_assets.py` in the cross-platform regression and check `Sec-Fetch-Mode` for same-origin static subresources on Firefox/Safari equivalents; if `no-cors` is still sent, ask 6.2 to accept same-origin no-cors on static routes while keeping cross-site refused. Resolved in the batch integration: tests/test_web_assets.py is now `covered` in the 7.2 coverage matrix.",
       "why": "Chromium with crossorigin=anonymous is verified; other engines are a 7.2 cross-platform concern."
     },
     {
       "to": "7.3",
-      "request": "Document the dashboard entry, read-only scope, 10-second refresh reuse, required semester, selection/export-scope behavior and the fact that local reads do not prove campus availability.",
+      "request": "Document the dashboard entry, read-only scope, 10-second refresh reuse, required semester, selection/export-scope behavior and the fact that local reads do not prove campus availability. Resolved in the batch integration: USER_GUIDE and CAPABILITIES now describe the wired shell instead of a pending 8.1 task.",
       "why": "User-facing capability documentation is 7.3's scope."
     },
     {
@@ -235,7 +235,7 @@
     },
     {
       "to": "6.2/8.1",
-      "request": "Preserve the facade-specific exception code (ADAPTER_REQUIRED, FACADE_CAPABILITY_UNAVAILABLE, etc.) in the 502 error body instead of collapsing every facade exception to LOCAL_API_FACADE_UNAVAILABLE, so the dashboard can distinguish a capability gap from a transient failure without treating a generic 502 as NOT_ENABLED.",
+      "request": "Preserve the facade-specific exception code (ADAPTER_REQUIRED, FACADE_CAPABILITY_UNAVAILABLE, etc.) in the 502 error body instead of collapsing every facade exception to LOCAL_API_FACADE_UNAVAILABLE, so the dashboard can distinguish a capability gap from a transient failure without treating a generic 502 as NOT_ENABLED. Resolved in the batch integration: 7.3 fixed `_local_failure` so failure envelopes keep their specific code instead of returning 502.",
       "why": "7.1 now uses HTTP 501 for a missing facade operation and only treats that as NOT_ENABLED; a 502 is shown as a real error. A specific code would let the UI keep the capability-gap text for genuinely unimplemented operations."
     },
     {
@@ -245,5 +245,5 @@
     }
   ],
   "rollback": "Stop the dashboard entry and remove src/thu_assistant/web_assets/ plus tests/test_web_assets.py. There is no storage, data-structure or package-metadata migration; MCP/CLI and existing authentication data are untouched. After rollback 6.2's JSON API remains and `/` returns LOCAL_API_UI_NOT_INSTALLED.",
-  "next": "Batch 7 reconnects 7.1, 7.2 and 7.3. 6.1/8.1 wires static_dir and 6.3/8.1 declares the package data; only then does an installed `/` serve this shell. This module opens no PR, merges nothing and publishes nothing."
+  "next": "Batch 7 is reconnected: the dashboard shell is packaged and both CLI construction paths pass static_dir, so an installed `openthu dashboard` serves `/` from the package. 8.1 verifies the asset layout in the candidate build; no PR, merge, tag or release is opened here."
 }

@@ -473,11 +473,53 @@
       "id": "7.1",
       "title": "轻量本地看板与统一使用体验",
       "batch": 7,
-      "state": "pending_same_batch",
+      "state": "covered",
       "test_files": [
-        "tests/test_web_assets.py"
+        "tests/test_web_assets.py",
+        "tests/test_batch7_integration.py"
       ],
-      "features": []
+      "features": [
+        {
+          "feature": "the packaged shell is served with CSP and no browser storage",
+          "case": "tests/test_web_assets.py::test_static_shell_is_served_with_csp_cookie_and_no_store"
+        },
+        {
+          "feature": "empty, unauthenticated and failed cards stay visibly distinct",
+          "case": "tests/test_web_assets.py::test_empty_unauthenticated_and_failed_cards_are_visibly_distinct"
+        },
+        {
+          "feature": "synthetic titles and links cannot execute script",
+          "case": "tests/test_web_assets.py::test_script_and_html_titles_are_rendered_as_text"
+        },
+        {
+          "feature": "a filter change discards the stale page, cursor and selection",
+          "case": "tests/test_web_assets.py::test_changing_filters_clears_selection_and_cursor"
+        },
+        {
+          "feature": "one failing card does not hide the other cards",
+          "case": "tests/test_web_assets.py::test_one_failed_card_does_not_hide_the_other_cards"
+        },
+        {
+          "feature": "no CDN, analytics or school-origin request is made",
+          "case": "tests/test_web_assets.py::test_no_external_cdn_or_analytics_request_is_made"
+        },
+        {
+          "feature": "a full visit issues only same-origin GET reads",
+          "case": "tests/test_web_assets.py::test_only_local_get_requests_are_made_on_a_full_visit"
+        },
+        {
+          "feature": "session expiry clears the previous account details",
+          "case": "tests/test_web_assets.py::test_session_expiry_clears_previous_details"
+        },
+        {
+          "feature": "keyboard focus and narrow screens keep the status visible",
+          "case": "tests/test_web_assets.py::test_skip_link_is_first_tab_stop_and_focus_is_visible"
+        },
+        {
+          "feature": "the batch wires the shell into the CLI and ships it in the package",
+          "case": "tests/test_batch7_integration.py::test_the_dashboard_shell_is_reachable_from_the_cli_and_packaged"
+        }
+      ]
     },
     {
       "id": "7.2",

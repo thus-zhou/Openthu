@@ -118,7 +118,7 @@ openthu dashboard --port 8765             # 常驻；先打印地址与实例号
 - 只允许回环地址：`127.0.0.1`、`localhost`、`::1`。公网绑定会被拒绝。
 - 只提供只读路由：`/api/v1/health`、`/services`、`/services/{id}`、`/query/{service}/{operation}`、`/todos`、`/calendar`、`/resources`。没有写入、付款、密钥配置或模型生成入口。
 - 本地会话由实例以 `0600` 文件交付一次性引导令牌；直接用 `curl`（不带令牌）会得到 `LOCAL_API_SESSION_REQUIRED`，这不是学校登录失败。浏览器外壳负责完成这一步；没有外壳时先用 JSON 路由。
-- 静态 HTML 外壳由同批 7.1 提供，还需要 8.1 把 `static_dir` 接到 CLI；在接线完成前，`openthu dashboard` 只提供 JSON API，`/` 返回 `LOCAL_API_UI_NOT_INSTALLED`，JSON 路由与 `--check` 不受影响。
+- 静态 HTML 外壳随包安装（`src/thu_assistant/web_assets/`），`openthu dashboard` 启动时把该目录交给本地 API，`/` 直接提供只读页面；页面只通过同源 `/api/v1/...` 读取数据。静态目录缺失或不可读时，`/` 返回 `LOCAL_API_UI_NOT_INSTALLED`，JSON 路由与 `--check` 不受影响。
 - 工程限制：请求体 64 KiB、默认每页 50（上限 200）、UI 等待 30 秒、同一读取刷新最短间隔 10 秒、最多 16 个本地会话。它们是工程边界，不是学校规定。
 
 `--check` 的已验证输出（端口由系统分配）：

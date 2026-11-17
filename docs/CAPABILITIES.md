@@ -135,7 +135,7 @@ v0.2.0 候选（未发布）｜编制：7.3｜事实来源：`business-facade-v1
 | Node 网关 | 需要 Node 24 与锁文件依赖 | 同左 | 缺 Node 时只影响网关相关能力，诊断会指出 |
 | 浏览器能力 | Playwright Chromium，可选 | 同左 | 缺 Chromium 只影响浏览器，不影响只读目录 |
 | 本地看板 API | 回环 HTTP，可用 | 可用 | 只读路由；本地会话由 `0600` 引导文件建立 |
-| 看板 HTML 外壳 | 由同批 7.1 提供，待 8.1 接线 | 同左 | 在 `static_dir` 接入 CLI 前，`/` 为 `LOCAL_API_UI_NOT_INSTALLED`，JSON 路由仍可用 |
+| 看板 HTML 外壳 | 随包安装，CLI 自动接线 | 同左 | `openthu dashboard` 的 `/` 提供只读页面并加载 `assets/`；静态目录缺失或不可读时为 `LOCAL_API_UI_NOT_INSTALLED`，JSON 路由仍可用 |
 | 模型文本 | 需要本人学校额度与上游认证 | 同左（上游代理自带登录流程） | 目录、生成、取消分别记录证据；不批量探测生成 |
 | 模型图片 | 管线已实现，协议未验证 | 同左 | 当前 `MODEL_IMAGE_INPUT_UNAVAILABLE`；工程上限见 §7 |
 

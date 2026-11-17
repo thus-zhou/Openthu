@@ -17,7 +17,8 @@
     "release_owner": "Codex",
     "batch4_integration_test": "tests/test_batch4_integration.py",
     "batch5_integration_test": "tests/test_batch5_integration.py",
-    "batch6_integration_test": "tests/test_batch6_integration.py"
+    "batch6_integration_test": "tests/test_batch6_integration.py",
+    "batch7_integration_test": "tests/test_batch7_integration.py"
   },
   "modules": [
     {
@@ -814,7 +815,8 @@
         "result-envelope-v1"
       ],
       "tests": [
-        "tests/test_web_assets.py"
+        "tests/test_web_assets.py",
+        "tests/test_batch7_integration.py"
       ],
       "docs": [
         "README.md",
@@ -828,7 +830,11 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "轻量本地看板、统一空/错/部分状态和响应式体验",
-      "evidence": []
+      "evidence": [
+        "e2b45fa: 77 module tests, 231 related regression tests; full offline Linux Python 1649 passed/7 skipped, Node 66 passed; check 538 files/0 findings.",
+        "audit 7.1-audit P0=0/P1=3/P2=14 fixed: CLI static_dir wiring, wheel/sdist shell assets, resource-page read generation, navigation/wording/timezone/link-whitelist.",
+        "Batch 7 integration: both CLI construction paths pass web_assets.static_dir(); the wheel/sdist package data includes index.html, app.css and app.js; tests/test_batch7_integration.py proves route parity with local-read-api-v1."
+      ]
     },
     {
       "id": "7.2",
@@ -863,7 +869,11 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "跨平台回归、隐私扫描、故障注入和验证报告生成",
-      "evidence": []
+      "evidence": [
+        "3eeb2d3: 100 module cases (99 passed, 1 Windows-only skip) and full offline Linux Python 1670 passed/8 skipped, Node 66 passed; check 545 files/0 findings.",
+        "audit 7.2-audit P0=0/P1=6/P2=10 fixed: platform identity, commit binding, evidence floor, fail-closed markers, archive/POSIX privacy, nodeid sanitising, report/gate accounting.",
+        "Coverage matrix 24 modules/63 features/8 criteria/45 legacy files; release-gate fails closed on the Linux-only host and real Windows evidence remains an 8.1 obligation."
+      ]
     },
     {
       "id": "7.3",
@@ -882,7 +892,9 @@
         "compatibility-baseline-v1"
       ],
       "tests": [
-        "tests/test_docs_contracts.py"
+        "tests/test_docs_consistency.py",
+        "tests/test_facade_failure_envelopes.py",
+        "tests/test_batch7_integration.py"
       ],
       "docs": [
         "README.md",
@@ -897,7 +909,11 @@
         "python scripts/dev.py test"
       ],
       "completion_standard": "能力矩阵、用户手册、升级记录和贡献维护文档",
-      "evidence": []
+      "evidence": [
+        "9726535: 36 module cases (28 documentation consistency + 8 facade failure envelopes); full offline Linux Python 1607 passed/7 skipped, Node 66 passed; check 535 files/0 findings.",
+        "audit 7.3-audit P0=0/P1=4/P2=12 fixed: README Chromium, executable Linux key creation, schema-valid image example, facade _local_failure binding, plus the entry-point/changelog/tools/evidence/error-code/table findings.",
+        "81 registrations (63 READ, 15 CAMPUS_WRITE, 2 LOCAL_WRITE, 1 MODEL); 29 MCP tools; candidate notes stay candidate-not-released; batch integration updated the dashboard wording to the wired CLI."
+      ]
     },
     {
       "id": "8.1",

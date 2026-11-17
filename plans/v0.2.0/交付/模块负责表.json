@@ -996,7 +996,22 @@
         "轻量本地看板、统一空/错/部分状态和响应式体验"
       ],
       "integration_order": 20,
-      "status": "pending"
+      "status": "accepted",
+      "delivery_commit": "e2b45facd3b9ff311ab4071b973277f63ed748ef",
+      "accepted_at": "2026-11-18",
+      "audit_fix": "7.1-audit P0=0/P1=3/P2=14",
+      "evidence": [
+        "77 module tests at e2b45fa; 231 related regression tests; full offline Linux Python 1649 passed/7 skipped, Node 66 passed",
+        "audit 7.1-audit P0=0, three P1 and fourteen P2 fixed: CLI static_dir wiring, wheel/sdist web assets, resource-page read generation, plus the navigation, wording, timezone and link-whitelist findings",
+        "Chromium against a synthetic facade over the real LocalApiServer: same-origin GET only, no CDN/analytics, no browser storage, 401 clears previous account data",
+        "both dashboard construction paths (--check and serve) pass web_assets.static_dir(); wheel and sdist contain index.html, app.css and app.js"
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/__main__.py (6.1): 7.1 adds the two `static_dir=web_assets.static_dir()` arguments; command names, output shape and exit codes are unchanged.",
+        "pyproject.toml and MANIFEST.in (6.3): 7.1 adds the web_assets package-data patterns and the recursive MANIFEST include; dependency pins and entry points are unchanged.",
+        "contracts local-read-api-v1 (1.1/8.1): the request-side `cursor` is still not in the frozen list; 7.1 follows next_cursor/cursor and the revision stays with the contract owner.",
+        "tests/test_web_assets.py (7.2): the browser matrix entry for 7.1 is now covered; Firefox/Safari Sec-Fetch-Mode remains a 7.2 cross-engine check."
+      ]
     },
     {
       "id": "7.2",
@@ -1035,7 +1050,22 @@
         "跨平台回归、隐私扫描、故障注入和验证报告生成"
       ],
       "integration_order": 21,
-      "status": "pending"
+      "status": "accepted",
+      "delivery_commit": "3eeb2d335059f5c41ff4dc08a79242e0c890cb30",
+      "accepted_at": "2026-11-18",
+      "audit_fix": "7.2-audit P0=0/P1=6/P2=10",
+      "evidence": [
+        "100 module cases (99 passed, 1 Windows-only skip) at 3eeb2d3; full offline Linux Python 1670 passed/8 skipped, Node 66 passed",
+        "audit 7.2-audit P0=0, six P1 and ten P2 fixed: platform identity, commit binding, evidence floor, fail-closed markers, archive/POSIX privacy scanning, nodeid sanitising and the report/gate accounting findings",
+        "release-gate fails closed on this Linux-only host: platform report missing and python_matrix_incomplete, the other eight checks pass; no shape report is accepted",
+        "coverage matrix 24 modules, 63 feature mappings, 8 acceptance criteria and 45 legacy test files; 7.1 became covered during batch integration"
+      ],
+      "cross_module_handoffs": [
+        ".github/workflows/ci.yml (6.3): 6.3 introduced the Linux 3.13 matrix; 7.2 owns the regression workflow, the release-gate job and the job names the machine gate matches.",
+        "scripts/privacy_scan.py (2.1/7.2): 7.2 adds the POSIX user-path rule; existing findings and exit semantics are unchanged.",
+        "docs/MAINTENANCE.md (7.3): 7.2 adds the report/gate/release-gate section; 7.3 owns the surrounding release documentation.",
+        "tests/release_regression/coverage_matrix.json (7.1): the dashboard entry moved from pending_same_batch to covered in the batch integration commit."
+      ]
     },
     {
       "id": "7.3",
@@ -1075,7 +1105,21 @@
         "能力矩阵、用户手册、升级记录和贡献维护文档"
       ],
       "integration_order": 22,
-      "status": "pending"
+      "status": "accepted",
+      "delivery_commit": "97265350445c2ae0c04f7aafafa828c9ad5c1dc6",
+      "accepted_at": "2026-11-18",
+      "audit_fix": "7.3-audit P0=0/P1=4/P2=12",
+      "evidence": [
+        "36 module cases at 9726535 (28 documentation consistency + 8 facade failure envelopes); full offline Linux Python 1607 passed/7 skipped, Node 66 passed",
+        "audit 7.3-audit P0=0, four P1 and twelve P2 fixed: README Chromium step, executable Linux key creation, schema-valid image example, facade _local_failure binding, plus the entry-point, changelog, tools, evidence, error-code and table findings",
+        "capability matrix regenerated from 81 registrations (63 READ, 15 CAMPUS_WRITE, 2 LOCAL_WRITE, 1 MODEL); 29 MCP tools and the six legacy entry points unchanged",
+        "candidate notes stay candidate-not-released; no live campus, model, browser or business call was made"
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/facade/core.py and __main__.py (6.1): 7.3 fixes the _local_failure binding and forwards --semester on agenda export; tool schemas and registrations are unchanged.",
+        "README.md, docs/, CHANGELOG.md, integrations/, CONTRIBUTING.md (7.3): the docs module owns the public wording; 7.2's MAINTENANCE section and 7.1's dashboard shell are described, not reimplemented.",
+        "docs/contracts/source-matrix.md (2.3): the historical wording row is still registered for 2.3/8.1; 7.3 does not edit the source-evidence document."
+      ]
     },
     {
       "id": "8.1",
