@@ -89,7 +89,7 @@
     },
     "dev_check": {
       "ok": true,
-      "files_checked": 563,
+      "files_checked": 568,
       "findings": 0,
       "mcp_tools": 29,
       "command": "python scripts/dev.py check"
@@ -149,7 +149,7 @@
     "privacy_scan": {
       "source": {
         "ok": true,
-        "files_checked": 563,
+        "files_checked": 568,
         "findings": 0
       },
       "archives": {
@@ -185,7 +185,7 @@
     "the integration checklist names all 24 modules; the candidate record carries the SHA256 set and the module record reports implemented status",
     "the candidate build at 9b1bef5 produced four artifacts with a clean tree; verify bound the commit and install-check ran outside the repository",
     "a fresh venv install served the dashboard shell from the package, refused /api/v1/health with 401, failed doctor on a missing bundled resource and reported SECURE_KEY_NOT_CONFIGURED without a key",
-    "privacy_scan found nothing in 563 source files and 1825 archive members",
+    "privacy_scan found nothing in 568 source files and 1825 archive members",
     "the test job checks out the full history, so the ancestry case runs in CI instead of skipping on a depth-1 clone"
   ],
   "limits": [
