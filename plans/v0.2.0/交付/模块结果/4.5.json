@@ -1,0 +1,227 @@
+{
+  "module": "4.5",
+  "title": "模型图片输入与资料引用增强",
+  "batch": 4,
+  "owner": "Hermes",
+  "status": "implemented",
+  "baseline_commit": "323a98b",
+  "delivery_commit": "291432e",
+  "code_commits": [
+    "291432e"
+  ],
+  "branch": "hermes/4.5",
+  "worktree": "/home/ubuntu/projects/Openthu/.local/worktrees/4.5",
+  "version_pr": 2,
+  "paths": [
+    "src/thu_assistant/models.py",
+    "src/thu_assistant/models.js",
+    "src/thu_assistant/model_media.py",
+    "tests/test_model_media.py"
+  ],
+  "contracts": [
+    "media-reference-v1",
+    "source-evidence-v1",
+    "result-envelope-v1",
+    "model-image-capability-v1"
+  ],
+  "interfaces": {
+    "chat": [
+      "models.chat(bridge, args, *, media=MediaBinding, protocols=ProtocolRegistry)"
+    ],
+    "prepare": [
+      "model_media.prepare(args, media=..., protocols=...).preview()",
+      "model_media.prepare(args, media=..., protocols=...).send(bridge)"
+    ],
+    "capability": [
+      "model_media.capabilities(directory, protocols=...)"
+    ],
+    "evidence": [
+      "model_media.ProtocolProfile",
+      "model_media.ProtocolRegistry",
+      "model_media.MediaBinding",
+      "model_media.TransportStage"
+    ]
+  },
+  "security_summary": {
+    "evidence_gate": "catalog_support_image, protocol_state and capability_state are separate; a catalog flag alone can only produce UNVERIFIED; AVAILABLE requires a ProtocolProfile with SYNTHETIC_TRANSPORT or LIVE_READ evidence",
+    "production_default": "the shipped ProtocolRegistry is empty, so every image call fails with MODEL_IMAGE_PROTOCOL_UNVERIFIED before resolving a reference, reading a byte or sending a request",
+    "input_shape": "images is an array of {media_id} references only; paths, URLs, headers, raw bytes and unknown fields are rejected; account, task and staging root are host-bound and absent from the tool schema",
+    "send_path": "MediaAssets.manifest -> prepare_model_bundle -> authorize_model_send -> consume_model_bundle; each OutboundImage is re-checked for media_id, MIME, byte size and sha256 before staging",
+    "staging": "one 0600 file per selected image under a 0700 root, named by a 32-hex token; Node reads an exact name and byte count with symlink refusal and sha256 verification, deletes the file immediately after reading, and Python deletes leftovers in finally; crash residue is swept after 900 seconds",
+    "scope": "only the named references are resolved and staged; a neighbouring file in the same directory is never opened",
+    "limits": "protocol limits may only narrow the frozen engineering maxima (4 images, 8 MiB per image, 16 MiB total, 16 million pixels)",
+    "cancellation": "CANCELLED revokes the task's media, deletes staged files and never replays; the one unopened 401 auth recovery keeps the same model and the same image set and records image_input.sends=2 with automatic_replay=false",
+    "usage": "only upstream usage is reported; missing usage stays null with usage_state UNKNOWN and is never derived from image count",
+    "source_mapping": "ORIGINAL_QUOTE, DERIVED_IMAGE, USER_INPUT and TEXT_SUMMARY are distinct; derived images keep source_sha256 -> sha256 conversion chains; citations only prove identifier registration and claim_verified is always false",
+    "leak_control": "errors and evidence carry counts, identifiers and hashes only, never image encoding, prompt text, staging paths or credentials",
+    "network_during_preparation": "the media boundary performs no network request; the model transport is the only outbound path"
+  },
+  "checks": {
+    "module_tests": {
+      "passed": 38,
+      "skipped": 0,
+      "failed": 0,
+      "python": 31,
+      "node_transport": 7,
+      "command": "python -m pytest -o addopts='' -q tests/test_model_media.py"
+    },
+    "full_offline": {
+      "command": "python scripts/dev.py test",
+      "python_passed": 686,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "ok": true
+    },
+    "baseline_comparison": {
+      "worktree": "detached 323a98b with the same node_modules link",
+      "python_passed": 648,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "note": "the 38 added tests are the only delta; no existing test changed state"
+    },
+    "privacy_scan": {
+      "files_checked": 405,
+      "findings": 0
+    },
+    "mcp_smoke": {
+      "tool_count": 29,
+      "live_campus_calls": 0,
+      "model_calls": 0,
+      "business_submissions": 0
+    },
+    "validators": {
+      "plan": "ok, 24 modules / 9 batches",
+      "contracts": "ok, 8 contracts / 9 schema samples / 35 rejection samples / 8 extra samples / 29 legacy tools"
+    },
+    "environment_note": "a fresh worktree has no src/thu_assistant/node_modules; without linking the installed dependencies 19 gateway/session tests fail for a missing tough-cookie module on both the baseline and this tree, so the link is an environment prerequisite, not a module result"
+  },
+  "acceptance": [
+    {
+      "case": "existing single-turn and multi-turn text requests keep parameters and result type",
+      "tests": [
+        "test_text_chat_keeps_its_parameter_shape_and_result_type",
+        "test_multiturn_text_requests_are_unchanged",
+        "test_prepare_refuses_images_instead_of_dropping_them",
+        "test_tool_schema_names_references_not_paths_or_urls"
+      ]
+    },
+    {
+      "case": "a catalogue flag without transport evidence refuses instead of guessing the request body",
+      "tests": [
+        "test_catalog_flag_without_transport_evidence_reads_nothing",
+        "test_offline_contract_evidence_is_not_transport_evidence",
+        "test_capability_rows_never_promote_a_catalog_flag",
+        "test_capability_without_a_registry_is_unverified",
+        "test_node_transport_refuses_unverified_protocol_and_unsupported_model",
+        "test_node_transport_refuses_a_model_without_image_support"
+      ]
+    },
+    {
+      "case": "another account, an expired reference or an over-limit selection produces zero fake remote requests",
+      "tests": [
+        "test_other_account_reference_never_reaches_the_transport",
+        "test_expired_reference_never_reaches_the_transport",
+        "test_duplicate_and_malformed_selections_are_refused",
+        "test_more_than_four_images_are_refused",
+        "test_stricter_protocol_limits_win",
+        "test_protocol_media_types_are_enforced",
+        "test_protocol_cannot_widen_the_frozen_limits",
+        "test_image_call_requires_an_explicit_model",
+        "test_image_call_without_a_media_pipeline_is_refused"
+      ]
+    },
+    {
+      "case": "the send scope is exactly the selected text and images and never reads a neighbour file",
+      "tests": [
+        "test_only_the_selected_image_is_staged_and_a_neighbour_is_never_read",
+        "test_two_images_keep_the_selection_order",
+        "test_preview_lists_what_would_be_sent_without_bytes_or_paths",
+        "test_the_staging_root_must_be_private_and_absolute",
+        "test_node_transport_sends_text_first_then_images_in_order"
+      ]
+    },
+    {
+      "case": "unknown citation ids are flagged and known ids are never claimed as verified facts",
+      "tests": [
+        "test_citations_prove_registration_only",
+        "test_text_sources_and_images_share_one_source_map",
+        "test_a_converted_image_keeps_the_conversion_chain"
+      ]
+    },
+    {
+      "case": "cancellation or a stream interruption after output starts never triggers a second generation",
+      "tests": [
+        "test_cancel_revokes_the_media_and_never_generates_twice",
+        "test_one_grant_authorises_one_send",
+        "test_node_transport_cancel_before_dispatch_sends_nothing",
+        "test_node_transport_cancel_after_start_never_replays",
+        "test_node_transport_allows_one_unopened_auth_recovery_without_switching_models"
+      ]
+    },
+    {
+      "case": "missing usage and partial output keep UNKNOWN and incomplete states",
+      "tests": [
+        "test_partial_output_and_unknown_usage_are_preserved",
+        "test_a_refused_answer_keeps_the_reported_usage_and_partial_text"
+      ]
+    },
+    {
+      "case": "logs, errors, progress and handover text carry no image encoding or prompt text",
+      "tests": [
+        "test_errors_and_evidence_carry_no_image_prompt_or_path",
+        "test_image_error_codes_are_the_frozen_media_taxonomy",
+        "test_staging_files_are_removed_when_the_transport_fails",
+        "test_node_transport_refuses_a_changed_staging_file"
+      ]
+    }
+  ],
+  "cross_module_requests": [
+    {
+      "owner": "6.1",
+      "request": "Wire models.chat(media=..., protocols=...): build MediaAssets from the 2.1 temp_dir, a MediaBinding from the authenticated account pseudonym, a per-request task id and <temp_dir>/transport created 0700; expose the already-extended images argument on model_chat and do not add another local read path or image_url/path field."
+    },
+    {
+      "owner": "6.1",
+      "request": "Register the new module codes in contracts/v0.2/error-classification.json: MODEL_REQUIRED_FOR_IMAGE_INPUT, MODEL_IMAGE_SELECTION_INVALID, MODEL_IMAGE_LIMIT_EXCEEDED, MODEL_IMAGE_UNSUPPORTED, MODEL_IMAGE_PROTOCOL_UNVERIFIED, MODEL_IMAGE_INPUT_UNAVAILABLE, MODEL_IMAGE_TRANSPORT_UNAVAILABLE, MODEL_IMAGE_STAGING_FAILED, MODEL_IMAGE_STAGING_MISMATCH, MODEL_IMAGE_MESSAGES_INVALID. Until then they classify as INTERNAL and are never replayed."
+    },
+    {
+      "owner": "6.1",
+      "request": "Optionally attach model_media.capabilities(directory, protocols=...) rows to list_models; never promote a catalog flag to AVAILABLE."
+    },
+    {
+      "owner": "7.3",
+      "request": "Document the gated image capability (current build returns MODEL_IMAGE_PROTOCOL_UNVERIFIED for image calls; text, catalog and the 29 tool entries are unchanged). 4.5 did not edit docs/CAPABILITIES.md because 4.1/4.2/4.3 share it and 7.3 owns the public manual."
+    },
+    {
+      "owner": "7.2",
+      "request": "Include tests/test_model_media.py in cross-platform regression; the Node transport cases need a node executable and the POSIX permission case skips on Windows."
+    },
+    {
+      "owner": "6.3",
+      "request": "Ship src/thu_assistant/model_media.py in the wheel (pure Python; no package-data entry needed)."
+    }
+  ],
+  "blockers": [
+    {
+      "id": "model-image-protocol-evidence",
+      "scope": "production model image transfer",
+      "status": "OPEN",
+      "impact": "Every image call refuses with MODEL_IMAGE_PROTOCOL_UNVERIFIED; text chat, the catalog and the existing 29 tool entries are unaffected.",
+      "resolution": "Record a ProtocolProfile only after official documentation or an owner-authorized synthetic probe defines the request media shape, supported models, byte/pixel/count limits and error semantics."
+    }
+  ],
+  "remaining_limits": [
+    "The module's completion means the gate, preview, send path, source mapping and refusal paths are implemented; it does not mean multimodal input works against the real school proxy.",
+    "Transport staging writes a second copy of already-sanitised image bytes beside the 3.3 cache: 0600 files under a 0700 root, deleted after a verified read or in finally, with crash residue swept after 900 seconds; no physical erasure is claimed.",
+    "The gateway stdin frame limit of 2 MiB is why inline base64 is not used; if 6.1 changes the framing protocol this decision must be re-checked.",
+    "Images attach only to the final user message; earlier assistant turns keep their original shape and images are never retro-inserted.",
+    "Protocol evidence is matched per exact model id with no wildcard; different proxy paths for one model need separate profiles.",
+    "Capability rows use the frozen model-image-capability-v1 object, so media types and limits live in preview.protocol rather than in the row.",
+    "Windows has no POSIX mode bits; staging privacy relies on the user-directory ACL and the module only rejects relative paths, symlinks and non-directories.",
+    "A 401 that arrives before output may resend the same images once for token refresh; the evidence records image_input.sends=2 and automatic_replay=false, and the model never changes."
+  ],
+  "rollback": "Stop injecting MediaBinding and ProtocolRegistry: image arguments then fail with MODEL_IMAGE_INPUT_UNAVAILABLE while text chat, the catalog and the 29 tool entries are unchanged. THU_MODEL_READ=0 still returns to the legacy single-prompt behaviour. Nothing is re-sent, and user files are never deleted.",
+  "next_step": "The batch integrator reconnects 4.1-4.5 on one commit, runs the batch-level check, the full offline suite and contract linkage, then the repair phase records acceptance; the protocol-evidence blocker stays open until verified evidence exists."
+}
