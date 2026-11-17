@@ -150,6 +150,7 @@
   "limits": [
     "Personal timetable, exam and grade production adapters remain BLOCKED_SOURCE_EVIDENCE; this module only gates and converts them, and no real academic record was read.",
     "Timetable events require explicit expansion from the 4.1 reader; the production reader is blocked, so only the synthetic path is covered here.",
+    "The outer THU-TODOS-1 cache container and record_id-in-AAD migration were not changed; like the 4.4 THU-ACTION-1 boundary this remains a later storage/integration step, and the existing cache format stays readable.",
     "SnapshotStore prefers the 2.2 SecureStore EVENT_CURSOR purpose and falls back to the existing protected-file wrapper; without a usable key it keeps an in-memory baseline and never writes plaintext.",
     "Cross-process incremental continuation requires a configured secure key; otherwise cursors remain valid only in the current process.",
     "iCalendar has no UNKNOWN status, so STATUS:UNKNOWN is exported as TENTATIVE plus X-OPENTHU-CALENDAR-STATUS:UNKNOWN; this is not a success claim.",
@@ -159,7 +160,8 @@
   "rollback": "Delete events.py, snapshot_diff.py, calendar_export.py, tests/test_events.py and tests/test_calendar_export.py; restore todos.py to 37b1605; revert the 5.4 error codes in contracts/v0.2/error-classification.json and source_state.py. The new get_todos parameters are optional and old callers ignore them; existing todo snapshots and cache format are unchanged. The events-v1 snapshot directory is separate from the legacy cache; invalidate new cursors explicitly on rollback. User-exported local calendar files are never deleted or remotely revoked.",
   "next": "Batch 5 integration reconnects 5.1-5.4, reruns scripts/dev.py check and test at the joint tree, and then records acceptance. 6.1 registers the public agenda/export/change methods; 7.3 updates capability and user documentation. This module opens no PR, does not merge main and does not publish a release.",
   "cross_module_requests": [
-    "6.1: register get_agenda, get_event_changes, export_calendar and describe_agenda; keep the 29 legacy tools and do not turn local export into a message send.",
+    "6.1: register get_agenda, get_event_changes, export_calendar and describe_agenda; update the get_todos description for the opt-in academics/semester parameters; keep the 29 legacy tools and do not turn local export into a message send.",
+    "6.1/8.1: the outer THU-TODOS-1 cache container and record_id-in-AAD migration remains a later storage step, matching the 4.4 THU-ACTION-1 boundary; do not assume 5.4 changed the cache format.",
     "5.1/5.2/5.3: preserve the time_trusted rule; pending approval, pending payment, upload success and draft state must not become confirmed agenda entries.",
     "6.2/7.1: read calendar_events/views/conflicts only; HTML rendering must apply its own escaping instead of reusing Markdown or ICS text.",
     "7.3: document on-demand reads, no background polling, no automatic messaging and no automatic booking, and record that academic sources remain blocked."
