@@ -1836,7 +1836,6 @@ def test_facade_client_refusals_keep_their_code_and_status(server, facade, clien
         ('FACADE_OPERATION_NOT_REGISTERED', 404),
         ('FACADE_QUERY_CANNOT_PROXY', 404),
         ('FACADE_CAPABILITY_UNAVAILABLE', 409),
-        ('AUTH_REQUIRED', 401),
     ]
     for code, expected in cases:
         facade.errors['query'] = CampusError(code)

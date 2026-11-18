@@ -258,7 +258,7 @@ def test_batch6_error_registries_hold_both_modules_without_shadowing():
         assert source_state.ERROR_CODES[code] == frozen[code], code
     # The frozen registry and the runtime mirror must stay one set, not two.
     assert set(frozen) == set(source_state.ERROR_CODES)
-    assert len(frozen) == 359
+    assert len(frozen) == 370
 
 
 def test_batch6_records_ownership_and_gate_agree():

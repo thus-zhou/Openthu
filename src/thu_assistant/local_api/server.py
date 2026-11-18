@@ -608,7 +608,6 @@ class LocalApiServer:
                 'FACADE_QUERY_CANNOT_PROXY': 404,
                 'FACADE_CAPABILITY_UNAVAILABLE': 409,
                 'FACADE_REQUEST_LIMIT': 429,
-                'AUTH_REQUIRED': 401,
                 'ACTION_ACCOUNT_MISMATCH': 409,
             }
             if isinstance(code, str) and code in facade_http:

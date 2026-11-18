@@ -89,7 +89,8 @@ def test_partial_directory_keeps_missing_pages_and_is_not_empty_success():
 def test_verified_empty_course_list_and_business_error_remain_distinct():
     class Learning:
         def call_tool(self,*args):return {'courses':[],'count':0}
-    a=CampusAssistant(learning_factory=Learning)
+    a=CampusAssistant(learning_factory=Learning,
+        bridge=lambda *args,**kwargs:{'account_id':'synthetic-test-account'})
     r=a.call('query_service',{'service_id':'learn','operation':'courses','parameters':{}})
     assert r['status']=='EMPTY' and r['complete'] and r['verification_level']=='BUSINESS_READ'
     from learn_assistant.errors import InterfaceDriftError
