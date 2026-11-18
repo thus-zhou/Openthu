@@ -287,10 +287,52 @@
         "Both the push run and the pull_request run at ac94b63 are green; version PR #2 head moved from 8d0606d to ac94b63.",
         "The audit remediation commits c81a877 (cursor refusal) and ac94b63 (acceptance records) are ancestors of the PR head.",
         "The record-head run 44202750006 at 9631d30 is green on both platforms and the release gate; commits after ac94b63 change plans/ text only.",
-        "The integration head also carries 2bd42cc (consent-peek fix in the action framework, another module's remediation); the tag build must rebuild at the final merged head and re-verify the hashes."
+        "The integration head also carries 2bd42cc (consent-peek fix in the action framework, another module's remediation); the tag build must rebuild at the final merged head and re-verify the hashes.",
+        "The final head run 44205543107 at eb9e162 is green on both platforms and the release gate, so version PR #2's head is verified."
       ],
       "record_head_run": 44202750006,
-      "record_head_commit": "9631d30da6a6719fd829d9ec24ff47b0a6bfe4b4"
+      "record_head_commit": "9631d30da6a6719fd829d9ec24ff47b0a6bfe4b4",
+      "head_run": {
+        "commit": "eb9e162d062c494f861f8d1d3376041fd7d222a1",
+        "run": 44205543107,
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "reports": {
+          "linux": {
+            "status": "PASS",
+            "passed": 1879,
+            "skipped": 8,
+            "failed": 0,
+            "total": 1887,
+            "python": {
+              "passed": 1813,
+              "skipped": 8
+            },
+            "node": {
+              "passed": 66,
+              "failed": 0
+            }
+          },
+          "windows": {
+            "status": "PASS",
+            "passed": 1866,
+            "skipped": 21,
+            "failed": 0,
+            "total": 1887,
+            "python": {
+              "passed": 1800,
+              "skipped": 21
+            },
+            "node": {
+              "passed": 66,
+              "failed": 0
+            }
+          }
+        },
+        "release_gate": "PASS, nine checks true, 0 gaps",
+        "note": "Final integration head after the consent-peek fix 2bd42cc; it carries one extra action-framework test, so the Python totals are one higher than the ac94b63 artifact run."
+      }
     },
     "live_campus_calls": 0,
     "model_calls": 0,
