@@ -414,7 +414,7 @@
         "8.1": "accepted"
       },
       "status": "accepted",
-      "integration_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed",
+      "integration_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
       "accepted_at": "2026-11-18",
       "entry_condition": "all batch 7 modules accepted and integrated",
       "exit_condition": "all modules accepted; candidate built, restored and reviewed",
@@ -447,14 +447,15 @@
           "release_gate": "PASS, 0 gaps, nine checks true"
         }
       },
-      "gate_note": "8.1 accepted after the 8.1-audit remediation and the batch-8 seam fixes; the module branch was merged into hermes/1-install-diagnostics at 5ec73d9, the consent-peek race found by the batch CI was fixed at 2bd42cc and the candidate was rebuilt there, so version PR #2 contains the candidate. Batch 9 is ready for Codex review; no PR was created, main was not merged, nothing was tagged or released.",
+      "gate_note": "8.1 accepted after the 8.1-audit remediation and the batch-8 seam fixes; the module branch was merged into hermes/1-install-diagnostics at 5ec73d9, and the green integration/artifact commit is 2bd42cc (the merge commit itself has no CI check-run). The consent-peek race found by the batch CI was fixed at 2bd42cc and the candidate was rebuilt there, so version PR #2 contains the candidate. Batch 9 is ready for Codex review; no PR was created, main was not merged, nothing was tagged or released.",
       "acceptance_record": "the commit containing this accepted record",
       "module_acceptance": {
         "8.1": {
           "accepted_at": "2026-11-18",
           "delivery_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
-          "integration_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed",
-          "evidence": "audit 8.1-audit P0=0/P1=3/P2=9 all closed; foreign cursors on /todos and /calendar are refused with 400 CURSOR_EXPIRED; pagination cases cover todos/calendar/resources; module tests 8, related 239, Linux Python 1813/8, Node 66; delivery commit includes the tests, the CI fetch-depth fix, the report attribution and the consent-peek seam fix; batch 8 merged into the integration branch at 5ec73d9."
+          "integration_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
+          "evidence": "audit 8.1-audit P0=0/P1=3/P2=9 all closed; foreign cursors on /todos and /calendar are refused with 400 CURSOR_EXPIRED; pagination cases cover todos/calendar/resources; module tests 8, related 239, Linux Python 1813/8, Node 66; delivery commit includes the tests, the CI fetch-depth fix, the report attribution and the consent-peek seam fix; batch 8 merged into the integration branch at 5ec73d9.",
+          "merge_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed"
         }
       },
       "audit_fix": {
@@ -492,7 +493,8 @@
         "Windows (CI): Python 1800 passed/21 platform skips/0 failed and Node 66 passed; the platform report returns PASS with 0 gaps",
         "GitHub Actions push 44204917343 and pull_request 44204927343 at 2bd42cc: ubuntu-24.04, ubuntu-24.04 (3.13), windows-2025 and the release gate all successful; the gate returns PASS with all nine checks true and 0 gaps",
         "final candidate rebuilt by the release gate at 2bd42cc: 4 artifacts, 565 source files, wheel 214 members (54 bundled), sdist 496 members"
-      ]
+      ],
+      "merge_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed"
     },
     {
       "batch": 9,

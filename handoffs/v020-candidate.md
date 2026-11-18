@@ -1,7 +1,7 @@
 # 任务交接：v0.2.0 候选交审
 
 - 任务 / Issue：Issue #4（v0.2.0 完整升级）；模块 8.1 全版本集成、候选构建与交审
-- 当前 PR / 分支：版本 PR #2（Draft；head `hermes/1-install-diagnostics` 已包含 8.1、集成提交 `5ec73d9` 与产物提交 `2bd42cc`）；模块分支 `hermes/8.1`
+- 当前 PR / 分支：版本 PR #2（Draft；head `hermes/1-install-diagnostics` 已包含 8.1、回接合并 `5ec73d9` 与集成/产物提交 `2bd42cc`）；模块分支 `hermes/8.1`
 - 当前负责者 → 下一位：Hermes → Codex
 - 目标与验收标准：把批次 1–7 的成果集成为一个可安装、可恢复、可复核的 `0.2.0` 候选；候选包、集成清单、模块结果和两平台证据齐备；由 Codex 整体审查后合并、打标签与发布
 

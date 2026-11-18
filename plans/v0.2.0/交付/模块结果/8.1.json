@@ -383,7 +383,7 @@
   "verification_commit": "the commit containing this record file",
   "branch_head": "the record-only head containing this record (artifact_commit 2bd42cc; product code ends at 2bd42cc)",
   "integration_branch": "hermes/1-install-diagnostics",
-  "integration_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed",
+  "integration_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
   "audit": {
     "report": "8.1-audit",
     "P0": 0,
@@ -392,7 +392,7 @@
     "closed": 12,
     "open": 0,
     "items": [
-      "P1-1: hermes/8.1 merged into hermes/1-install-diagnostics at 5ec73d9; version PR #2 head now contains the candidate",
+      "P1-1: hermes/8.1 merged into hermes/1-install-diagnostics at 5ec73d9; the green integration/artifact commit is 2bd42cc and version PR #2 head now contains the candidate",
       "P1-2: delivery_commit c81a877 contains the module tests, the CI fetch-depth fix and the report attribution; implementation_commits lists the chain and verification_commit is separate",
       "P1-3: /todos and /calendar refuse a cursor they never issued (400 CURSOR_EXPIRED, including non-lac1 values) and a lac1 cursor from another route (400 CURSOR_QUERY_MISMATCH)",
       "P2-1: privacy counts are recorded for both the local rehearsal and the final candidate",
@@ -409,6 +409,8 @@
   "artifact_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
   "candidate_head": "the commit containing this record file (record-only after 2bd42cc)",
   "integration_fixes": [
-    "S12: a concurrent take() could make peek() report STATE_READ_FAILED for a grant it had just consumed; peek now shares the consent lock and reports a vanished grant as absent, with a deterministic regression test."
-  ]
+    "S12: a concurrent take() could make peek() report STATE_READ_FAILED for a grant it had just consumed; peek now shares the consent lock and reports a vanished grant as absent, with a deterministic regression test.",
+    "S13: the merge commit 5ec73d9 never became a checked head, so the machine gate could not find green test (ubuntu-24.04)/test (windows-2025) runs; batch 8 now records integration_commit 2bd42cc (CI green) and merge_commit 5ec73d9."
+  ],
+  "merge_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed"
 }

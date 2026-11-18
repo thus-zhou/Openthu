@@ -121,7 +121,7 @@
     "total": 9,
     "current": 8,
     "current_status": "accepted",
-    "module_status_note": "Batches 1-8 accepted; 8.1 accepted after the 8.1-audit remediation and merged into hermes/1-install-diagnostics at 5ec73d9. Batch 9 is ready for the Codex review; version PR #2 now contains the candidate.",
+    "module_status_note": "Batches 1-8 accepted; 8.1 accepted after the 8.1-audit remediation and merged into hermes/1-install-diagnostics at 5ec73d9; the green integration/artifact commit is 2bd42cc. Batch 9 is ready for the Codex review; version PR #2 now contains the candidate.",
     "next": 9,
     "gate_file": "交付/批次门禁.json",
     "status_model": "accepted prefix -> one ready -> locked remainder; all accepted only at version completion",
