@@ -235,7 +235,7 @@ Hermes 负责第 1–8 批（23 个模块）；第 9 批 9.1 是 Codex 的发布
 | `plans/v0.2.0/进度清单.md` | 第 8 批后没有总审计段 | 增加“总审计修复 17/17”与下一步 |
 | `plans/v0.2.0/交付/集成清单.md` | 8.1 行和候选段停在 `2bd42cc` | 补总审计提交链与当前候选 |
 | `plans/v0.2.0/交付/批次门禁记录.md` | 有 P2-6/P1-4 的个别同步，但没有完整的总审计小节 | 追加“总审计修复与复验（`4a03ecd`）”小节 |
-| `handoffs/v020-candidate.json` | `code_commit` 仍为 `2bd42cc` | 在最终交接提交上重新运行 `python scripts/handoff.py v020-candidate --to codex` |
+| `handoffs/v020-candidate.json` | 已重新生成，`code_commit` 为 `b87dc3f`（交接文档提交） | 最终 head 确定后可再运行一次 `python scripts/handoff.py v020-candidate --to codex` |
 | `docs/HANDOVER.md`（本文） | 已更新到总审计后状态 | 随本次记录性提交进入仓库 |
 
 这些是记录一致性问题，不是产品缺陷；但不能让门禁继续指向审计前的提交而声称“已验收”。处理方式应是记录性提交 + 在新 head 上重跑 CI/`release gate`，不需要改产品代码。
