@@ -162,6 +162,10 @@ class HostConsent:
     def _read_grant(self, path: Path) -> dict:
         try:
             blob = path.read_bytes()
+        except FileNotFoundError:
+            # A concurrent ``take``/``discard`` may consume the grant between an
+            # existence check and this read; that is "no grant", not corruption.
+            raise
         except OSError:
             raise CampusError("STATE_READ_FAILED") from None
         if not blob.startswith(GRANT_MAGIC):
@@ -200,11 +204,22 @@ class HostConsent:
         return replaced
 
     def peek(self, record: dict, *, now: float | None = None) -> dict | None:
-        """Read and verify a pending grant without consuming it."""
+        """Read and verify a pending grant without consuming it.
+
+        The read shares the consent lock with ``put``/``take``/``discard`` so a
+        concurrent consume cannot make an issued grant look corrupt.  A grant
+        that disappears before the read is reported as absent, never as a state
+        read failure.
+        """
         path = self.grant_path(record["operation_id"])
-        if not path.exists():
+        try:
+            with self.store.lock("consent"):
+                if not path.exists():
+                    return None
+                grant = self._read_grant(path)
+        except FileNotFoundError:
             return None
-        return self._verify(self._read_grant(path), record, now)
+        return self._verify(grant, record, now)
 
     def take(self, record: dict, *, now: float | None = None) -> dict | None:
         """Atomically consume and verify the pending grant for this plan.

@@ -344,6 +344,28 @@ def test_concurrent_execute_dispatches_once(tmp_path):
     assert engine.result(plan_id)["status"] == "SUCCEEDED"
 
 
+def test_peek_reports_a_concurrently_consumed_grant_as_absent(tmp_path, monkeypatch):
+    """A loser thread must not see a state read failure for a consumed grant.
+
+    ``peek`` checks that the grant exists before reading it.  When another
+    thread's ``take`` removes the file in between, a plain read raises
+    FileNotFoundError, which used to surface as STATE_READ_FAILED and made the
+    concurrent-execute outcome non-deterministic.
+    """
+    engine, adapter, host, store = setup(tmp_path)
+    plan_id = plan(engine)
+    approve(engine, host, plan_id)
+    record = store.read(plan_id)
+    original = host._read_grant
+
+    def consumed(path):
+        path.unlink()
+        return original(path)
+
+    monkeypatch.setattr(host, "_read_grant", consumed)
+    assert host.peek(record) is None
+
+
 def test_lost_response_starts_unknown_and_restart_only_reconciles(tmp_path):
     engine, adapter, host, store = setup(tmp_path)
     plan_id = plan(engine)
