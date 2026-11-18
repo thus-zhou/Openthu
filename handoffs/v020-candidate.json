@@ -4,9 +4,8 @@
   "status": "READY_FOR_CODEX",
   "next_owner": "codex",
   "branch": "hermes/1-install-diagnostics",
-  "code_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
-  "created_at": "2026-11-17T23:38:30+00:00",
+  "code_commit": "b87dc3f9c947eda6ad8fd3143960849daa2b8846",
+  "created_at": "2026-11-18T04:46:34+00:00",
   "context_file": "handoffs/v020-candidate.md",
-  "dispatch": "manual",
-  "note": "code_commit is the artifact/acceptance commit 2bd42cc (includes the consent-peek fix); the PR head adds record-only commits."
+  "dispatch": "manual"
 }
