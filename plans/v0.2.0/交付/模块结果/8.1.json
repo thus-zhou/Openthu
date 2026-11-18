@@ -285,8 +285,12 @@
       "notes": [
         "Windows is a CI-only platform; the local host is Linux.",
         "Both the push run and the pull_request run at ac94b63 are green; version PR #2 head moved from 8d0606d to ac94b63.",
-        "The audit remediation commits c81a877 (cursor refusal) and ac94b63 (acceptance records) are ancestors of the PR head."
-      ]
+        "The audit remediation commits c81a877 (cursor refusal) and ac94b63 (acceptance records) are ancestors of the PR head.",
+        "The record-head run 44202750006 at 9631d30 is green on both platforms and the release gate; commits after ac94b63 change plans/ text only.",
+        "The integration head also carries 2bd42cc (consent-peek fix in the action framework, another module's remediation); the tag build must rebuild at the final merged head and re-verify the hashes."
+      ],
+      "record_head_run": 44202750006,
+      "record_head_commit": "9631d30da6a6719fd829d9ec24ff47b0a6bfe4b4"
     },
     "live_campus_calls": 0,
     "model_calls": 0,
@@ -319,7 +323,8 @@
     "The local read API HEAD performs one read without consuming the 10-second refresh budget, and a bootstrap token is single-use; sessions expire without a restart command.",
     "The legacy learn_assistant.core.prepare_submission still writes an unencrypted local preview JSON containing a local path; it never uploads or submits and is retained as a v0.1 compatibility boundary.",
     "The wheel does not ship node_modules; gateway-backed capabilities report GATEWAY_EXITED until the documented npm ci step runs.",
-    "Real campus login, writes, payments, submissions and model image transfers remain unverified; engineering checks do not raise their evidence level."
+    "Real campus login, writes, payments, submissions and model image transfers remain unverified; engineering checks do not raise their evidence level.",
+    "The artifact hashes were produced at ac94b63; the integration head later received the consent-peek fix 2bd42cc, so Codex must rebuild at the merged head before tagging."
   ],
   "rollback": "Restore the five code paths (local-read-api.schema.json, local_api/contract.py, local_api/samples.py, tests/test_local_api.py and the actions.py docstring) to 8d0606d; /todos, /calendar and /resources then depend on the 6.2 QUERY_EXTENSION and its PENDING_CONTRACT_OWNER_REVISION status returns. Delete the 8.1 records and handoff, and restore the ledgers (batch gate, ownership, acceptance map, VERSION_MANIFEST, progress and version lists) to the batch-7 state. The rollback does not touch user state, keys, sessions, downloads or pending transactions, and the candidate dist directory can be deleted because it is not committed.",
   "next": "Codex reviews the candidate on version PR #2, requests fixes on the same branch if needed, then merges main, tags v0.2.0, publishes the Release and verifies the downloads. Hermes does not merge, tag or publish in this phase.",
@@ -335,7 +340,7 @@
   "accepted_at": "2026-11-18",
   "integration_parent_note": "fb6edb1 is the batch-7 integration commit; 8d0606d is the branch point / record correction that 8.1 actually starts from.",
   "verification_commit": "the commit containing this record file",
-  "branch_head": "3270fdc9f79a79a578e38ad403112a7611fad003 (record-only head after ac94b63)",
+  "branch_head": "the record-only head containing this record (artifact_commit ac94b63; product code ends at c81a877)",
   "integration_branch": "hermes/1-install-diagnostics",
   "integration_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed",
   "audit": {
