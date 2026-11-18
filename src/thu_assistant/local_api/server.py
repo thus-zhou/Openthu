@@ -663,10 +663,15 @@ class LocalApiServer:
               session_key: str) -> Response:
         page_size = int(query.get('page_size', self._limits.page_size_default))
         cursor = query.get('cursor')
+        # Only paged reads need the account dimension.  Health/services/detail
+        # stay free of an identity probe, so their "no live probe" contract is
+        # unchanged.
+        paged = route.name in ('query', 'todos', 'calendar', 'resources')
+        account_scope = self._account_scope() if (cursor or paged) else None
         key = paging.binding(route.name, path_params,
                              {k: v for k, v in query.items() if k != 'cursor'},
                              page_size, session_key,
-                             account_scope=self._account_scope())
+                             account_scope=account_scope)
         service_id, operation = self._read_target(route, path_params)
         if cursor and isinstance(cursor, str) and cursor.startswith(paging.CURSOR_PREFIX + '.'):
             envelope = self._pages.resume(cursor, key)
