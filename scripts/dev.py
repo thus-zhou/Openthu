@@ -178,6 +178,15 @@ def main():
                                  label='隐私扫描进程（runtime.python）',env=env)
                 if scan.returncode:
                     return scan.returncode
+                plan=run_checked([env.get('THU_PYTHON',sys.executable),
+                                  'plans/v0.2.0/工具/validate_plan.py'],
+                                 label='规划校验进程（runtime.python）',env=env,
+                                 capture_output=True)
+                if plan.stdout:
+                    print(plan.stdout,end='')
+                if plan.returncode:
+                    print(plan.stderr,end='',file=sys.stderr)
+                    return plan.returncode
             try:
                 print(json.dumps(smoke(env)))
             except RuntimeError as error:
