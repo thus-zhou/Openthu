@@ -1828,3 +1828,37 @@ def test_a_facade_without_a_method_is_a_capability_gap_not_a_500(tmp_path) -> No
         assert status != 500
     finally:
         instance.stop()
+
+
+def test_facade_client_refusals_keep_their_code_and_status(server, facade, client) -> None:
+    cases = [
+        ('FACADE_SERVICE_UNKNOWN', 404),
+        ('FACADE_OPERATION_NOT_REGISTERED', 404),
+        ('FACADE_QUERY_CANNOT_PROXY', 404),
+        ('FACADE_CAPABILITY_UNAVAILABLE', 409),
+        ('AUTH_REQUIRED', 401),
+    ]
+    for code, expected in cases:
+        facade.errors['query'] = CampusError(code)
+        status, _headers, payload = json_request(
+            server, 'GET', query_path(), headers=auth_headers(client))
+        assert status == expected, code
+        assert payload['error']['code'] == code, code
+        assert payload['error']['code'] != 'LOCAL_API_FACADE_UNAVAILABLE', code
+    facade.errors.pop('query')
+
+
+def test_capability_gap_keeps_its_not_implemented_category(server, facade, client) -> None:
+    facade.errors['query'] = CampusError('FACADE_CAPABILITY_UNAVAILABLE')
+    status, _headers, payload = json_request(
+        server, 'GET', query_path(), headers=auth_headers(client))
+    assert status == 409
+    assert payload['error']['code'] == 'FACADE_CAPABILITY_UNAVAILABLE'
+    assert payload['error']['category'] == 'NOT_IMPLEMENTED'
+    facade.errors.pop('query')
+
+
+def test_ipv6_loopback_base_url_keeps_its_brackets() -> None:
+    client = LocalApiClient('http://[::1]:38413')
+    assert client.base_url == 'http://[::1]:38413'
+    assert (client.hostname, client.port) == ('::1', 38413)

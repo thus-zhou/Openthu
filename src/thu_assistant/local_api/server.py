@@ -598,6 +598,21 @@ class LocalApiServer:
             if code == 'SERVICE_NOT_FOUND_REFRESH_DIRECTORY_OR_USE_URL':
                 raise contract.LocalApiError('LOCAL_API_SERVICE_NOT_FOUND', http_status=404,
                                              message='未在服务目录登记该服务。') from None
+            # A facade client refusal is not a transport failure.  Preserve
+            # its registered code and category instead of folding everything
+            # into 502 LOCAL_API_FACADE_UNAVAILABLE (P2-2).
+            facade_http = {
+                'FACADE_SERVICE_UNKNOWN': 404,
+                'FACADE_OPERATION_NOT_REGISTERED': 404,
+                'FACADE_WRITE_NOT_REGISTERED': 404,
+                'FACADE_QUERY_CANNOT_PROXY': 404,
+                'FACADE_CAPABILITY_UNAVAILABLE': 409,
+                'FACADE_REQUEST_LIMIT': 429,
+                'AUTH_REQUIRED': 401,
+                'ACTION_ACCOUNT_MISMATCH': 409,
+            }
+            if isinstance(code, str) and code in facade_http:
+                raise contract.LocalApiError(code, http_status=facade_http[code]) from None
             self._logger.warning('local_api_facade_error instance=%s type=%s',
                                  self.instance_id, type(error).__name__)
             raise contract.LocalApiError('LOCAL_API_FACADE_UNAVAILABLE',

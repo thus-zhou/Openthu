@@ -24,7 +24,8 @@ class LocalApiClient:
             raise ValueError('the local client only connects to a loopback origin')
         if parsed.port is None:
             raise ValueError('the local client needs an explicit loopback port')
-        self.base_url = f'http://{parsed.hostname}:{parsed.port}'
+        host = f'[{parsed.hostname}]' if ':' in parsed.hostname else parsed.hostname
+        self.base_url = f'http://{host}:{parsed.port}'
         self.hostname = parsed.hostname
         self.port = int(parsed.port)
         self._bootstrap_token = token
