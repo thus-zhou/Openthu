@@ -352,16 +352,19 @@ class LearnAssistant:
             path = Path(raw_path).expanduser().resolve()
             path_key = str(path).casefold()
             if path_key in seen_paths:
-                errors.append(f"重复指定文件：{path}")
+                errors.append(f"重复指定文件：{path.name}")
                 continue
             seen_paths.add(path_key)
-            record: dict[str, Any] = {"path": str(path), "exists": path.exists()}
+            # Only the display name, size and hash cross the local boundary.
+            # The absolute path stays inside this method; it is not copied to
+            # the MCP result or to the plaintext confirmation preview.
+            record: dict[str, Any] = {"name": path.name, "exists": path.exists()}
             if not path.exists():
-                errors.append(f"文件不存在：{path}")
+                errors.append(f"文件不存在：{path.name}")
                 files.append(record)
                 continue
             if not path.is_file():
-                errors.append(f"路径不是普通文件：{path}")
+                errors.append(f"路径不是普通文件：{path.name}")
                 files.append(record)
                 continue
             size = path.stat().st_size
@@ -404,10 +407,16 @@ class LearnAssistant:
                 else "本地校验未通过；未生成可提交的文件集合。"
             ),
         }
-        preview_path = self.system_data_root / "submission-previews" / f"{operation_id}.json"
-        summary["preview_path"] = str(preview_path)
-        preview_path.parent.mkdir(parents=True, exist_ok=True)
+        # The preview is legacy plaintext (documented in the source matrix);
+        # keep it owner-only and return a logical name, never a local path.
+        preview_name = f"submission-previews/{operation_id}.json"
+        preview_dir = self.system_data_root / "submission-previews"
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(preview_dir, 0o700)
+        preview_path = preview_dir / f"{operation_id}.json"
+        summary["preview"] = preview_name
         preview_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.chmod(preview_path, 0o600)
         return summary
 
     def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:

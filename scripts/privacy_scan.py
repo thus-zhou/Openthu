@@ -14,6 +14,18 @@ FORBIDDEN={'creds.json','credentials.json','cookies.json','session.json','token.
 SYNTHETIC_POSIX_USERS={
     'synthetic','synthetic-private','synthetic-marker','example','alice','someone','user','web',
 }
+# RFC 2606/6761 reserved names are used by fixtures and documentation.  They
+# can never be a real student address, so the email rule ignores them.
+SYNTHETIC_EMAIL_DOMAINS={'example.com','example.org','example.net'}
+# URL userinfo in documentation uses these placeholder local parts; they are
+# credentials, not student addresses.
+SYNTHETIC_EMAIL_USERS={'user','pass','pw'}
+# Generated/minified bundles contain long integer constants that can match the
+# 10-digit shape; real ids appear on ordinary source or document lines.
+MAX_STUDENT_ID_LINE=2000
+# The two 10-digit values used by synthetic tests; a real student id is not
+# listed here and is reported.
+SYNTHETIC_STUDENT_IDS={'2023000001','2023000002'}
 PATTERNS={
     'private-key':re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----'),
     'github-token':re.compile(r'\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b'),
@@ -23,7 +35,46 @@ PATTERNS={
     'windows-user-path':re.compile(r'(?i)[a-z]:[\\/]+Users[\\/]+(?!Public\b|Default\b|example\b|user\b)[^\s"\'<>/\\]+'),
     'posix-user-path':re.compile(r'(?<![\w.-])/(?:home|Users)/([^/\s"\'<>\[\]]+)'),
     'private-host-ip':re.compile(r'(?<![\d.])(?:10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2})(?![\d.])'),
+    'email':re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'),
+    'tsinghua-email':re.compile(r'\b[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)*tsinghua\.edu\.cn\b',re.I),
+    'student-id':re.compile(r'\b20\d{8}\b'),
 }
+# A binary member still carries readable secrets and addresses; path and
+# student-id patterns are text-only to avoid random-byte false positives.
+BINARY_RULES=('private-key','github-token','api-token','aws-access-key','jwt','email','tsinghua-email')
+
+
+def _synthetic_email(match, text):
+    address=match.group(0)
+    local,_,domain=address.rpartition('@')
+    domain=domain.casefold().rstrip('.')
+    if domain in SYNTHETIC_EMAIL_DOMAINS or domain.endswith('.invalid') or domain.endswith('.example'):
+        return True
+    # ``https://user:pass@host/`` is URL userinfo, not an email address.
+    return (match.start()>0 and text[match.start()-1]==':'
+            and local.casefold() in SYNTHETIC_EMAIL_USERS)
+
+
+def _line_length(text, position):
+    start=text.rfind('\n',0,position)+1
+    end=text.find('\n',position)
+    return (len(text) if end<0 else end)-start
+
+
+def _scan(text, rules):
+    result=[]
+    for rule in rules:
+        pattern=PATTERNS[rule]
+        for match in pattern.finditer(text):
+            if rule=='posix-user-path' and match.group(1).casefold() in SYNTHETIC_POSIX_USERS:
+                continue
+            if rule in ('email','tsinghua-email') and _synthetic_email(match,text):
+                continue
+            if rule=='student-id' and (match.group(0) in SYNTHETIC_STUDENT_IDS
+                                        or _line_length(text,match.start())>MAX_STUDENT_ID_LINE):
+                continue
+            result.append({'file':None,'line':text.count('\n',0,match.start())+1,'rule':rule})
+    return result
 
 
 def findings(name: str,data: bytes):
@@ -32,23 +83,32 @@ def findings(name: str,data: bytes):
     if (base in FORBIDDEN or base=='.env' or (base.startswith('.env.') and base!='.env.example')
             or base.endswith(('.dpapi','.pem','.key','.p12','.pfx','.sqlite','.db'))):
         result.append({'file':name,'line':0,'rule':'sensitive-file'})
-    if b'\0' in data[:8192]:return result
-    try:text=data.decode('utf-8-sig')
-    except UnicodeDecodeError:return result
-    for rule,pattern in PATTERNS.items():
-        for match in pattern.finditer(text):
-            if rule=='posix-user-path' and match.group(1).casefold() in SYNTHETIC_POSIX_USERS:
-                continue
-            result.append({'file':name,'line':text.count('\n',0,match.start())+1,'rule':rule})
+    if b'\0' in data[:8192]:
+        text=data.decode('latin-1')
+        rows=_scan(text,BINARY_RULES)
+    else:
+        try:text=data.decode('utf-8-sig')
+        except UnicodeDecodeError:
+            text=data.decode('latin-1')
+            rows=_scan(text,BINARY_RULES)
+        else:
+            rows=_scan(text,tuple(PATTERNS))
+    for row in rows:
+        row['file']=name
+        result.append(row)
     return result
 
 
 def source_files():
     if (ROOT/'.git').is_dir():
-        result=subprocess.run(['git','ls-files','-z'],cwd=ROOT,capture_output=True,check=True)
+        result=subprocess.run(
+            ['git','ls-files','-z','--cached','--others','--exclude-standard'],
+            cwd=ROOT,capture_output=True,check=True)
         files=[ROOT/p.decode('utf-8') for p in result.stdout.split(b'\0') if p]
         if files:
-            return files
+            # --cached and --others do not overlap, but keep the scanner
+            # deterministic if a future Git version changes that.
+            return sorted(dict.fromkeys(files))
     return [p for p in ROOT.rglob('*') if p.is_file() and not any(x in EXCLUDED or x.endswith('.egg-info') for x in p.relative_to(ROOT).parts)]
 
 

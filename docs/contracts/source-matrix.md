@@ -55,7 +55,7 @@
 | 位置 | 旧说明或表面行为 | 当前代码事实 | 状态 |
 |---|---|---|---|
 | `src/thu_assistant/actions.py` 顶部 | 早期 docstring 写“No campus write adapter is enabled in block 5” | docstring 已改为已注册的图书馆座位/研讨间与体育创建、取消，并保留“真实事项需当次授权”的边界 | 8.1 已更正 |
-| `src/learn_assistant/core.py` 的 `prepare_submission` | 2.3 的 `prepare` 边界写“只写本地加密计划” | 5.3 的门面路径使用受控的提交计划；旧 v0.1 兼容方法仍把摘要写到 `system_data_root/submission-previews/*.json`（未加密、含本地路径、不上传不提交） | 保留：只在本机状态目录，候选记录登记，不改变旧兼容行为 |
+| `src/learn_assistant/core.py` 的 `prepare_submission` | 2.3 的 `prepare` 边界写“只写本地加密计划” | 5.3 的门面路径使用受控的提交计划；旧 v0.1 兼容方法只在 `system_data_root/submission-previews/` 写用户本人可读（目录 0700、文件 0600）的明文摘要，返回值只含文件 `name`/`bytes`/`sha256` 与相对 `preview` 名，不含本地绝对路径；不上传、不提交 | 已按总审计 P1-4 收紧：路径不外泄、权限仅本人 |
 | `learn.calendar` 的 `fl` | 旧事件字典把 `fl` 放进 `status` | 统一事件按 `BUSINESS_STATUS` 映射，`fl` 不作为日历状态 | 5.4 已按来源字段处理 |
 | `library.catalog_detail` 的 `borrowable` | 表面是布尔值 | 不可借时为 `False`，否则为 `None`，并带 `borrowable_state=UNVERIFIED` | 4.3 保留三态，未写成可借 |
 | `sports.availability` 的 `available`/费用 | 表面是“可预约/价格” | 只是余量与报价，不是预约或付款回执 | 4.3/5.2 保留来源证据 |

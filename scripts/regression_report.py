@@ -869,7 +869,7 @@ def privacy_scan_source() -> dict:
         findings.extend(scanner.findings(name, data))
     return {"ok": not findings, "files_checked": count,
             "findings": findings[:50], "finding_count": len(findings),
-            "scope": "tracked-source"}
+            "scope": "worktree-source"}
 
 
 def privacy_scan_archives(paths: list[Path]) -> dict:

@@ -1087,3 +1087,41 @@ def test_installed_doctor_flags_a_missing_bundle(tmp_path):
 
 
 
+
+
+def test_scanner_covers_email_and_student_id_but_skips_synthetic_placeholders():
+    scanner=load('privacy_scan')
+    # Assembled at runtime: the canary itself must not appear in this source
+    # file, or the worktree scan would (correctly) flag the test.
+    address='student'+'@'+'mails'+'.tsinghua.edu.cn'
+    student_id='2023'+'012345'
+    rows=scanner.findings('notes.txt',
+                          ('学生 %s 学号 %s' % (address,student_id)).encode('utf-8'))
+    assert {'email','tsinghua-email','student-id'} <= {row['rule'] for row in rows}
+    synthetic='maintainers@openthu.invalid tests@example.invalid https://user:pass@example.invalid/ 2023000001 2023000002'
+    assert scanner.findings('synthetic.txt',synthetic.encode('utf-8'))==[]
+
+
+def test_scanner_checks_binary_members_for_high_signal_values():
+    scanner=load('privacy_scan')
+    token='ghp_'+'b'*36
+    address='student'+'@'+'mails'+'.tsinghua.edu.cn'
+    rows=scanner.findings('blob.bin',b'\x00\x01'+token.encode()
+                          +b' '+address.encode())
+    assert {'github-token','email','tsinghua-email'} <= {row['rule'] for row in rows}
+    assert token not in json.dumps(rows)
+
+
+def test_source_files_include_untracked_non_ignored_files(monkeypatch):
+    scanner=load('privacy_scan')
+    captured={}
+    class Result:
+        stdout=b'tracked.py\0untracked.py\0'
+    def fake_run(argv,**kwargs):
+        captured['argv']=argv
+        return Result()
+    monkeypatch.setattr(scanner.subprocess,'run',fake_run)
+    files=scanner.source_files()
+    assert '--others' in captured['argv']
+    assert '--exclude-standard' in captured['argv']
+    assert [path.name for path in files]==['tracked.py','untracked.py']
