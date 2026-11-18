@@ -45,12 +45,22 @@ def gateway_environment(env: dict[str, str] | None = None) -> dict[str, str]:
     """
     source = dict(os.environ if env is None else env)
     defaults = paths.default_paths(env=source)
-    raw_state = (
+    explicit_state = (
         source.get("OPENTHU_STATE_DIR")
         or source.get("THU_ASSISTANT_STATE_DIR")
-        or str(defaults.state_dir)
     )
-    state = _absolute_path(raw_state, "storage.state_dir")
+    if explicit_state:
+        state = _absolute_path(explicit_state, "storage.state_dir")
+    else:
+        # The gateway owns session/credential state, so it must follow the
+        # same layered configuration as catalog.state_root().  Falling back
+        # only to paths.default_paths() would split Python state and gateway
+        # state when storage.state_dir comes from the config file.
+        try:
+            from .configuration import ConfigurationError, load_config
+            state = load_config(env=source).storage.state_dir
+        except (ConfigurationError, OSError, ValueError):
+            state = defaults.state_dir
     result = dict(source)
     result["OPENTHU_STATE_DIR"] = str(state)
     result["THU_ASSISTANT_STATE_DIR"] = str(state)

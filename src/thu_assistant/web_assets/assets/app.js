@@ -409,8 +409,8 @@
     model = withNotEnabled(model, body, result.httpStatus);
     if (result.httpStatus > 501 && body.error
         && body.error.code === 'LOCAL_API_FACADE_UNAVAILABLE') {
-      // The local API currently collapses facade exceptions into one 502
-      // code.  Show a real error, not the UNKNOWN display state.
+      // A genuine facade/transport failure stays 502 after client refusals
+      // keep their own 404/409/429.  Show a real error, not UNKNOWN.
       model = localModel('ERROR', '业务门面不可用。', '稍后重试；其他卡片不受影响。',
         {requestId: result.requestId});
     }
