@@ -1171,7 +1171,7 @@
         "2.3: the source-matrix difference register was rewritten to the observed resolved/retained state; the v0.1 preview boundary is kept.",
         "6.2: the QUERY_EXTENSION note and the describe_api query_extension field were removed after the contract declared the parameter.",
         "7.2 (.github/workflows/ci.yml, scripts/regression_report.py): the test job checks out full history and the batch-7/batch-8 test files are attributed; job names, matrix and gate semantics unchanged.",
-        "9.1: rebuild and re-verify the candidate at the final merged head before tagging; the recorded SHA256 set belongs to ac94b63.",
+        "9.1: rebuild and re-verify the candidate at the final merged head before tagging; the recorded SHA256 set belongs to 2bd42cc.",
         "4.4 (src/thu_assistant/consent/store.py, tests/test_action_framework.py): the integrator fixed the peek/take race surfaced by the batch-8 3.13 CI; peek now shares the consent lock and treats a vanished grant as absent; no authorization semantics changed."
       ]
     },

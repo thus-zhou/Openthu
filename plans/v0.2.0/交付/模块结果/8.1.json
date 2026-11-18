@@ -188,7 +188,7 @@
         "ok": true,
         "files_checked": 1840,
         "findings": 0,
-        "note": "Final candidate at ac94b63: 565 source members x2 + 214 wheel + 496 sdist = 1,840; the earlier 9b1bef5 rehearsal scanned 1,825."
+        "note": "Final candidate at 2bd42cc: 565 source members x2 + 214 wheel + 496 sdist = 1,840; the earlier 9b1bef5 rehearsal scanned 1,825."
       },
       "git_diff": "added absolute paths are synthetic test markers (alice/synthetic/example); no real host path, credential or private key block",
       "author_identity": "Openthu Maintainers <maintainers@openthu.invalid>"
@@ -358,7 +358,7 @@
     "every new integration test file is registered for failure attribution, so a failure is attributed to its batch instead of unmapped"
   ],
   "limits": [
-    "The candidate record documents the final artifact set rebuilt by the release gate at ac94b63 and the earlier local rehearsal at 9b1bef5; rebuilding at the record head changes only record text, but the tag must be built at the final merged head and its hashes re-verified.",
+    "The candidate record documents the final artifact set rebuilt by the release gate at 2bd42cc and the earlier local rehearsal at 9b1bef5; rebuilding at the record head changes only record text, but the tag must be built at the final merged head and its hashes re-verified.",
     "Windows results come from GitHub Actions, not a local Windows host; Linux was executed locally.",
     "Firefox and Safari static-subresource behaviour (Sec-Fetch-Mode) remains unverified; only Chromium was exercised.",
     "The local read API HEAD performs one read without consuming the 10-second refresh budget, and a bootstrap token is single-use; sessions expire without a restart command.",
@@ -407,7 +407,7 @@
     ]
   },
   "artifact_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
-  "candidate_head": "the commit containing this record file (record-only after ac94b63)",
+  "candidate_head": "the commit containing this record file (record-only after 2bd42cc)",
   "integration_fixes": [
     "S12: a concurrent take() could make peek() report STATE_READ_FAILED for a grant it had just consumed; peek now shares the consent lock and reports a vanished grant as absent, with a deterministic regression test."
   ]
