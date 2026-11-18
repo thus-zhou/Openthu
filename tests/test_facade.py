@@ -775,3 +775,40 @@ def test_legacy_unbacked_write_keeps_its_prepare_shape(monkeypatch, tmp_path):
     with pytest.raises(CampusError) as caught:
         a.facade.execute(plan['plan_id'], '对本次合成事项的明确人工授权')
     assert caught.value.code == 'ADAPTER_REQUIRED'
+
+
+def test_write_switch_off_uses_the_registered_service_specific_code(monkeypatch, tmp_path):
+    a = assistant(monkeypatch, tmp_path)
+    monkeypatch.setenv('THU_LIBRARY_WRITE', '0')
+    entry = a.facade.capability('library', 'create_seat_reservation')
+    assert (entry.state, entry.reason) == ('DISABLED', 'LIBRARY_WRITES_DISABLED')
+    with pytest.raises(facade_errors.FacadeError) as caught:
+        a.facade.prepare('library', 'create_seat_reservation', {})
+    assert caught.value.code == 'LIBRARY_WRITES_DISABLED'
+    public = caught.value.public()
+    assert public['code'] == 'LIBRARY_WRITES_DISABLED'
+    assert public['category'] == 'PERMISSION'
+
+
+def test_describe_counts_the_live_tool_surface(monkeypatch, tmp_path):
+    a = assistant(monkeypatch, tmp_path)
+    from thu_assistant import mcp_stdio
+    monkeypatch.setattr(mcp_stdio, 'TOOLS', mcp_stdio.TOOLS[:-1])
+    described = a.facade.describe()
+    assert described['tool_count'] == len(mcp_stdio.TOOLS) == 28
+    assert described['legacy_tools_unchanged'] is False
+
+
+def test_mcp_prepare_reports_a_disabled_switch_as_permission(monkeypatch, tmp_path):
+    a = assistant(monkeypatch, tmp_path)
+    monkeypatch.setenv('THU_LIBRARY_WRITE', '0')
+    response = McpServer(a).handle({
+        'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+        'params': {'name': 'prepare_service_action',
+                   'arguments': {'service_id': 'library',
+                                 'operation': 'create_seat_reservation',
+                                 'parameters': {}}}})
+    assert response['result']['isError'] is True
+    error = response['result']['structuredContent']['error']
+    assert error['code'] == 'LIBRARY_WRITES_DISABLED'
+    assert error['category'] == 'PERMISSION'

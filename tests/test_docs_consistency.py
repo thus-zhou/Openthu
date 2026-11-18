@@ -353,7 +353,7 @@ def test_switched_off_is_the_documented_evidence_for_a_disabled_write(monkeypatc
     row = next(entry for entry in entries
                if entry.service_id == "library" and entry.operation == "create_seat_reservation")
     assert row.state == "DISABLED"
-    assert row.reason == "WRITES_DISABLED"
+    assert row.reason == "LIBRARY_WRITES_DISABLED"
     assert row.evidence == "SWITCHED_OFF"
     text = (ROOT / "docs" / "CAPABILITIES.md").read_text(encoding="utf-8")
     assert "`SWITCHED_OFF`（写开关关闭，对应 `DISABLED`）" in text

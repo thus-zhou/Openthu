@@ -65,6 +65,20 @@ def action_enabled(service):
     if service=="sports":return sports_enabled()
     return False
 
+
+def writes_disabled_code(service):
+    """A registered code for 'the write switch is off' for this service.
+
+    The generic ``WRITES_DISABLED`` is registered as PERMISSION for services
+    without their own switch code; library and sports keep the more specific
+    codes so a client can distinguish which switch it must turn on.
+    """
+    if str(service).startswith('library'):
+        return 'LIBRARY_WRITES_DISABLED'
+    if service == 'sports':
+        return 'SPORTS_WRITES_DISABLED'
+    return 'WRITES_DISABLED'
+
 def sports_enabled():
     return os.environ.get('THU_SPORTS_WRITE','1') != '0' and os.environ.get('THU_SPORTS_READ','1') != '0'
 
@@ -113,7 +127,7 @@ def next_actions(record):
 
 def describe_actions(service_id):
     return [{'operation':op,'parameters_schema':deepcopy(c.get('input_schema',c['schema'])),'required_business_fields':list(c['required']),
-        'adapter_version':c['version'],'enabled':c['enabled'] and action_enabled(service_id),'reason':(('READY' if action_enabled(service_id) else 'WRITES_DISABLED') if c['enabled'] else (c.get('disabled_reason') or 'ADAPTER_REQUIRED')),
+        'adapter_version':c['version'],'enabled':c['enabled'] and action_enabled(service_id),'reason':(('READY' if action_enabled(service_id) else writes_disabled_code(service_id)) if c['enabled'] else (c.get('disabled_reason') or 'ADAPTER_REQUIRED')),
         'request_sequence':c['request_sequence'],'prechecks':list(c['prechecks']),
         'critical_fields':c['critical_fields'],'risk_conditions':c['risk_conditions'],'reconciliation':c['reconciliation'],
         'reconciliation_scope':c.get('reconciliation_scope')}

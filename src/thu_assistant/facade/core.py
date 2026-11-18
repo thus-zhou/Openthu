@@ -31,6 +31,32 @@ VERSION = reg.VERSION
 METHODS = ('query', 'health', 'prepare', 'execute', 'result', 'cancel')
 LOCAL_METHODS = ('describe', 'describe_service', 'export_agenda')
 
+# The frozen 29-name MCP surface from
+# contracts/v0.2/compatibility-baseline.json ``mcp_tools``.  ``describe()``
+# compares the live list with this tuple; a contract test keeps the tuple and
+# the baseline identical, so a deliberate surface change must update both.
+FROZEN_LEGACY_TOOL_NAMES = (
+    'list_courses', 'list_assignments', 'get_assignment', 'list_course_files',
+    'download_files', 'prepare_submission', 'login', 'get_login_status',
+    'list_services', 'refresh_service_directory', 'describe_service',
+    'query_service', 'prepare_service_action', 'execute_service_action',
+    'get_action_result', 'read_page', 'download_campus_file', 'get_service_status',
+    'list_models', 'get_todos', 'model_chat', 'browser_open', 'browser_snapshot',
+    'browser_scroll', 'browser_fill', 'browser_click', 'prepare_browser_action',
+    'execute_browser_action', 'browser_close',
+)
+
+
+def _tool_surface_report():
+    """Count and compare the live MCP tool list with the frozen baseline."""
+    try:
+        from ..mcp_stdio import TOOLS
+        names = tuple(tool.get('name') for tool in TOOLS if isinstance(tool, dict))
+    except Exception:
+        return 0, False
+    return len(names), names == FROZEN_LEGACY_TOOL_NAMES
+
+
 # A read entry may never forward an HTTP method, an authentication header, a
 # token or a body to an upstream.  ``url`` stays allowed only for the already
 # registered page/read operations, which validate the host separately.
@@ -127,6 +153,15 @@ class BusinessFacade:
             return account
         raise CampusError('ACTION_ACCOUNT_MISMATCH')
 
+    def account_scope(self) -> str:
+        """The campus account bound to this facade's reads (P2-6 cursor key).
+
+        This is an auxiliary identity seam, not a seventh facade method: the
+        frozen method set stays ``METHODS``.  It raises ``ACTION_ACCOUNT_MISMATCH``
+        when no identity is available, matching ``_account()``.
+        """
+        return self._account()
+
     def providers(self) -> reg.Providers:
         return reg.Providers(
             actions=getattr(self.owner, 'actions', None),
@@ -186,12 +221,13 @@ class BusinessFacade:
                 'blocked': sum(1 for row in rows if row.state != 'AVAILABLE'),
                 'state': _aggregate(rows),
             }
+        tool_count, tools_unchanged = _tool_surface_report()
         return {
             'version': VERSION,
             'methods': {name: _METHOD_DOC[name] for name in METHODS},
             'local_methods': {name: _LOCAL_DOC[name] for name in LOCAL_METHODS},
-            'tool_count': 29,
-            'legacy_tools_unchanged': True,
+            'tool_count': tool_count,
+            'legacy_tools_unchanged': tools_unchanged,
             'services': state['services'],
             'states': state['states'],
             'blockers': [entry.public() for entry in entries if entry.blocking],
