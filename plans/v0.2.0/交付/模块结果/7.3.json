@@ -193,7 +193,7 @@
     "README installs Chromium before dev.py test and the real browser test passes in the provisioned environment",
     "resources without a semester returns INVALID_ARGUMENT_VALUE, resources with a semester but no provider returns FACADE_CAPABILITY_UNAVAILABLE, and todos/calendar bad ranges return INVALID_DATE_RANGE, each as an ERROR envelope with empty items",
     "the loopback /api/v1/resources?semester=... route returns HTTP 200 with FACADE_CAPABILITY_UNAVAILABLE instead of a 502",
-    "THU_LIBRARY_WRITE=0 produces DISABLED/WRITES_DISABLED/SWITCHED_OFF for library writes, and the evidence value is documented",
+    "THU_LIBRARY_WRITE=0 produces DISABLED/LIBRARY_WRITES_DISABLED/SWITCHED_OFF for library writes, and the evidence value is documented",
     "local.resources reports MISSING/RESOURCE_PROVIDER_UNAVAILABLE/LOCAL_INDEX_READ and visitors.* reports MISSING/ADAPTER_REQUIRED/NO_PROVIDER in the gap table",
     "migration preview marks a .dpapi file UNSUPPORTED_PLATFORM while LegacyDpapiReader returns SECURE_LEGACY_UNAVAILABLE at runtime",
     "the dashboard shell wording says 7.1 provides it and 8.1 still has to wire static_dir; the current CLI has no static_dir and / returns LOCAL_API_UI_NOT_INSTALLED",

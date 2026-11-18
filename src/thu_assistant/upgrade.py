@@ -289,7 +289,14 @@ def preview(
         legacy_root = paths.legacy_state_dir(env=env, platform_name=platform_name)
         legacy_source = paths.legacy_state_source(env=env, platform_name=platform_name)
     if target_root is None:
-        target_root = paths.default_paths(env=env, platform_name=platform_name).state_dir
+        # Migration must land where the runtime actually reads/writes state.
+        # catalog.state_root() follows the layered configuration, so a custom
+        # storage.state_dir in the config file must not be bypassed here.
+        try:
+            from .configuration import ConfigurationError, load_config
+            target_root = load_config(env=env, platform_name=platform_name).storage.state_dir
+        except (ConfigurationError, OSError, ValueError):
+            target_root = paths.default_paths(env=env, platform_name=platform_name).state_dir
     legacy = _absolute_root(legacy_root, "migration.from")
     target = _absolute_root(target_root, "migration.to")
     if key_file is not None:

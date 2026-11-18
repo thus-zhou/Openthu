@@ -152,7 +152,16 @@ class LocalApiServer:
         self._facade = facade if facade is not None else facade_module.UnavailableFacade()
         self._executor_workers = max(1, int(executor_workers))
         self._priority_workers = 2
-        base_state = Path(state_dir) if state_dir is not None else path_module.default_paths().state_dir
+        if state_dir is not None:
+            base_state = Path(state_dir)
+        else:
+            # The bootstrap file is local state too; follow the same resolved
+            # directory as catalog.state_root() instead of only the default.
+            try:
+                from ..catalog import state_root
+                base_state = state_root()
+            except Exception:
+                base_state = path_module.default_paths().state_dir
         self.instance_id = secrets.token_hex(16)
         self._sessions = security.SessionStore(
             instance_id=self.instance_id, clock=clock,
