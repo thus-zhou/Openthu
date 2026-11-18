@@ -34,7 +34,7 @@
         "1.1": "accepted"
       },
       "status": "accepted",
-      "integration_commit": "the commit containing this accepted record",
+      "integration_commit": "2fcc0a6252653f484aa21a2b5a96967375c48e6d",
       "accepted_at": "2026-11-16",
       "entry_condition": "baseline and contracts frozen",
       "exit_condition": "all modules accepted; contracts connected; check and full offline suite pass",

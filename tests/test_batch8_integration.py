@@ -216,3 +216,12 @@ def test_the_integration_and_candidate_records_exist() -> None:
     assert "candidate-not-released" in candidate
     assert "SHA256" in candidate or "sha256" in candidate
 
+
+
+def test_every_accepted_batch_has_a_real_integration_commit() -> None:
+    gate = _delivery_json("批次门禁.json")
+    for batch in gate["batches"]:
+        if batch["status"] != "accepted":
+            continue
+        commit = batch.get("integration_commit") or ""
+        assert re.fullmatch(r"[0-9a-f]{40}", commit), (batch["batch"], commit)
