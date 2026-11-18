@@ -25,11 +25,12 @@ MAX_BYTES = 16 * 1024 * 1024
 
 
 def binding(route: str, path: Mapping[str, str], query: Mapping[str, Any],
-            page_size: int, session: str) -> str:
+            page_size: int, session: str, account_scope: str | None = None) -> str:
     payload = {'route': route, 'path': dict(sorted(path.items())),
                'query': dict(sorted((key, query[key]) for key in query
                                     if key not in ('cursor', 'page_size'))),
-               'page_size': page_size, 'session': session}
+               'page_size': page_size, 'session': session,
+               'account_scope': account_scope}
     return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False,
                                      default=str).encode('utf-8')).hexdigest()
 

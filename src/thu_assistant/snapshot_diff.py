@@ -41,6 +41,11 @@ CURSOR_VERSION = 'evc1'
 DEFAULT_MAX_AGE = timedelta(days=7)
 DEFAULT_CURSOR_TTL = 600
 MAX_SNAPSHOT_BYTES = 32 * 1024 * 1024
+# The per-account SEQUENCE table keeps UIDs that are outside the current
+# export window so an event that comes back later continues its monotonic
+# sequence.  The bound keeps that memory finite; the most recently touched
+# rows are retained.
+MAX_SEQUENCE_ROWS = 4096
 
 TZ = timezone(timedelta(hours=8))
 _DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
@@ -657,6 +662,22 @@ class IncrementalStore:
             return False
         return True
 
+    def _merge_sequences(self, account, known, updates):
+        """Persist ``updates`` without dropping UIDs outside this export.
+
+        A missing UID is not proof of cancellation: an ICS export may simply
+        use a different date window.  Keeping the previous row is what makes
+        SEQUENCE monotonic when the event returns.  Re-inserting touched keys
+        puts them at the end so the bounded table drops the coldest rows first.
+        """
+        merged = dict(known or {})
+        for uid, row in (updates or {}).items():
+            merged.pop(uid, None)
+            merged[uid] = row
+        if len(merged) > MAX_SEQUENCE_ROWS:
+            merged = dict(list(merged.items())[-MAX_SEQUENCE_ROWS:])
+        return merged
+
     def observe(self, events, *, account):
         """Assign monotonic sequences without creating or advancing a baseline.
 
@@ -681,7 +702,7 @@ class IncrementalStore:
                 sequence = 0
             item['sequence'] = sequence
             updated[uid] = {'sequence': sequence, 'digest': digest}
-        self._save_sequences(account, updated)
+        self._save_sequences(account, self._merge_sequences(account, known, updated))
         return {uid: row['sequence'] for uid, row in updated.items()}
 
     def query(self, current, *, account, scope, cursor=None, canonical_version=VERSION,
@@ -726,7 +747,7 @@ class IncrementalStore:
                     'sequence': max(0, int(item.get('sequence') or 0)),
                     'digest': semantic_digest(item),
                 }
-        if not self._save_sequences(account, sequence_rows):
+        if not self._save_sequences(account, self._merge_sequences(account, known, sequence_rows)):
             warnings.add('SNAPSHOT_SEQUENCE_PERSIST_FAILED')
         result['next_cursor'] = self.cursors.issue(account=account, scope_hash=scope_hash,
                                                    snapshot=snapshot)

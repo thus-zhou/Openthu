@@ -86,10 +86,15 @@ class FixtureFacade:
         self.delay: dict[str, float] = {}
         self.errors: dict[str, BaseException] = {}
         self.responses: dict[str, object] = {}
+        self.account = 'fixture-account'
         self.health_rows = [
             {'service_id': 'learn', 'status': 'OK', 'checked_at': '2026-11-17T12:00:00+08:00',
              'complete': True},
         ]
+
+    def account_scope(self):
+        """The campus account this fixture would read as (P2-6 binding)."""
+        return self.account
 
     def _resolve(self, name: str, default, cancel=None):
         self.calls.append(name)
@@ -813,6 +818,26 @@ def test_every_paged_route_slices_and_resumes(name, path, facade_name, service, 
     ids = [row['event_id'] for row in first['items'] + second['items'] + third['items']]
     assert len(ids) == len(set(ids)) == 5
     assert facade.calls.count(facade_name) == 1
+
+
+def test_lac1_cursor_is_bound_to_the_campus_account(server, facade, client) -> None:
+    _set_paged_response(facade, 'todos', 'agenda', 'todos')
+    status, _headers, first = json_request(
+        server, 'GET', '/api/v1/todos?page_size=2', headers=auth_headers(client))
+    assert status == 200 and first['next_cursor'].startswith(paging.CURSOR_PREFIX + '.')
+    facade.account = 'other-campus-account'
+    status, _headers, payload = json_request(
+        server, 'GET', '/api/v1/todos?page_size=2&cursor=' + first['next_cursor'],
+        headers=auth_headers(client))
+    assert status == 400
+    assert payload['error']['code'] == 'CURSOR_QUERY_MISMATCH'
+
+
+def test_paging_binding_includes_the_account_scope() -> None:
+    same = paging.binding('todos', {}, {}, 2, 'session', account_scope='acct_one')
+    assert same == paging.binding('todos', {}, {}, 2, 'session', account_scope='acct_one')
+    assert same != paging.binding('todos', {}, {}, 2, 'session', account_scope='acct_two')
+    assert same != paging.binding('todos', {}, {}, 2, 'session', account_scope=None)
 
 
 @pytest.mark.parametrize('name,path,facade_name,service,operation,extra', PAGED_ROUTES)

@@ -821,3 +821,45 @@ def _snapshot(items, *, complete=True, status='SUCCESS', source='learn.assignmen
             'sources': {source: _source_record(
                 source, complete=complete, status=status,
                 pages=1 if status != 'FAILED' else 0)}}
+
+
+def _sequence_event(uid, title):
+    """A calendar-valid event in the scope used by the incremental store."""
+    item = calendar_event(uid=uid, title=title)
+    item['calendar_valid'] = True
+    item['source_id'] = 'learn.assignments'
+    return item
+
+
+def test_observe_keeps_sequences_for_events_outside_the_window():
+    incremental = snapshot_diff.IncrementalStore(
+        store=snapshot_diff.SnapshotStore(backend=snapshot_diff.MemoryBackend()),
+        now=lambda: NOW)
+    assert incremental.observe([_sequence_event('UID-A', 'old')], account='acct')['UID-A'] == 0
+    assert incremental.observe([_sequence_event('UID-A', 'new')], account='acct')['UID-A'] == 1
+    observed = incremental.observe([_sequence_event('UID-B', 'other')], account='acct')
+    assert observed == {'UID-B': 0}
+    known = incremental._load_sequences('acct')
+    assert known['UID-A']['sequence'] == 1
+    assert incremental.observe([_sequence_event('UID-A', 'newer')], account='acct')['UID-A'] == 2
+
+
+def test_query_keeps_sequences_when_an_event_leaves_and_returns():
+    incremental = snapshot_diff.IncrementalStore(
+        store=snapshot_diff.SnapshotStore(backend=snapshot_diff.MemoryBackend()),
+        now=lambda: NOW)
+    scope = _scope()
+    first = incremental.query(_snapshot([_sequence_event('UID-A', 'old')], account='acct'),
+                              account='acct', scope=scope)
+    assert first['sequences']['UID-A'] == 0
+    second = incremental.query(_snapshot([_sequence_event('UID-A', 'new')], account='acct'),
+                               account='acct', scope=scope)
+    assert second['sequences']['UID-A'] >= 1
+    previous = second['sequences']['UID-A']
+    absent = incremental.query(_snapshot([_sequence_event('UID-B', 'other')], account='acct'),
+                               account='acct', scope=scope)
+    assert 'UID-A' not in absent['sequences']
+    assert incremental._load_sequences('acct')['UID-A']['sequence'] == previous
+    returned = incremental.query(_snapshot([_sequence_event('UID-A', 'newer')], account='acct'),
+                                 account='acct', scope=scope)
+    assert returned['sequences']['UID-A'] >= previous + 1

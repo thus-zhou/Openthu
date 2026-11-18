@@ -623,6 +623,27 @@ class LocalApiServer:
                 message='业务门面返回了无法识别的结果。')
         return dict(envelope)
 
+    def _account_scope(self) -> str:
+        """Account dimension for the ``lac1`` paging key.
+
+        A cursor must not survive a campus-account switch inside one local
+        session.  The facade exposes ``account_scope()`` for this; a stub or a
+        facade without an identity yields ``UNAVAILABLE`` and account-bound
+        reads fail closed before an envelope exists (P2-11), so the fallback
+        cannot expose another account's snapshot.
+        """
+        provider = getattr(self._facade, 'account_scope', None)
+        if callable(provider):
+            try:
+                value = provider()
+            except Exception:
+                return 'UNAVAILABLE'
+            if type(value) is int:
+                return str(value)
+            if isinstance(value, str) and value:
+                return value
+        return 'UNAVAILABLE'
+
     def _read(self, route: contract.Route, path_params: Mapping[str, str],
               query: Mapping[str, Any], request: _Request,
               session_key: str) -> Response:
@@ -630,7 +651,8 @@ class LocalApiServer:
         cursor = query.get('cursor')
         key = paging.binding(route.name, path_params,
                              {k: v for k, v in query.items() if k != 'cursor'},
-                             page_size, session_key)
+                             page_size, session_key,
+                             account_scope=self._account_scope())
         service_id, operation = self._read_target(route, path_params)
         if cursor and isinstance(cursor, str) and cursor.startswith(paging.CURSOR_PREFIX + '.'):
             envelope = self._pages.resume(cursor, key)
