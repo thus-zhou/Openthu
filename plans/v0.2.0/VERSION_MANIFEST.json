@@ -209,7 +209,7 @@
   },
   "candidate": {
     "status": "candidate-not-released",
-    "code_commit": "c81a8771a08d63ee88ad5325e10ea4b2b0d3776a",
+    "code_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
     "artifacts": 4,
     "artifact_names": [
       "Openthu-0.2.0-source.tar.gz",
@@ -221,35 +221,35 @@
     "bundled_files": 54,
     "sdist_members": 496,
     "source_files": 565,
-    "verify": "ok=true at ac94b63; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
+    "verify": "ok=true at 2bd42cc; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
     "install_check": "outside the repository; 29 MCP tools, doctor ok, user state unchanged",
     "published": false,
     "record": "交付/候选版本记录.md",
-    "release_gate": "PASS; nine checks true, 0 gaps; run 44197852215 (push) and 44197861613 (pull_request)",
+    "release_gate": "PASS; nine checks true, 0 gaps; run 44204917343 (push) and 44204927343 (pull_request)",
     "artifact_files": [
       {
         "name": "Openthu-0.2.0-source.tar.gz",
-        "size": 3672821,
-        "sha256": "4eccadfd1944a80443575195125c4d8abfaab76969c67dfb4289e58805c8f484"
+        "size": 3678796,
+        "sha256": "3c919b38b434d95a1b9f530c9c3f7a3261c706bafa989220e02347d45acae39b"
       },
       {
         "name": "Openthu-0.2.0-source.zip",
-        "size": 4132000,
-        "sha256": "563ff4cfcc48265367da3e874883e5815a8664e0d8bfeb07268c1f5467816b5e"
+        "size": 4137747,
+        "sha256": "de7471b35f4b088f34a3057f1d0cbfc5d5619784b94563528c032926f1a8d638"
       },
       {
         "name": "openthu-0.2.0-py3-none-any.whl",
-        "size": 2807388,
-        "sha256": "d3ae68a0eaba50711ff8c5b707574a44f1b4fa25b0c29d6a4be46825df615982"
+        "size": 2807557,
+        "sha256": "a64169b8794768d171674e309826a5f98918076b98005c382e0b15b8e2b58ab2"
       },
       {
         "name": "openthu-0.2.0.tar.gz",
-        "size": 3439873,
-        "sha256": "3700c74879c7348fd182b0bfcfbce1c666fee3a5334ec3b3be49a6c351d431c2"
+        "size": 3444088,
+        "sha256": "a4317c58fc02f9cf2942e6d44c117fe4bbff74de4e70a935e21156ded4ed4001"
       }
     ],
-    "artifact_commit": "ac94b63d991bafec0b3bf4717b8fb5ae72e1ce35",
-    "candidate_head": "the commit containing this record file (record-only after ac94b63)",
-    "note": "code_commit is the last product-code change; artifact_commit/candidate_head are filled by the acceptance record commit."
+    "artifact_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
+    "candidate_head": "the commit containing this record file (record-only after 2bd42cc)",
+    "note": "code_commit is the last product-code change and the artifact commit; artifact_commit/candidate_head are filled by the acceptance record commit."
   }
 }

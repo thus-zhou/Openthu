@@ -437,8 +437,8 @@
         ],
         "note": "Historical pre-audit checkpoint kept for traceability; the accepted state is the audit_fix block and the module_acceptance / checks fields.",
         "final_candidate": {
-          "commit": "ac94b63d991bafec0b3bf4717b8fb5ae72e1ce35",
-          "run": 44197852215,
+          "commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
+          "run": 44204917343,
           "artifacts": 4,
           "source_files": 565,
           "wheel_members": 214,
@@ -447,14 +447,14 @@
           "release_gate": "PASS, 0 gaps, nine checks true"
         }
       },
-      "gate_note": "8.1 accepted after the 8.1-audit remediation; the module branch was merged into hermes/1-install-diagnostics at 5ec73d9, so version PR #2 now contains the candidate. Batch 9 is ready for Codex review; no PR was created, main was not merged, nothing was tagged or released.",
+      "gate_note": "8.1 accepted after the 8.1-audit remediation and the batch-8 seam fixes; the module branch was merged into hermes/1-install-diagnostics at 5ec73d9, the consent-peek race found by the batch CI was fixed at 2bd42cc and the candidate was rebuilt there, so version PR #2 contains the candidate. Batch 9 is ready for Codex review; no PR was created, main was not merged, nothing was tagged or released.",
       "acceptance_record": "the commit containing this accepted record",
       "module_acceptance": {
         "8.1": {
           "accepted_at": "2026-11-18",
-          "delivery_commit": "c81a8771a08d63ee88ad5325e10ea4b2b0d3776a",
+          "delivery_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
           "integration_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed",
-          "evidence": "audit 8.1-audit P0=0/P1=3/P2=9 all closed; foreign cursors on /todos and /calendar are refused with 400 CURSOR_EXPIRED; pagination cases cover todos/calendar/resources; module tests 8, related 239, Linux Python 1812/8, Node 66; delivery commit includes the tests, the CI fetch-depth fix and the report attribution; batch 8 merged into the integration branch at 5ec73d9."
+          "evidence": "audit 8.1-audit P0=0/P1=3/P2=9 all closed; foreign cursors on /todos and /calendar are refused with 400 CURSOR_EXPIRED; pagination cases cover todos/calendar/resources; module tests 8, related 239, Linux Python 1813/8, Node 66; delivery commit includes the tests, the CI fetch-depth fix, the report attribution and the consent-peek seam fix; batch 8 merged into the integration branch at 5ec73d9."
         }
       },
       "audit_fix": {
@@ -477,6 +477,9 @@
           "P2-7 candidate code_commit/artifact_commit/candidate_head are separated",
           "P2-8 handoff JSON is regenerated at the final head",
           "P2-9 cursor wording names the local session binding and records the account-switch boundary"
+        ],
+        "integration_fixes": [
+          "S12 consent peek returns absent instead of STATE_READ_FAILED when another thread consumes the grant (2bd42cc)"
         ]
       },
       "checks": [
@@ -485,10 +488,10 @@
         "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures",
         "scripts/dev.py check: 568 files, 0 findings, 29 MCP tools",
         "module tests: tests/test_batch8_integration.py 8 passed; related suites 239 passed",
-        "Linux: Python 1812 passed/8 platform skips/0 failed (1820 cases) and Node 66 passed; the JUnit report returns PASS with 0 gaps",
-        "Windows (CI): Python 1799 passed/21 platform skips/0 failed and Node 66 passed; the platform report returns PASS with 0 gaps",
-        "GitHub Actions push 44197852215 and pull_request 44197861613 at ac94b63: ubuntu-24.04, ubuntu-24.04 (3.13), windows-2025 and the release gate all successful; the gate returns PASS with all nine checks true and 0 gaps",
-        "final candidate rebuilt by the release gate at ac94b63: 4 artifacts, 565 source files, wheel 214 members (54 bundled), sdist 496 members"
+        "Linux: Python 1813 passed/8 platform skips/0 failed (1821 cases) and Node 66 passed; the JUnit report returns PASS with 0 gaps",
+        "Windows (CI): Python 1800 passed/21 platform skips/0 failed and Node 66 passed; the platform report returns PASS with 0 gaps",
+        "GitHub Actions push 44204917343 and pull_request 44204927343 at 2bd42cc: ubuntu-24.04, ubuntu-24.04 (3.13), windows-2025 and the release gate all successful; the gate returns PASS with all nine checks true and 0 gaps",
+        "final candidate rebuilt by the release gate at 2bd42cc: 4 artifacts, 565 source files, wheel 214 members (54 bundled), sdist 496 members"
       ]
     },
     {

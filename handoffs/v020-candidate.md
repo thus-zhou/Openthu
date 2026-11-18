@@ -1,7 +1,7 @@
 # 任务交接：v0.2.0 候选交审
 
 - 任务 / Issue：Issue #4（v0.2.0 完整升级）；模块 8.1 全版本集成、候选构建与交审
-- 当前 PR / 分支：版本 PR #2（Draft；head `hermes/1-install-diagnostics` 已包含 8.1、集成提交 `5ec73d9` 与验收提交 `ac94b63`）；模块分支 `hermes/8.1`
+- 当前 PR / 分支：版本 PR #2（Draft；head `hermes/1-install-diagnostics` 已包含 8.1、集成提交 `5ec73d9` 与产物提交 `2bd42cc`）；模块分支 `hermes/8.1`
 - 当前负责者 → 下一位：Hermes → Codex
 - 目标与验收标准：把批次 1–7 的成果集成为一个可安装、可恢复、可复核的 `0.2.0` 候选；候选包、集成清单、模块结果和两平台证据齐备；由 Codex 整体审查后合并、打标签与发布
 
@@ -34,7 +34,7 @@ CI 在每个平台运行同一套离线检查，并在 `release gate (ubuntu-24.
 - 构建 4 个候选产物，`verify` 绑定提交，`install-check` 在仓库外安装；另建全新 venv 复核看板外壳、无会话 401、缺资源与缺密钥行为。
 - 隐私扫描源码与全部候选归档，0 发现。
 - 审计 `8.1-audit` 的 P1×3 + P2×9 已全部闭环：`/todos`、`/calendar` 拒绝非 `lac1` 游标；分页用例覆盖三条路由；交付提交含模块测试、CI 修复与报告归因；`hermes/8.1` 合入集成分支，PR #2 head 不再缺 8.1。
-- 集成分支 `ac94b63` 上 push `44197852215` 与 pull_request `44197861613` 四作业全部 success，`release gate` 九项 true、0 gap；最终候选 4 个产物、源码 565、wheel 214（54 随包）、sdist 496。
+- 集成分支 `2bd42cc` 上 push `44204917343` 与 pull_request `44204927343` 四作业全部 success，`release gate` 九项 true、0 gap；最终候选 4 个产物、源码 565、wheel 214（54 随包）、sdist 496；批次 CI 抓到的 consent-peek 并发竞争已由该提交修复。
 
 ## 需要解决的具体问题
 

@@ -961,9 +961,9 @@
       ],
       "completion_standard": "全版本集成、候选构建、恢复安装验证和交审说明",
       "evidence": [
-        "8.1-audit P0=0/P1=3/P2=9 closed; delivery commit c81a877 contains the cursor refusal, the pagination matrix, the CI fetch-depth fix and the batch attribution",
+        "8.1-audit P0=0/P1=3/P2=9 closed; delivery commit 2bd42cc contains the cursor refusal, the pagination matrix, the CI fetch-depth fix, the batch attribution and the consent-peek seam fix",
         "foreign or expired cursors on /todos and /calendar return 400 CURSOR_EXPIRED; a cursor from another route returns 400 CURSOR_QUERY_MISMATCH",
-        "module tests 8 passed; related suites 239 passed; Linux Python 1812/8 and Node 66; candidate build/verify/install-check pass",
+        "module tests 8 passed; related suites 239 passed; Linux Python 1813/8 and Node 66; candidate build/verify/install-check pass at 2bd42cc",
         "batch 8 merged into the integration branch at 5ec73d9; version PR #2 head now contains the candidate"
       ]
     },
