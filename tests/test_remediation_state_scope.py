@@ -42,13 +42,11 @@ def test_state_root_keeps_both_environment_aliases(monkeypatch, tmp_path):
 
 
 def test_state_root_honours_the_configuration_file(monkeypatch, tmp_path):
-    home = tmp_path / 'home'
     custom = tmp_path / 'configured-state'
-    config_dir = home / '.config' / 'openthu'
-    config_dir.mkdir(parents=True)
-    (config_dir / 'config.json').write_text(
+    config_file = tmp_path / 'config.json'
+    config_file.write_text(
         json.dumps({'storage': {'state_dir': str(custom)}}), encoding='utf-8')
-    monkeypatch.setenv('HOME', str(home))
+    monkeypatch.setenv('OPENTHU_CONFIG_FILE', str(config_file))
     for name in ('OPENTHU_STATE_DIR', 'THU_ASSISTANT_STATE_DIR',
                  'XDG_CONFIG_HOME', 'XDG_STATE_HOME', 'OPENTHU_CONFIG'):
         monkeypatch.delenv(name, raising=False)
