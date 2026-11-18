@@ -461,22 +461,24 @@ class QueryEngine:
         self.snapshots = Snapshots()
 
     def _account_scope(self):
-        """Best-effort account identity for snapshot binding.
+        """Resolve the account identity used to bind every account-scoped read.
 
-        A test double or a gateway without a selected account yields
-        ``UNAVAILABLE`` rather than silently omitting the account dimension.
+        Fail closed: an unavailable gateway identity is not a shared
+        ``UNAVAILABLE`` scope.  Returning that constant used to let two
+        accounts share snapshots and cursors whenever the identity probe
+        failed.  Public (non-account) reads never call this helper.
         """
         try:
             identity = self.owner.bridge('action_identity')
-            if isinstance(identity, dict):
-                account = identity.get('account_id')
-                if type(account) is int:
-                    return str(account)
-                if isinstance(account, str) and account:
-                    return account
         except Exception:
-            pass
-        return 'UNAVAILABLE'
+            raise CampusError('AUTH_REQUIRED') from None
+        if isinstance(identity, dict):
+            account = identity.get('account_id')
+            if type(account) is int:
+                return str(account)
+            if isinstance(account, str) and account:
+                return account
+        raise CampusError('AUTH_REQUIRED')
 
     def _finish(self, result, items, source_complete, scope, query_time,
                 missing_pages=(), source_errors=()):
@@ -588,13 +590,20 @@ class QueryEngine:
         else:
             raw = self.owner.learning_call('list_courses', parameters)
             items = raw['courses']
+            complete = raw.get('complete', True) is not False
+            warnings = raw.get('warnings') if isinstance(raw.get('warnings'), list) else []
+            status = raw.get('status') if isinstance(raw.get('status'), str) and raw.get('status') else (
+                'OK' if complete else 'PARTIAL')
+            if not complete and status in ('OK', 'EMPTY'):
+                status = 'PARTIAL'
             result = metadata('learn', 'courses', 'https://learn.tsinghua.edu.cn/b/wlxt/kc/v_wlkc_xs_xkb_kcb_extend/student/loadCourseBySemesterId/',
-                              'BUSINESS_READ', 'OK', True, strict=True, source_complete=True,
+                              'BUSINESS_READ', status, complete, warnings, raw.get('checked_at'),
+                              strict=True, source_complete=complete,
                               snapshot_complete=True, query_time=query_time)
             result['upstream_total'] = None if parameters.get('query') else len(items)
             result['total_scope'] = 'filtered_result' if parameters.get('query') else 'semester_courses'
             scope = read_scope_for('learn', 'courses', parameters, items, raw, query_time)
-            result = self._finish(result, items, True, scope, query_time)
+            result = self._finish(result, items, complete, scope, query_time)
         return self.snapshots.start(key, result, 'list', items, page_size)
 
     def local_query(self, operation, parameters, cursor=None, page_size=50):
@@ -722,7 +731,12 @@ class QueryEngine:
 def legacy_metadata(name, result):
     """Add evidence to old fields without promising unimplemented pagination."""
     if name == 'list_courses':
-        return {**metadata('learn', 'courses', 'https://learn.tsinghua.edu.cn/', 'BUSINESS_READ', 'EMPTY' if not result.get('count') else 'OK', True), **result}
+        complete = result.get('complete', True) is not False
+        status = 'PARTIAL' if not complete else ('EMPTY' if not result.get('count') else 'OK')
+        warnings = result.get('warnings') if isinstance(result.get('warnings'), list) else []
+        return {**metadata('learn', 'courses', 'https://learn.tsinghua.edu.cn/', 'BUSINESS_READ',
+                           status, complete, warnings,
+                           result.get('checked_at') or result.get('checkedAt')), **result}
     if name in ('list_assignments', 'list_course_files', 'get_assignment'):
         evidence = result.get('read_evidence')
         if evidence:

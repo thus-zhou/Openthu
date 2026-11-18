@@ -12,11 +12,31 @@ import os
 import uuid
 from pathlib import Path
 from .bridge import CampusError, gateway
-from . import cache_policy, source_state
+from . import cache_policy, paths, source_state
 
 
 def state_root():
-    return Path(os.environ.get('THU_ASSISTANT_STATE_DIR') or Path(os.environ.get('LOCALAPPDATA', Path.home())) / 'TsinghuaAssistant')
+    """The one state directory used by stateful modules.
+
+    Resolution order is explicit environment overrides, then the layered
+    configuration file, then the documented platform default.  The legacy
+    ``THU_ASSISTANT_STATE_DIR`` name stays a lower-priority alias, so an old
+    invocation keeps working while the runtime and ``doctor``/migration see the
+    same directory.  This used to be a second, independent implementation that
+    ignored ``OPENTHU_STATE_DIR`` and the configuration file on Linux.
+    """
+    for name in ('OPENTHU_STATE_DIR', 'THU_ASSISTANT_STATE_DIR'):
+        value = (os.environ.get(name) or '').strip()
+        if value:
+            return Path(value).expanduser()
+    try:
+        from .configuration import ConfigurationError, load_config
+        return load_config().storage.state_dir
+    except (ConfigurationError, OSError, ValueError):
+        # A malformed or unreadable configuration must not change where state
+        # is written; the platform default is the same default the configuration
+        # layer would have used.
+        return paths.default_paths().state_dir
 
 
 def directory_path():

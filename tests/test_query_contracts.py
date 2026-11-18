@@ -486,7 +486,13 @@ def test_result_envelope_schema_accepts_v020_envelopes_and_errors():
 
     raw = {'status': 'AUTH_REQUIRED', 'httpStatus': 401,
            'url': 'https://learn.tsinghua.edu.cn/', 'text': 'login', 'checked_at': None}
-    auth = QueryEngine(SimpleNamespace(bridge=lambda *a, **k: deepcopy(raw), browsers=None)).query(
+
+    def bridge(command, *args, **kwargs):
+        # Identity is a separate gateway command; a page read needs an account
+        # binding now that an unavailable identity fails closed (P2-11).
+        return {'account_id': 'one'} if command == 'action_identity' else deepcopy(raw)
+
+    auth = QueryEngine(SimpleNamespace(bridge=bridge, browsers=None)).query(
         'library', 'page', {})
     assert auth['status'] == 'AUTH_REQUIRED' and auth['error']['category'] == 'AUTH'
     validate('result-envelope.schema.json', auth)
