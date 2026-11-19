@@ -46,6 +46,31 @@ ACTIVE_STAGES = ('UPLOADING', 'UPLOADED_STAGING', 'DRAFT_SAVED',
 PREPARED_GRACE_SECONDS = 900
 
 
+def _win_transient(error):
+    return os.name == 'nt' and getattr(error, 'winerror', None) in (5, 32)
+
+
+def _read_bytes_safe(path):
+    for attempt in range(20):
+        try:
+            return path.read_bytes()
+        except OSError as error:
+            if not _win_transient(error) or attempt == 19:
+                raise
+            time.sleep(min(0.02, 0.002 * (attempt + 1)))
+
+
+def _replace_safe(temporary, target):
+    for attempt in range(20):
+        try:
+            os.replace(temporary, target)
+            return
+        except OSError as error:
+            if not _win_transient(error) or attempt == 19:
+                raise
+            time.sleep(min(0.02, 0.002 * (attempt + 1)))
+
+
 def _fsync_directory(directory):
     try:
         handle = os.open(directory, os.O_RDONLY)
@@ -151,7 +176,7 @@ class _ProtectedStore:
                 handle.write(self.header + blob)
                 handle.flush()
                 os.fsync(handle.fileno())
-            os.replace(temporary, target)
+            _replace_safe(temporary, target)
             if os.name != 'nt':
                 os.chmod(target, 0o600)
             _fsync_directory(self.root)
@@ -166,7 +191,7 @@ class _ProtectedStore:
     def _read(self, record_id):
         path = self._path(record_id)
         try:
-            blob = path.read_bytes()
+            blob = _read_bytes_safe(path)
         except FileNotFoundError:
             return None
         except OSError:

@@ -47,7 +47,14 @@ def _write_private(path: Path, data: bytes) -> None:
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-        os.replace(str(temporary), str(path))
+        for attempt in range(20):
+            try:
+                os.replace(str(temporary), str(path))
+                break
+            except OSError as error:
+                if not (os.name == "nt" and getattr(error, "winerror", None) in (5, 32)) or attempt == 19:
+                    raise
+                time.sleep(min(0.02, 0.002 * (attempt + 1)))
     except OSError:
         raise CampusError("STATE_WRITE_FAILED") from None
     finally:

@@ -12,6 +12,26 @@ _OPERATION=re.compile('[a-f0-9]{32}')
 _CHALLENGE=re.compile('[a-f0-9]{64}')
 _EFFECT_STEP=re.compile('[a-z][a-z0-9_-]{0,39}')
 
+
+def _win_transient(error):
+    return os.name=='nt' and getattr(error,'winerror',None) in (5,32)
+
+
+def _read_bytes_safe(path):
+    for attempt in range(20):
+        try:return path.read_bytes()
+        except OSError as error:
+            if not _win_transient(error) or attempt==19:raise
+            time.sleep(min(0.02,0.002*(attempt+1)))
+
+
+def _replace_safe(temporary,target):
+    for attempt in range(20):
+        try:os.replace(temporary,target);return
+        except OSError as error:
+            if not _win_transient(error) or attempt==19:raise
+            time.sleep(min(0.02,0.002*(attempt+1)))
+
 def _check_effects(value):
     if value is None:return []
     if not isinstance(value,list):return None
@@ -66,7 +86,7 @@ class ActionStore:
             file.close()
     def read(self,oid):
         path=self.path(oid)
-        try:blob=path.read_bytes()
+        try:blob=_read_bytes_safe(path)
         except FileNotFoundError:
             # Windows reports a path below a file as FileNotFoundError; only a
             # missing record inside an existing journal directory is NOT_FOUND.
@@ -100,7 +120,7 @@ class ActionStore:
         temporary=target.with_name(target.name+'.'+uuid.uuid4().hex+'.tmp')
         try:
             with open(temporary,'xb') as f:f.write(b'THU-ACTION-1\0'+blob);f.flush();os.fsync(f.fileno())
-            os.replace(temporary,target)
+            _replace_safe(temporary,target)
         except OSError:raise CampusError('STATE_WRITE_FAILED') from None
         finally:
             try:temporary.unlink(missing_ok=True)

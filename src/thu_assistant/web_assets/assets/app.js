@@ -57,6 +57,7 @@
     routed: false,
     session: 'unknown',
     cache: new Map(),
+    inflight: new Map(),
     semesters: {loaded: false, loading: null, options: [], error: null},
     data: {
       overview: {},
@@ -373,7 +374,8 @@
   async function request(key, path, params, options) {
     const opts = options || {};
     const signature = cacheSignature(path, params);
-    if (opts.cache !== false) {
+    const allowCache = opts.cache !== false;
+    if (allowCache) {
       const hit = state.cache.get(signature);
       if (hit && Date.now() - hit.at < M.REFRESH_MIN_SECONDS * 1000) {
         return {kind: 'ok', body: hit.body, cached: true,
@@ -385,37 +387,68 @@
     state.pending.set(key, controller);
     syncBusy();
     announce('正在读取' + (opts.label ? '：' + opts.label : '') + '…');
-    const result = await client.get(path, params || {}, {signal: controller.signal});
-    if (state.pending.get(key) === controller) state.pending.delete(key);
-    syncBusy();
-    if (result.timedOut) {
-      return {kind: 'ok', body: null,
-              model: localModel('LIMITED', '读取超时。', '稍后重试；其他卡片不受影响。')};
+    if (allowCache && state.inflight.has(signature)) {
+      // Reuse an identical in-flight GET (e.g. overview -> detail navigation)
+      // so two views do not race into the server's 10-second refresh limiter.
+      const shared = state.inflight.get(signature);
+      const awaited = await new Promise(function (resolve) {
+        if (controller.signal.aborted) { resolve({kind: 'cancelled'}); return; }
+        function onAbort() { resolve({kind: 'cancelled'}); }
+        controller.signal.addEventListener('abort', onAbort, {once: true});
+        shared.promise.then(function (outcome) {
+          controller.signal.removeEventListener('abort', onAbort);
+          resolve(outcome);
+        });
+      });
+      if (awaited.kind !== 'cancelled' || controller.signal.aborted) {
+        if (state.pending.get(key) === controller) state.pending.delete(key);
+        syncBusy();
+        if (awaited.kind === 'ok' && awaited.body && awaited.body.status) {
+          return {kind: 'ok', body: awaited.body, cached: true, model: awaited.model};
+        }
+        return awaited;
+      }
     }
-    if (result.aborted) return {kind: 'cancelled'};
-    if (result.networkError === 'LOCAL_API_NETWORK_UNAVAILABLE') {
-      return {kind: 'ok', body: null, model: networkModel(result.requestId)};
+    const fetchPromise = (async function () {
+      const result = await client.get(path, params || {}, {signal: controller.signal});
+      if (result.timedOut) {
+        return {kind: 'ok', body: null,
+                model: localModel('LIMITED', '读取超时。', '稍后重试；其他卡片不受影响。')};
+      }
+      if (result.aborted) return {kind: 'cancelled'};
+      if (result.networkError === 'LOCAL_API_NETWORK_UNAVAILABLE') {
+        return {kind: 'ok', body: null, model: networkModel(result.requestId)};
+      }
+      if (result.networkError === 'LOCAL_API_INVALID_JSON') {
+        return {kind: 'ok', body: null, model: invalidJsonModel(result.requestId)};
+      }
+      const body = result.body || {};
+      const display = body.display && typeof body.display === 'object' ? body.display : {};
+      if (result.httpStatus === 401 || display.state === 'LOCAL_SESSION_REQUIRED') {
+        sessionLost();
+        return {kind: 'session'};
+      }
+      let model = M.envelopeModel(body);
+      model = withNotEnabled(model, body, result.httpStatus);
+      if (result.httpStatus > 501 && body.error
+          && body.error.code === 'LOCAL_API_FACADE_UNAVAILABLE') {
+        // A genuine facade/transport failure stays 502 after client refusals
+        // keep their own 404/409/429.  Show a real error, not UNKNOWN.
+        model = localModel('ERROR', '业务门面不可用。', '稍后重试；其他卡片不受影响。',
+          {requestId: result.requestId});
+      }
+      if (result.ok && body && body.status) state.cache.set(signature, {body: body, at: Date.now()});
+      return {kind: 'ok', body: body, model: model};
+    })();
+    const entry = allowCache ? {promise: fetchPromise} : null;
+    if (entry) state.inflight.set(signature, entry);
+    try {
+      return await fetchPromise;
+    } finally {
+      if (entry && state.inflight.get(signature) === entry) state.inflight.delete(signature);
+      if (state.pending.get(key) === controller) state.pending.delete(key);
+      syncBusy();
     }
-    if (result.networkError === 'LOCAL_API_INVALID_JSON') {
-      return {kind: 'ok', body: null, model: invalidJsonModel(result.requestId)};
-    }
-    const body = result.body || {};
-    const display = body.display && typeof body.display === 'object' ? body.display : {};
-    if (result.httpStatus === 401 || display.state === 'LOCAL_SESSION_REQUIRED') {
-      sessionLost();
-      return {kind: 'session'};
-    }
-    let model = M.envelopeModel(body);
-    model = withNotEnabled(model, body, result.httpStatus);
-    if (result.httpStatus > 501 && body.error
-        && body.error.code === 'LOCAL_API_FACADE_UNAVAILABLE') {
-      // A genuine facade/transport failure stays 502 after client refusals
-      // keep their own 404/409/429.  Show a real error, not UNKNOWN.
-      model = localModel('ERROR', '业务门面不可用。', '稍后重试；其他卡片不受影响。',
-        {requestId: result.requestId});
-    }
-    if (result.ok && body && body.status) state.cache.set(signature, {body: body, at: Date.now()});
-    return {kind: 'ok', body: body, model: model};
   }
 
   function localTimeWindow() {
@@ -1424,6 +1457,7 @@
     abortAll(true);
     state.session = 'lost';
     state.cache.clear();
+    state.inflight.clear();
     state.data = {overview: {}, courses: null, resources: null, calendar: null,
                   calendarEnvelope: null, library: {}, health: null, services: null};
     state.semesters = {loaded: false, loading: null, options: [], error: null};

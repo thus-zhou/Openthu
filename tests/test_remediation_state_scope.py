@@ -201,3 +201,46 @@ def test_facade_tracks_live_env_changes_and_injected_env_switches(monkeypatch):
     by_op = {row['operation']: row for row in described['actions']}
     assert by_op['create_seat_reservation']['enabled'] is False
     assert by_op['create_seat_reservation']['reason'] == 'LIBRARY_WRITES_DISABLED'
+
+
+def test_action_and_submission_stores_retry_windows_sharing_violations(monkeypatch, tmp_path):
+    from thu_assistant import action_store
+    from thu_assistant.submissions import store as submission_store
+
+    target = tmp_path / 'sample.dpapi'
+    temp = tmp_path / 'sample.tmp'
+    temp.write_bytes(b'payload')
+
+    attempts = {'replace': 0, 'read': 0}
+    real_replace = os.replace
+
+    def flaky_replace(src, dst):
+        attempts['replace'] += 1
+        if attempts['replace'] < 3:
+            err = PermissionError('sharing violation')
+            err.winerror = 32
+            raise err
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(action_store.os, 'name', 'nt')
+    monkeypatch.setattr(action_store.os, 'replace', flaky_replace)
+    monkeypatch.setattr(action_store.time, 'sleep', lambda _s: None)
+    action_store._replace_safe(temp, target)
+    assert attempts['replace'] == 3
+    assert target.read_bytes() == b'payload'
+
+    real_read_bytes = Path.read_bytes
+
+    def flaky_read(self):
+        attempts['read'] += 1
+        if attempts['read'] < 3:
+            err = PermissionError('access denied')
+            err.winerror = 5
+            raise err
+        return real_read_bytes(self)
+
+    monkeypatch.setattr(submission_store.os, 'name', 'nt')
+    monkeypatch.setattr(submission_store.time, 'sleep', lambda _s: None)
+    monkeypatch.setattr(Path, 'read_bytes', flaky_read)
+    assert submission_store._read_bytes_safe(target) == b'payload'
+    assert attempts['read'] == 3
