@@ -121,7 +121,7 @@
     "total": 9,
     "current": 8,
     "current_status": "accepted",
-    "module_status_note": "Batches 1-8 accepted; 8.1 accepted after the 8.1-audit remediation and merged into hermes/1-install-diagnostics at 5ec73d9; the green integration/artifact commit is 2bd42cc. Batch 9 is ready for the Codex review; version PR #2 now contains the candidate.",
+    "module_status_note": "Batches 1-8 accepted; 8.1 accepted after the 8.1-audit remediation and merged into hermes/1-install-diagnostics at 5ec73d9; total-audit 17/17 remediation (43f19ef/4a03ecd) and pre-batch-9 optimization (50ce675) are integrated and CI green. Batch 9 is ready for Codex review on version PR #2.",
     "next": 9,
     "gate_file": "交付/批次门禁.json",
     "status_model": "accepted prefix -> one ready -> locked remainder; all accepted only at version completion",
@@ -209,7 +209,11 @@
   },
   "candidate": {
     "status": "candidate-not-released",
-    "code_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
+    "code_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+    "previous_candidates": [
+      "4a03ecd1fc4cc1059f544381a16c3d3f348712ef",
+      "2bd42cc6ea414a246b71abe530b99eb759b78930"
+    ],
     "artifacts": 4,
     "artifact_names": [
       "Openthu-0.2.0-source.tar.gz",
@@ -219,37 +223,37 @@
     ],
     "wheel_members": 214,
     "bundled_files": 54,
-    "sdist_members": 496,
-    "source_files": 565,
-    "verify": "ok=true at 2bd42cc; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
+    "sdist_members": 499,
+    "source_files": 568,
+    "verify": "ok=true at 50ce675; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
     "install_check": "outside the repository; 29 MCP tools, doctor ok, user state unchanged",
     "published": false,
     "record": "交付/候选版本记录.md",
-    "release_gate": "PASS; nine checks true, 0 gaps; run 44204917343 (push) and 44204927343 (pull_request)",
+    "release_gate": "PASS; nine checks true, 0 gaps; run 44434121491 (push) and 44434129313 (pull_request)",
     "artifact_files": [
       {
         "name": "Openthu-0.2.0-source.tar.gz",
-        "size": 3678796,
-        "sha256": "3c919b38b434d95a1b9f530c9c3f7a3261c706bafa989220e02347d45acae39b"
+        "size": 3704445,
+        "sha256": "12f8f04626710373b7ed090e16f439434d4640d607db102110ac5b57a8982d88"
       },
       {
         "name": "Openthu-0.2.0-source.zip",
-        "size": 4137747,
-        "sha256": "de7471b35f4b088f34a3057f1d0cbfc5d5619784b94563528c032926f1a8d638"
+        "size": 4165186,
+        "sha256": "170b78436e6418ac101fd0b909f94d7540485a2c5716f66715f0e2a6a44938f2"
       },
       {
         "name": "openthu-0.2.0-py3-none-any.whl",
-        "size": 2807557,
-        "sha256": "a64169b8794768d171674e309826a5f98918076b98005c382e0b15b8e2b58ab2"
+        "size": 2811450,
+        "sha256": "497e862c2ea64f251d68a97b4260c0960ab71c3ccb10453f092121e7c36c6846"
       },
       {
         "name": "openthu-0.2.0.tar.gz",
-        "size": 3444088,
-        "sha256": "a4317c58fc02f9cf2942e6d44c117fe4bbff74de4e70a935e21156ded4ed4001"
+        "size": 3467528,
+        "sha256": "89aed763555f4ac01087cde1a42a9c5b541fa40ef7b5ae68e8e649b315fa1959"
       }
     ],
-    "artifact_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
-    "candidate_head": "the commit containing this record file (record-only after 2bd42cc)",
-    "note": "code_commit is the last product-code change and the artifact commit; artifact_commit/candidate_head are filled by the acceptance record commit."
+    "artifact_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+    "candidate_head": "the commit containing this record file (record-only after 50ce675)",
+    "note": "code_commit is the final pre-batch-9 product-code and CI artifact commit (50ce675); record-only commits after 50ce675 synchronize ledgers without changing wheel product code, and Codex rebuilds at the final merged head before tagging."
   }
 }

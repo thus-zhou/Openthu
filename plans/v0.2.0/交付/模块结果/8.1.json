@@ -6,7 +6,7 @@
   "status": "accepted",
   "baseline_commit": "8d0606daf9bc121f3db1c5a5dba7ca62d343d0d8",
   "integration_parent_commit": "fb6edb1e4071f574430ef5d0259d918b67f3b0dc",
-  "delivery_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
+  "delivery_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
   "implementation_commits": [
     "9b1bef5",
     "e98f42b",
@@ -14,7 +14,10 @@
     "6e45eb0",
     "16e6b27",
     "c81a877",
-    "2bd42cc"
+    "2bd42cc",
+    "43f19ef",
+    "4a03ecd",
+    "50ce675"
   ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/8.1",
@@ -82,22 +85,22 @@
       "command": "python -m pytest -o addopts='' -q tests/test_local_api.py tests/test_facade_audit.py tests/test_batch6_integration.py tests/test_batch7_integration.py tests/test_docs_consistency.py"
     },
     "full_offline_suite_linux": {
-      "python_passed": 1813,
+      "python_passed": 1842,
       "python_skipped": 8,
       "python_failed": 0,
       "python_errors": 0,
-      "python_total": 1821,
+      "python_total": 1850,
       "node_passed": 66,
       "node_failed": 0,
       "command": "python -m pytest -o addopts='' -q -p no:cacheprovider --junitxml=.local/junit-a.xml; python scripts/dev.py test",
-      "note": "Python totals come from the JUnit cases; scripts/regression_report.py adds the 66 Node cases into its own totals (1879), so its total is Python plus Node.",
+      "note": "Python totals come from the JUnit cases; scripts/regression_report.py adds the 66 Node cases into its own totals (1908 passed, 8 skipped, 1916 total, 0 unmapped).",
       "live_campus_calls": 0,
       "model_calls": 0,
       "business_submissions": 0
     },
     "dev_check": {
       "ok": true,
-      "files_checked": 568,
+      "files_checked": 571,
       "findings": 0,
       "mcp_tools": 29,
       "command": "python scripts/dev.py check"
@@ -111,6 +114,7 @@
     "contract_validator": {
       "ok": true,
       "contracts": 8,
+      "error_codes": 370,
       "legacy_tools": 29,
       "command": "python contracts/v0.2/validate.py"
     },
@@ -123,40 +127,40 @@
       "command": "python contracts/v0.2/sources/validate.py"
     },
     "candidate_build": {
-      "commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
+      "commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
       "dirty": false,
       "artifacts": 4,
-      "source_files": 565,
+      "source_files": 568,
       "wheel_members": 214,
       "bundled_files": 54,
-      "sdist_members": 496,
+      "sdist_members": 499,
       "artifact_files": [
         {
           "name": "Openthu-0.2.0-source.tar.gz",
-          "size": 3678796,
-          "sha256": "3c919b38b434d95a1b9f530c9c3f7a3261c706bafa989220e02347d45acae39b"
+          "size": 3704445,
+          "sha256": "12f8f04626710373b7ed090e16f439434d4640d607db102110ac5b57a8982d88"
         },
         {
           "name": "Openthu-0.2.0-source.zip",
-          "size": 4137747,
-          "sha256": "de7471b35f4b088f34a3057f1d0cbfc5d5619784b94563528c032926f1a8d638"
+          "size": 4165186,
+          "sha256": "170b78436e6418ac101fd0b909f94d7540485a2c5716f66715f0e2a6a44938f2"
         },
         {
           "name": "openthu-0.2.0-py3-none-any.whl",
-          "size": 2807557,
-          "sha256": "a64169b8794768d171674e309826a5f98918076b98005c382e0b15b8e2b58ab2"
+          "size": 2811450,
+          "sha256": "497e862c2ea64f251d68a97b4260c0960ab71c3ccb10453f092121e7c36c6846"
         },
         {
           "name": "openthu-0.2.0.tar.gz",
-          "size": 3444088,
-          "sha256": "a4317c58fc02f9cf2942e6d44c117fe4bbff74de4e70a935e21156ded4ed4001"
+          "size": 3467528,
+          "sha256": "89aed763555f4ac01087cde1a42a9c5b541fa40ef7b5ae68e8e649b315fa1959"
         }
       ],
       "verify": "ok=true; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
       "release_status": "candidate-not-released",
       "published": false,
-      "command": "python scripts/package_release.py build (CI release gate at 2bd42cc)",
-      "note": "Hashes are from the CI release-gate build at 2bd42cc, the commit that includes the consent-peek fix. A local rebuild at the same commit produced the same source/sdist bytes; the wheel bytes differ by setuptools toolchain, so the CI artifact is authoritative."
+      "command": "python scripts/package_release.py build (CI release gate at 50ce675)",
+      "note": "Hashes are from the CI release-gate build at 50ce675 (pre-batch-9 optimization and wrap-up on top of total-audit 43f19ef/4a03ecd). A local Windows rebuild at 50ce675 verified the exact same source.zip SHA256 and passed verify + out-of-repo install-check; Codex rebuilds at the final merged head before tagging."
     },
     "install_check": {
       "source_root": null,
@@ -166,7 +170,7 @@
       "user_state_unchanged": true,
       "venv": "temporary",
       "command": "python scripts/package_release.py install-check --dist dist",
-      "note": "Run on a local rebuild at 2bd42cc; source and sdist hashes match CI, wheel bytes differ by toolchain, member list and metadata checks pass."
+      "note": "Run on a clean rebuild at 50ce675 outside the repository; member list, metadata, doctor and 29 MCP tools all pass."
     },
     "fresh_install": {
       "location": "a new venv outside the repository",
@@ -181,23 +185,23 @@
     "privacy_scan": {
       "source": {
         "ok": true,
-        "files_checked": 568,
+        "files_checked": 571,
         "findings": 0
       },
       "archives": {
         "ok": true,
-        "files_checked": 1840,
+        "files_checked": 1849,
         "findings": 0,
-        "note": "Final candidate at 2bd42cc: 565 source members x2 + 214 wheel + 496 sdist = 1,840; the earlier 9b1bef5 rehearsal scanned 1,825."
+        "note": "Current candidate at 50ce675: 568 source members x2 + 214 wheel + 499 sdist = 1,849 (earlier 2bd42cc scanned 1,840; 9b1bef5 rehearsal scanned 1,825)."
       },
       "git_diff": "added absolute paths are synthetic test markers (alice/synthetic/example); no real host path, credential or private key block",
       "author_identity": "Openthu Maintainers <maintainers@openthu.invalid>"
     },
     "github_actions": {
-      "commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
-      "run": 44204917343,
+      "commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+      "run": 44434121491,
       "event": "push",
-      "pull_request_run": 44204927343,
+      "pull_request_run": 44434129313,
       "status": "completed",
       "conclusion": "success",
       "jobs": {
@@ -209,12 +213,13 @@
       "reports": {
         "linux": {
           "status": "PASS",
-          "passed": 1879,
+          "passed": 1908,
           "skipped": 8,
           "failed": 0,
-          "total": 1887,
+          "total": 1916,
+          "unmapped": 0,
           "python": {
-            "passed": 1813,
+            "passed": 1842,
             "skipped": 8
           },
           "node": {
@@ -224,12 +229,13 @@
         },
         "windows": {
           "status": "PASS",
-          "passed": 1866,
+          "passed": 1895,
           "skipped": 21,
           "failed": 0,
-          "total": 1887,
+          "total": 1916,
+          "unmapped": 0,
           "python": {
-            "passed": 1800,
+            "passed": 1829,
             "skipped": 21
           },
           "node": {
@@ -254,58 +260,58 @@
         }
       },
       "candidate": {
-        "commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
+        "commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
         "artifacts": 4,
-        "source_files": 565,
+        "source_files": 568,
         "wheel_members": 214,
         "bundled_files": 54,
-        "sdist_members": 496,
+        "sdist_members": 499,
         "artifact_files": [
           {
             "name": "Openthu-0.2.0-source.tar.gz",
-            "size": 3678796,
-            "sha256": "3c919b38b434d95a1b9f530c9c3f7a3261c706bafa989220e02347d45acae39b"
+            "size": 3704445,
+            "sha256": "12f8f04626710373b7ed090e16f439434d4640d607db102110ac5b57a8982d88"
           },
           {
             "name": "Openthu-0.2.0-source.zip",
-            "size": 4137747,
-            "sha256": "de7471b35f4b088f34a3057f1d0cbfc5d5619784b94563528c032926f1a8d638"
+            "size": 4165186,
+            "sha256": "170b78436e6418ac101fd0b909f94d7540485a2c5716f66715f0e2a6a44938f2"
           },
           {
             "name": "openthu-0.2.0-py3-none-any.whl",
-            "size": 2807557,
-            "sha256": "a64169b8794768d171674e309826a5f98918076b98005c382e0b15b8e2b58ab2"
+            "size": 2811450,
+            "sha256": "497e862c2ea64f251d68a97b4260c0960ab71c3ccb10453f092121e7c36c6846"
           },
           {
             "name": "openthu-0.2.0.tar.gz",
-            "size": 3444088,
-            "sha256": "a4317c58fc02f9cf2942e6d44c117fe4bbff74de4e70a935e21156ded4ed4001"
+            "size": 3467528,
+            "sha256": "89aed763555f4ac01087cde1a42a9c5b541fa40ef7b5ae68e8e649b315fa1959"
           }
         ]
       },
       "notes": [
-        "Windows is a CI-only platform; the local host is Linux.",
-        "The final artifact run is the push run 44204917343 at 2bd42cc; pull_request run 44204927343 is green on both platforms as well.",
-        "Earlier runs 44197852215/44197861613 at ac94b63 and 44205543107 at eb9e162 are record/evidence history; they are not the artifact set.",
-        "2bd42cc adds the consent-peek fix and one action-framework regression test, so the Python totals are one higher than the ac94b63 run."
+        "Current code/CI/artifact run is push 44434121491 and pull_request 44434129313 at 50ce675; all four jobs succeeded with 0 unmapped test files and 0 release-gate gaps.",
+        "Previous total-audit green runs: push 44236818999 and pull_request 44236825532 at 4a03ecd (Linux 1905/8, Windows 1892/21).",
+        "Earlier pre-total-audit candidate runs: push 44204917343 and pull_request 44204927343 at 2bd42cc (Linux 1879/8, Windows 1866/21)."
       ],
       "record_head_run": 44202750006,
       "record_head_commit": "9631d30da6a6719fd829d9ec24ff47b0a6bfe4b4",
       "head_run": {
-        "commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
-        "run": 44204917343,
+        "commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+        "run": 44434121491,
         "event": "push",
         "status": "completed",
         "conclusion": "success",
         "reports": {
           "linux": {
             "status": "PASS",
-            "passed": 1879,
+            "passed": 1908,
             "skipped": 8,
             "failed": 0,
-            "total": 1887,
+            "total": 1916,
+            "unmapped": 0,
             "python": {
-              "passed": 1813,
+              "passed": 1842,
               "skipped": 8
             },
             "node": {
@@ -315,12 +321,13 @@
           },
           "windows": {
             "status": "PASS",
-            "passed": 1866,
+            "passed": 1895,
             "skipped": 21,
             "failed": 0,
-            "total": 1887,
+            "total": 1916,
+            "unmapped": 0,
             "python": {
-              "passed": 1800,
+              "passed": 1829,
               "skipped": 21
             },
             "node": {
@@ -330,7 +337,7 @@
           }
         },
         "release_gate": "PASS, nine checks true, 0 gaps",
-        "note": "Artifact run at the consent-peek fix commit."
+        "note": "Artifact run at the pre-batch-9 optimization and wrap-up commit 50ce675."
       }
     },
     "live_campus_calls": 0,
@@ -381,9 +388,37 @@
   "accepted_at": "2026-11-18",
   "integration_parent_note": "fb6edb1 is the batch-7 integration commit; 8d0606d is the branch point / record correction that 8.1 actually starts from.",
   "verification_commit": "the commit containing this record file",
-  "branch_head": "the record-only head containing this record (artifact_commit 2bd42cc; product code ends at 2bd42cc)",
+  "branch_head": "the record-only head containing this record (artifact_commit 50ce675; product code ends at 50ce675)",
   "integration_branch": "hermes/1-install-diagnostics",
-  "integration_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
+  "integration_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+  "total_audit_remediation": {
+    "snapshot_commit": "de1d2fc409c64fca57854100a2ee9870405756d2",
+    "product_commit": "43f19ef65e4802092386c0dfab0f50da44590a3d",
+    "ci_green_commit": "4a03ecd1fc4cc1059f544381a16c3d3f348712ef",
+    "P0": 0,
+    "P1": 4,
+    "P2": 11,
+    "P3": 2,
+    "closed": 17,
+    "open": 0,
+    "error_codes": 370,
+    "runs": {
+      "push": 44236818999,
+      "pull_request": 44236825532
+    }
+  },
+  "pre_batch9_wrapup": {
+    "commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+    "fixes": [
+      "Mapped tests/test_error_registry.py, test_plan_validation.py and test_remediation_state_scope.py in scripts/regression_report.py with a repository-wide mapping guard (0 unmapped files)",
+      "Unified LearnAssistant default state/download roots and non-Windows session dir with configuration/catalog state_root and atomic 0600 preview creation",
+      "Fixed BusinessFacade registration cache to track live os.environ and full service_ids, and threaded injected env through queries.describe, actions.describe_actions and library_contracts"
+    ],
+    "runs": {
+      "push": 44434121491,
+      "pull_request": 44434129313
+    }
+  },
   "audit": {
     "report": "8.1-audit",
     "P0": 0,
@@ -406,8 +441,8 @@
       "P2-9: the contract names the local-session binding and records the account-switch boundary"
     ]
   },
-  "artifact_commit": "2bd42cc6ea414a246b71abe530b99eb759b78930",
-  "candidate_head": "the commit containing this record file (record-only after 2bd42cc)",
+  "artifact_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+  "candidate_head": "the commit containing this record file (record-only after 50ce675)",
   "integration_fixes": [
     "S12: a concurrent take() could make peek() report STATE_READ_FAILED for a grant it had just consumed; peek now shares the consent lock and reports a vanished grant as absent, with a deterministic regression test.",
     "S13: the merge commit 5ec73d9 never became a checked head, so the machine gate could not find green test (ubuntu-24.04)/test (windows-2025) runs; batch 8 now records integration_commit 2bd42cc (CI green) and merge_commit 5ec73d9."

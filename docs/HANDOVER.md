@@ -1,10 +1,10 @@
 # Openthu 完整开发交接
 
-交接基准：2026-11-18，v0.2.0 未发布候选。集成分支 `hermes/1-install-diagnostics`，代码/CI head `4a03ecd`（本文档所在记录提交为 PR head）；版本 PR [#2](https://github.com/thus-zhou/Openthu/pull/2) 保持 Draft。本文与代码、能力矩阵、用户手册、版本计划和候选记录共同组成交付；任何历史测试结论都不替代当前运行结果。
+交接基准：2026-11-19，v0.2.0 未发布候选。集成分支 `hermes/1-install-diagnostics`，代码/CI head `50ce675`（本文档所在台账同步提交与交接检查点为 PR head）；版本 PR [#2](https://github.com/thus-zhou/Openthu/pull/2) 保持 Draft。本文与代码、能力矩阵、用户手册、版本计划和候选记录共同组成交付；任何历史测试结论都不替代当前运行结果。
 
 ## 0. 一句话结论
 
-v0.2.0 计划内的实现、集成、离线回归、候选构建和总审计修复已经完成：Hermes 负责的 23 个模块全部 `accepted`，第 9 批（Codex 整体审查、合并、标签与 Release）为 `ready`。总审计的 17 条发现（P1×4、P2×11、P3×2，P0=0）全部闭环，其中 P2-9 按审计允许的替代证明闭环。当前没有未闭环的 P0/P1/P2/P3；但真实校园写入仍没有生产证据，且总审计后的最终 PR head 仍需 Codex 重建候选包并重新登记哈希。未合并 main、未打标签、未发布。
+v0.2.0 计划内第 1–8 批的全部实现、集成、离线回归、候选构建、总审计 17/17 闭环、第 9 批前代码优化（`50ce675`）与全部交付台账同步已经完成：Hermes 负责的 23 个模块全部 `accepted`，第 9 批（Codex 整体审查、合并、标签与 Release）为 `ready`。当前没有未闭环的 P0/P1/P2/P3 与台账滞后；真实校园写入仍没有生产证据，且最终 PR head 仍需 Codex 在合并前重建候选包并重新登记哈希。未合并 main、未打标签、未发布。
 
 ## 1. 当前状态速览
 
@@ -12,24 +12,22 @@ v0.2.0 计划内的实现、集成、离线回归、候选构建和总审计修�
 |---|---|
 | 目标版本 | `0.2.0`（未发布候选；已发布版本仍是 `0.1.0`） |
 | 集成分支 | `hermes/1-install-diagnostics` |
-| 代码/CI head | `4a03ecd1fc4cc1059f544381a16c3d3f348712ef`（总审计修复 + Windows 配置路径测试修复） |
-| 产品代码提交 | `43f19ef65e4802092386c0dfab0f50da44590a3d`（总审计 P1/P2/P3 修复）；`4a03ecd` 只改 Windows 配置路径测试 |
-| 候选产物提交 | `4a03ecd`（CI `release gate` 重建 4 个产物并 `verify`） |
-| 前序候选 | `2bd42cc6ea414a246b71abe530b99eb759b78930`（consent-peek 修复后的旧候选） |
+| 代码/CI head | `50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b`（第 9 批前收尾优化：报告零 `unmapped`、`learn_assistant` 统一状态/下载根与 0600 原子预览、`BusinessFacade` 实时与注入环境开关贯通） |
+| 前序候选 | `4a03ecd1fc4cc1059f544381a16c3d3f348712ef`（总审计 17/17 + Windows 配置路径测试修复）、`2bd42cc6ea414a246b71abe530b99eb759b78930`（consent-peek 修复） |
+| 候选产物提交 | `50ce675`（CI `release gate` 重建 4 个产物并 `verify`；本机 Windows 同步复核 `verify` 与仓库外 `install-check`） |
 | 回接合并 | `5ec73d955073fdd283c8f5a6bab1fee072e848ed`（`hermes/8.1` → 集成分支） |
-| 版本 PR | #2，Open / Draft，代码/CI head `4a03ecd`；文档记录提交后 PR head 前移 |
+| 版本 PR | #2，Open / Draft，代码/CI head `50ce675`；台账同步与交接检查点提交后 PR head 前移 |
 | main | `9135a75abc1847f317b8aedd1bb7447945669ac9`（未合并本候选） |
 | 标签 | 仅有 `v0.1.0`；没有 `v0.2.0` 标签 |
 | 包版本 | `0.2.0`；Python `>=3.12` |
-| 规模 | 相对 main：337 个提交（截至 `6e22dbb`）、376 个文件、+94,503 / −948 行；另有 `4a03ecd` 测试修复与本文档记录提交 |
 | 工具面 | 29 个 MCP 工具；6 个旧入口点 + `openthu-doctor` |
 | 登记操作 | 81 条：64 `AVAILABLE`、6 `BLOCKED`、11 `MISSING`；按类别 READ 63、LOCAL_WRITE 2、MODEL 1、CAMPUS_WRITE 15 |
-| 本地验证 | Python **1839 passed / 8 skipped / 0 failed**；Node **66 passed / 0 failed**；`dev.py check` 571 文件 / 0 隐私发现 / 29 工具 |
-| CI（`4a03ecd`） | push `44236818999` 与 PR `44236825532` 四作业全绿；Linux 1905/8（Python 1839 + Node 66）、Windows 1892/21（Python 1826 + Node 66）；`release gate` 九项 true、0 gap |
+| CI（`50ce675`） | push `44434121491` 与 PR `44434129313` 四作业全绿；Linux 3.12/3.13 均 1908/8（Python 1842/8 + Node 66），Windows 1895/21（Python 1829/21 + Node 66），0 `unmapped`；`release gate` 九项 true、0 gap |
+| 离线校验 | `dev.py check` 571 文件 / 0 隐私发现 / 29 工具；契约 8+1（370 错误码）；来源 29/10/8/14/7；规划 24 模块/9 批次 |
 | 总审计 | P0=0，P1=4，P2=11，P3=2；17/17 闭环 |
 | 真实调用 | 校园 / 模型 / 浏览器 / 付款 / 提交 / 消息发送均为 0 |
 
-> CI 状态必须按提交和运行号阅读，不能把旧候选的绿色当成当前 head 的结论。`2bd42cc` 是总审计前的完整候选；`6e22dbb` 的 Windows 作业因一个 Linux-only 测试失败；`4a03ecd` 修复该测试后双平台与 `release gate` 全绿，是当前代码/CI 证据。
+> CI 状态必须按提交和运行号阅读，不能把旧候选的绿色当成当前 head 的结论。`50ce675` 是当前代码/CI 证据；其后的记录性提交只同步 `plans/`、`docs/HANDOVER.md` 与 `handoffs/`，并在新 head 复跑 CI。
 
 ## 2. 目标与代码结构
 
@@ -82,7 +80,7 @@ Hermes 负责第 1–8 批（23 个模块）；第 9 批 9.1 是 Codex 的发布
 | 5 | 5.1 图书馆预约、取消与续借适配；5.2 体育预约取消与付款状态闭环；5.3 网络学堂作业上传与正式提交；5.4 统一日程、增量事件与日历导出 | accepted | `0779fff`（接缝 `ac99326`） |
 | 6 | 6.1 公共业务门面与 MCP CLI 集成；6.2 本地看板读取 API 与进程边界；6.3 完整发行布局与安装升级迁移 | accepted | `4f5c62e`（接缝 X1–X7） |
 | 7 | 7.1 轻量本地看板与统一使用体验；7.2 跨平台回归、隐私与故障注入；7.3 能力文档、用户手册与升级记录 | accepted | `fb6edb1`（接缝 `d81c81c`） |
-| 8 | 8.1 全版本集成、候选构建与交审 | accepted | `2bd42cc`（回接合并 `5ec73d9`） |
+| 8 | 8.1 全版本集成、候选构建与交审 | accepted | `50ce675`（回接合并 `5ec73d9`，含总审计 17/17 与第 9 批前收尾优化） |
 | 9 | 9.1 Codex 整体审查与正式发行管理 | ready | — |
 
 模块结果台账在 `plans/v0.2.0/交付/模块结果/`，每项都有 `.md` 与 `.json`。批次状态机在 `plans/v0.2.0/交付/批次门禁.json`，规则是“已验收前缀 → 唯一 ready → 其余 locked”。
@@ -109,38 +107,36 @@ Hermes 负责第 1–8 批（23 个模块）；第 9 批 9.1 是 Codex 的发布
 | `python contracts/v0.2/validate.py` | `ok=true`；8 契约 / 1 兼容基线 / 9 schema 样例 / 35 拒绝样例 / 8 额外夹具 / 29 legacy 工具；错误码 370 条 |
 | `python contracts/v0.2/sources/validate.py` | `ok=true`；29 sources / 10 models / 8 tasks / 14 readiness / 7 fixtures；9 schema / 24 拒绝样例 |
 
-### 4.2 本地离线验证（head `4a03ecd`）
+### 4.2 离线验证与 CI 证据（代码/CI head `50ce675`）
 
 | 检查 | 结果 |
 |---|---|
 | `python scripts/dev.py check` | `ok=true`；571 文件、0 隐私发现、29 个 MCP 工具；规划校验通过 |
-| `python scripts/dev.py test` | Python **1839 passed / 8 platform skipped / 0 failed / 0 errors**；Node **66 passed / 0 failed**；`ok=true` |
+| Linux CI（3.12 / 3.13） | Python **1842 passed / 8 platform skipped / 0 failed**；Node **66 passed / 0 failed**；总计 1908/8，0 `unmapped` |
+| Windows CI（3.12） | Python **1829 passed / 21 platform skipped / 0 failed**；Node **66 passed / 0 failed**；总计 1895/21，0 `unmapped` |
 | 真实调用 | `live_campus_calls=0`、`model_calls=0`、`business_submissions=0` |
 
-审计修复新增 26 个 Python 用例（1813 → 1839），Node 保持 66；修复过程中没有用 `xfail`、删除用例或放宽断言掩盖失败。
+总审计修复新增 26 个 Python 用例（1813 → 1839），第 9 批前收尾优化再新增 3 个 Python 用例（1839 → 1842），Node 保持 66；全仓 `tests/**/test_*.py` 全部归因到对应模块（0 `unmapped`）。
 
 ### 4.3 CI 与候选
 
-- **`4a03ecd`（当前代码/CI head）**：push `44236818999` 与 pull_request `44236825532` 四作业全部 success；Linux 报告 1905 passed/8 skipped（Python 1839/8 + Node 66），Windows 报告 1892 passed/21 skipped（Python 1826/21 + Node 66）；`release gate` 九项 true、0 gap；候选 4 个产物由门禁在同一提交重建。
-- **`6e22dbb`（总审计修复后的首个 head，Windows 红）**：Linux 3.12/3.13 作业 success，Windows 的 `test_state_root_honours_the_configuration_file` 失败——测试把默认配置路径写死为 Linux 的 `$HOME/.config/openthu/config.json`，Windows 实际读 `%APPDATA%\Openthu\config.json`，于是 `state_root()` 回退到默认目录。修复为使用 `OPENTHU_CONFIG_FILE` 指向临时配置（跨平台），产品代码不变；`4a03ecd` 复跑双平台与门禁全绿。该失败是测试假设问题，不是 P1-1 产品修复回退。
-- **`2bd42cc`（总审计前的完整绿色候选）**：push `44204917343` 与 pull_request `44204927343`，四作业全部 success；Linux 报告 1879 passed/8 skipped（Python 1813/8 + Node 66），Windows 报告 1866 passed/21 skipped（Python 1800/21 + Node 66）；`release gate` 九项 true、0 gap。该提交的候选是 4 个产物：源码 565、wheel 214（54 随包）、sdist 496。
-- 历史失败运行都已定位并修复：depth-1 checkout 的祖先核对失败改为 `fetch-depth: 0`；`test_concurrent_execute_dispatches_once` 的 `STATE_READ_FAILED` 是 consent `peek()`/`take()` 竞争，已由 `2bd42cc` 的 consent 锁修复。
+- **`50ce675`（当前代码/CI head）**：push `44434121491` 与 pull_request `44434129313` 四作业全部 success；Linux 3.12/3.13 报告 1908 passed/8 skipped（Python 1842/8 + Node 66），Windows 报告 1895 passed/21 skipped（Python 1829/21 + Node 66），三份报告均 0 `unmapped`；`release gate` 九项 true、0 gap；候选 4 个产物由门禁在同一提交重建，本机 Windows 同步复核 `verify` 与仓库外 `install-check` 通过。
+- **`4a03ecd`（前序总审计绿色候选）**：push `44236818999` 与 pull_request `44236825532` 四作业全绿（Linux 1905/8，Windows 1892/21）。
+- **`2bd42cc`（总审计前的早期绿色候选）**：push `44204917343` 与 pull_request `44204927343` 四作业全绿（Linux 1879/8，Windows 1866/21）。
 
-### 4.4 当前候选产物（`artifact_commit 4a03ecd`，CI `release gate` 重建）
+### 4.4 当前候选产物（`artifact_commit 50ce675`，CI `release gate` 重建）
 
 | 产物 | 字节 | SHA256 |
 |---|---:|---|
-| `Openthu-0.2.0-source.tar.gz` | 3,691,357 | `d8bf25eebdcc43900481fda4b1df79eb0d766292f9020cc713d664995ebf7f8bd` |
-| `Openthu-0.2.0-source.zip` | 4,151,902 | `6085eced8a284629ea307c156f80dcda07cfc29949186281af2b8fa8038dcd7a` |
-| `openthu-0.2.0-py3-none-any.whl` | 2,810,776 | `cde3156579119b8dffc56c2f79d23d1f447579f02f13786b2eef7a74ea0ff0c3` |
-| `openthu-0.2.0.tar.gz` | 3,455,708 | `28d28b61aa4f7b8152a7dfbffd0dc5f4a429196549e49c43b557e669dd437cc8` |
+| `Openthu-0.2.0-source.tar.gz` | 3,704,445 | `12f8f04626710373b7ed090e16f439434d4640d607db102110ac5b57a8982d88` |
+| `Openthu-0.2.0-source.zip` | 4,165,186 | `170b78436e6418ac101fd0b909f94d7540485a2c5716f66715f0e2a6a44938f2` |
+| `openthu-0.2.0-py3-none-any.whl` | 2,811,450 | `497e862c2ea64f251d68a97b4260c0960ab71c3ccb10453f092121e7c36c6846` |
+| `openthu-0.2.0.tar.gz` | 3,467,528 | `89aed763555f4ac01087cde1a42a9c5b541fa40ef7b5ae68e8e649b315fa1959` |
 
-- 成员统计：源码 568；wheel 214（54 随包）；sdist 499。`4a03ecd` 的 CI 报告与 `verify` 均以该提交为准。
-- `verify` 在 CI `release gate` 中通过：metadata、`Requires-Python`、`Requires-Dist`、七个入口点、许可证、随包布局与资源哈希全部通过。
-- `install-check` 在仓库外临时 venv 中安装 wheel：包位于 `site-packages/thu_assistant`、`source_root=null`、缺失资源 `[]`、29 个工具、`doctor_ok=true`、用户状态不变。该检查在 `43f19ef` 候选上执行；`4a03ecd` 相对它只改测试文件，安装路径与资源布局不变，CI 门禁在 `4a03ecd` 重建并 `verify` 通过。
-- 仓库外全新安装复核：看板外壳可服务、无本地会话 `/api/v1/health` 返回 401、缺 `_bundled` 资源时 doctor 失败关闭、无密钥返回 `SECURE_KEY_NOT_CONFIGURED`。该复核同样在 `43f19ef` 候选上执行。
+- 成员统计：源码 568；wheel 214（54 随包）；sdist 499；归档隐私扫描 1,849 成员 / 0 发现。`50ce675` 的 CI 报告与 `verify` 均以该提交为准。
+- `install-check` 在仓库外临时 venv 中安装 `50ce675` 构建的 wheel：包位于 `site-packages/thu_assistant`、`source_root=null`、缺失资源 `[]`、29 个工具、`doctor_ok=true`、用户状态不变。
 
-**哈希边界**：`code_commit`、`artifact_commit`、`candidate_head` 是三个不同概念。`43f19ef` 是总审计后的产品代码提交；`4a03ecd` 在其上只改一个 Windows 测试，并由 CI `release gate` 重建 4 个产物；其后的记录性提交只改 `plans/`、`handoffs/`、文档与报告归因，不改变 wheel 内产品代码，但会改变 source/sdist 的字节和 SHA256。**最终 PR head 必须由 Codex 在同一提交树或最终 head 重新构建并登记，不能复用 `43f19ef`、`4a03ecd` 或 `2bd42cc` 的旧资产。**
+**哈希边界**：`code_commit`、`artifact_commit`、`candidate_head` 是三个不同概念。`50ce675` 是当前产品代码与 CI 重建产物提交；其后的记录性提交只改 `plans/`、`docs/HANDOVER.md` 与 `handoffs/`，不改变 wheel 内产品代码，但会改变 source/sdist 的字节和 SHA256。**最终 PR head 必须由 Codex 在同一提交树或最终 head 重新构建并登记，不能复用旧提交的资产。**
 
 ## 5. 总审计与修复（2026-11-18）
 
@@ -209,11 +205,11 @@ Hermes 负责第 1–8 批（23 个模块）；第 9 批 9.1 是 Codex 的发布
 
 ### 8.1 第 9 批：Codex 整体审查与正式发行
 
-1. **读取**：PR #2 描述（含“总审计修复”段）、`handoffs/v020-candidate.md`、`plans/v0.2.0/交付/候选版本记录.md`、`批次门禁记录.md`、`.local/audits/total-audit-*.md`（本地，不入库）。
-2. **核对当前 head 的 CI**：代码/CI head `4a03ecd` 的 push `44236818999` 与 PR `44236825532` 已全绿；文档记录提交后的 PR head 只改记录，仍应核对一次。若红，先在同一分支交回 Hermes，不合并。
-3. **审查总审计修复**：15 个提交，重点是 P1-1 状态目录、P1-2 ICS SEQUENCE、P1-3 写开关错误码、P1-4 旧预览路径/权限；注意本轮没有独立第二审查者。
-4. **在最终 PR head 重建候选**：`python scripts/package_release.py build`、`verify --expected-commit <最终 head>`、`install-check --dist dist`；重新登记四个产物的字节与 SHA256。**不要复用 `43f19ef`、`4a03ecd` 或 `2bd42cc` 的旧资产。**
-5. **同步台账**（见 §8.3），然后按 `docs/MAINTENANCE.md` 合并 main、创建 `v0.2.0` 标签、发布 GitHub Release，并核对公开下载、SHA256 与安装检查。
+1. **读取**：PR #2 描述、`handoffs/v020-candidate.md`、`plans/v0.2.0/交付/候选版本记录.md`、`批次门禁记录.md`。
+2. **核对当前 head 的 CI**：代码/CI head `50ce675` 的 push `44434121491` 与 PR `44434129313` 已全绿；台账同步与交接检查点提交后的 PR head 仍应核对一次。若红，先在同一分支交回 Hermes，不合并。
+3. **审查总审计修复与收尾优化**：重点核对总审计 17/17 修复（`88c48e1..4a03ecd`：P1-1 状态目录、P1-2 ICS SEQUENCE、P1-3 写开关错误码、P1-4 旧预览路径/权限）与第 9 批前收尾优化（`50ce675`：零 `unmapped`、`learn_assistant` 统一状态/下载根与 0600 原子预览、`BusinessFacade` 实时与注入环境开关贯通）。
+4. **在最终 PR head 重建候选**：`python scripts/package_release.py build`、`verify --expected-commit <最终 head>`、`install-check --dist dist`；重新登记四个产物的字节与 SHA256。**不要复用 `50ce675`、`4a03ecd` 或 `2bd42cc` 的旧资产。**
+5. **复核台账**（§8.3 全部台账已同步至 `50ce675`），然后按 `docs/MAINTENANCE.md` 合并 main、创建 `v0.2.0` 标签、发布 GitHub Release，并核对公开下载、SHA256 与安装检查。
 6. 合并前确认：PR #2 的最终 head 包含全部 23 个 Hermes 模块提交；29 个工具、6 个旧入口点、导入路径与错误形状未变；没有把任何 `BLOCKED`/`PARTIAL`/`UNKNOWN` 写成成功。
 
 ### 8.2 发布后 / 下一版本
@@ -223,22 +219,23 @@ Hermes 负责第 1–8 批（23 个模块）；第 9 批 9.1 是 Codex 的发布
 3. **Linux 生产认证与桌面密钥环**：在“缺密钥拒绝写入”的前提下评估；不得用明文落盘绕过 Windows 依赖。
 4. **路线图其余项**：更多只读来源（校内通知、云盘、培养方案）、推送与通知、原生移动体验、OCR/录音、课程知识库、适配生态；按独立 Issue 规划，不自动接力。
 
-### 8.3 当前台账的已知滞后（必须在合并前处理）
+### 8.3 台账同步状态（已全部闭环）
 
-总审计修复发生在批次 8 验收之后。以下文件仍指向 `2bd42cc` 或缺少总审计段，**不是**当前产品树的完整描述：
+原先在总审计后滞后于 `2bd42cc` 的全部台账文件均已同步至 `50ce675`（含总审计 17/17 与第 9 批前收尾优化）：
 
-| 文件 | 现状 | 建议 |
-|---|---|---|
-| `plans/v0.2.0/交付/批次门禁.json` | 批次 8 `integration_commit` 仍是 `2bd42cc`；`8.1` 的 `delivery_commit`/`artifact_commit` 也是 `2bd42cc` | 在最终绿提交上把批次 8 的集成提交指向含总审计修复的 CI 绿提交（`4a03ecd`）；`delivery_commit` 记产品代码提交 `43f19ef`，并补 `4a03ecd` 测试修复；补总审计 17/17 与新的测试计数 |
-| `plans/v0.2.0/交付/模块结果/8.1.json` / `.md` | `branch_head` 仍写“product code ends at 2bd42cc”；checks 是 1813/8、568 文件 | 增加 `total_audit_remediation` 段：`43f19ef`/`4a03ecd`、17/17、1839/8、571 文件、370 错误码；更新 `branch_head` |
-| `plans/v0.2.0/版本总清单.md` | 状态摘要停在批次 8，未提总审计；候选表写 `2bd42cc` | 更新为当前 head、`4a03ecd` 候选与 17/17 |
-| `plans/v0.2.0/进度清单.md` | 第 8 批后没有总审计段 | 增加“总审计修复 17/17”与下一步 |
-| `plans/v0.2.0/交付/集成清单.md` | 8.1 行和候选段停在 `2bd42cc` | 补总审计提交链与当前候选 |
-| `plans/v0.2.0/交付/批次门禁记录.md` | 有 P2-6/P1-4 的个别同步，但没有完整的总审计小节 | 追加“总审计修复与复验（`4a03ecd`）”小节 |
-| `handoffs/v020-candidate.json` | 已重新生成，`code_commit` 为 `b87dc3f`（交接文档提交） | 最终 head 确定后可再运行一次 `python scripts/handoff.py v020-candidate --to codex` |
-| `docs/HANDOVER.md`（本文） | 已更新到总审计后状态 | 随本次记录性提交进入仓库 |
-
-这些是记录一致性问题，不是产品缺陷；但不能让门禁继续指向审计前的提交而声称“已验收”。处理方式应是记录性提交 + 在新 head 上重跑 CI/`release gate`，不需要改产品代码。
+| 文件 | 当前状态 |
+|---|---|
+| `plans/v0.2.0/交付/批次门禁.json` | 已同步：批次 8 `integration_commit` 与顶层 `gate_note` 均指向 `50ce675`，补齐 `total_audit_remediation` 与 `pre_batch9_wrapup` |
+| `plans/v0.2.0/交付/模块结果/8.1.json` / `.md` | 已同步：`delivery_commit`/`integration_commit`/`artifact_commit` 指向 `50ce675`，记录 1842/8、1829/21、Node 66、571 文件、370 码、0 `unmapped` |
+| `plans/v0.2.0/交付/模块负责表.json` / `.md` | 已同步：8.1 `accepted`、9.1 `ready`，提交与证据对齐 `50ce675` |
+| `plans/v0.2.0/交付/验收映射.json` | 已同步：8.1 测试清单与双平台证据更新至 `50ce675` |
+| `plans/v0.2.0/VERSION_MANIFEST.json` | 已同步：`batches.module_status_note` 与 `candidate` 产物/哈希更新至 `50ce675` |
+| `plans/v0.2.0/版本总清单.md` / `进度清单.md` | 已同步：补齐总审计 17/17 与第 9 批前收尾优化段及当前候选表 |
+| `plans/v0.2.0/交付/集成清单.md` | 已同步：8.1/9.1 状态修正为 `accepted`/`ready`，旧 `prepare_submission` 边界更新为 P1-4 及原子 0600 加固表述 |
+| `plans/v0.2.0/交付/批次门禁记录.md` | 已同步：追加“总审计修复与第 9 批前收尾复验（`4a03ecd` → `50ce675`）”完整小节 |
+| `plans/v0.2.0/交付/候选版本记录.md` | 已同步：登记 `50ce675` 的四个 CI 重建哈希与隐私计数（571 源码 / 1,849 归档） |
+| `handoffs/v020-candidate.md` / `.json` | 已同步并重新生成检查点 |
+| `docs/HANDOVER.md`（本文） | 已同步到第 9 批前最终收尾状态 |
 
 ## 9. 关键文件索引
 
@@ -302,7 +299,8 @@ c81a877  8.1 审计修复
 de1d2fc  总审计快照（审计前 head）
 88c48e1 … 6e22dbb  总审计 17 条修复与记录（15 个提交）
 43f19ef  总审计后产品代码 + 候选产物重建
-4a03ecd  Windows 配置路径测试修复（代码/CI head，双平台全绿）
+4a03ecd  Windows 配置路径测试修复（双平台全绿）
+50ce675  第 9 批前收尾优化（零 unmapped、learn 统一状态/下载根与 0600 原子预览、facade 实时/注入环境开关贯通；当前代码/CI/产物 head）
 ```
 
 ## 12. 边界声明
