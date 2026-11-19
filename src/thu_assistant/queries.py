@@ -143,17 +143,23 @@ def validate(value, spec):
         raise CampusError('INVALID_ARGUMENT_RANGE')
 
 
-def describe(service_id):
+def _switch(name, env=None):
+    if env is not None and name in env:
+        return str(env[name])
+    return os.environ.get(name, '1')
+
+
+def describe(service_id, env=None):
     if service_id not in ('campus', local_ops.SERVICE_ID):
         catalog.resolve(service_id)
     operations = []
     local_names = tuple(LOCAL_OPS) if service_id == local_ops.SERVICE_ID else ()
     for operation in (*local_names, 'page', 'status', 'directory', 'courses', 'semesters', 'notices', 'notice_detail', 'assignments', 'assignment_detail', 'files', 'calendar', *LIBRARY_OPS, *SPACE_OPS, *SPORTS_OPS):
-        if operation in SPORTS_OPS and os.environ.get('THU_SPORTS_READ', '1') == '0':
+        if operation in SPORTS_OPS and _switch('THU_SPORTS_READ', env) == '0':
             continue
-        if operation in (*LIBRARY_OPS, *SPACE_OPS) and os.environ.get('THU_LIBRARY_READ', '1') == '0':
+        if operation in (*LIBRARY_OPS, *SPACE_OPS) and _switch('THU_LIBRARY_READ', env) == '0':
             continue
-        if operation in SPACE_OPS and os.environ.get('THU_SPACE_READ', '1') == '0':
+        if operation in SPACE_OPS and _switch('THU_SPACE_READ', env) == '0':
             continue
         entry = REGISTRY.get((service_id, operation)) or (REGISTRY.get(('*', operation)) if service_id not in ('campus', local_ops.SERVICE_ID) else None)
         if entry:
@@ -178,7 +184,7 @@ def describe(service_id):
                                                        'report': '模块结果/6.1.md'},
                                       note=LOCAL_OPS[operation]['note'], local_read=True)
     from .actions import describe_actions
-    return {'service_id': service_id, 'operations': operations, 'actions': describe_actions(service_id),
+    return {'service_id': service_id, 'operations': operations, 'actions': describe_actions(service_id, env=env),
             'registry_version': VERSION, 'cursor_version': CURSOR_VERSION,
             'snapshot_version': SNAPSHOT_VERSION,
             'completeness': {'fields': ['source_complete', 'snapshot_complete', 'complete'],

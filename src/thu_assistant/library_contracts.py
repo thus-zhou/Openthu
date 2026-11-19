@@ -66,13 +66,19 @@ RECONCILIATION_SCOPE = {CREATE_SEAT:'OWN_RECORD_RESOURCE_TIME_STATUS',
                         RENEW_LOAN:'OWN_LOAN_SAME_RECORD_AND_NEW_DUE_AT'}
 
 
-def enabled():
-    return all(os.environ.get(k,'1')!='0' for k in ('THU_LIBRARY_WRITE','THU_LIBRARY_READ','THU_SPACE_READ'))
+def _switch(name, env=None):
+    if env is not None and name in env:
+        return str(env[name])
+    return os.environ.get(name, '1')
 
 
-def renewal_enabled():
+def enabled(env=None):
+    return all(_switch(k, env) != '0' for k in ('THU_LIBRARY_WRITE', 'THU_LIBRARY_READ', 'THU_SPACE_READ'))
+
+
+def renewal_enabled(env=None):
     """Renewal has its own rollout switch; it never bypasses the library one."""
-    return enabled() and os.environ.get('THU_LIBRARY_RENEW','1')!='0'
+    return enabled(env=env) and _switch('THU_LIBRARY_RENEW', env) != '0'
 
 
 def precheck_states(block):

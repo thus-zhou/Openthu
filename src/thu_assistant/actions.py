@@ -57,12 +57,18 @@ from . import library_contracts as library_actions
 REGISTRY.update(library_actions.contracts())
 VERIFIED_ADAPTERS = {library_actions.VERSION, "sports-action-v1"}
 
-def action_enabled(service):
+def _switch(name, env=None):
+    if env is not None and name in env:
+        return str(env[name])
+    return os.environ.get(name, '1')
+
+
+def action_enabled(service, env=None):
     # Fail closed for every service without an explicit write switch.  A new
     # service (5.3 registers `learn`) must never inherit the sports switch just
     # because it is not the library.
-    if service=="library":return library_actions.enabled()
-    if service=="sports":return sports_enabled()
+    if service=="library":return library_actions.enabled(env=env)
+    if service=="sports":return sports_enabled(env=env)
     return False
 
 
@@ -79,8 +85,8 @@ def writes_disabled_code(service):
         return 'SPORTS_WRITES_DISABLED'
     return 'WRITES_DISABLED'
 
-def sports_enabled():
-    return os.environ.get('THU_SPORTS_WRITE','1') != '0' and os.environ.get('THU_SPORTS_READ','1') != '0'
+def sports_enabled(env=None):
+    return _switch('THU_SPORTS_WRITE', env) != '0' and _switch('THU_SPORTS_READ', env) != '0'
 
 TRANSITIONS={
  'PREPARED':{'DISPATCHING','FAILED','AWAITING_OFFICIAL'},'AWAITING_OFFICIAL':{'AWAITING_OFFICIAL','UNKNOWN','SUCCEEDED','PENDING_PAYMENT','PENDING_APPROVAL','FAILED'},'NEEDS_USER_ACTION':set(),
@@ -125,9 +131,10 @@ def next_actions(record):
       'SUCCEEDED':[],
       'FAILED':['PREPARE_AGAIN_IF_APPROPRIATE']}.get(record.get('state'),['CHECK_RESULT']))
 
-def describe_actions(service_id):
+def describe_actions(service_id, env=None):
+    service_enabled = action_enabled(service_id, env=env)
     return [{'operation':op,'parameters_schema':deepcopy(c.get('input_schema',c['schema'])),'required_business_fields':list(c['required']),
-        'adapter_version':c['version'],'enabled':c['enabled'] and action_enabled(service_id),'reason':(('READY' if action_enabled(service_id) else writes_disabled_code(service_id)) if c['enabled'] else (c.get('disabled_reason') or 'ADAPTER_REQUIRED')),
+        'adapter_version':c['version'],'enabled':c['enabled'] and service_enabled,'reason':(('READY' if service_enabled else writes_disabled_code(service_id)) if c['enabled'] else (c.get('disabled_reason') or 'ADAPTER_REQUIRED')),
         'request_sequence':c['request_sequence'],'prechecks':list(c['prechecks']),
         'critical_fields':c['critical_fields'],'risk_conditions':c['risk_conditions'],'reconciliation':c['reconciliation'],
         'reconciliation_scope':c.get('reconciliation_scope')}

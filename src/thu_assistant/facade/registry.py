@@ -225,7 +225,7 @@ def _action_entries(providers: Providers, env) -> tuple[list[Registration], list
                           'code': 'CAPABILITY_REPORT_FAILED'}]
     for service in services:
         try:
-            rows = actions.describe_actions(service)
+            rows = actions.describe_actions(service, env=env)
         except Exception:
             failures.append({'service_id': service, 'stage': 'ACTION_DESCRIPTION',
                              'code': 'CAPABILITY_REPORT_FAILED'})
@@ -261,9 +261,9 @@ def _action_entries(providers: Providers, env) -> tuple[list[Registration], list
 def _renewal_state(env) -> tuple[str, str | None, bool]:
     """A switched-off renewal must not still advertise a prepare path."""
     from .. import library_contracts
-    if not library_contracts.enabled():
+    if not library_contracts.enabled(env=env):
         return 'DISABLED', 'LIBRARY_WRITES_DISABLED', False
-    if not library_contracts.renewal_enabled():
+    if not library_contracts.renewal_enabled(env=env):
         return 'DISABLED', 'LIBRARY_RENEW_DISABLED', False
     return 'BLOCKED', 'SOURCE_CONTRACT_UNVERIFIED', True
 

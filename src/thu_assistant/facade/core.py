@@ -80,7 +80,7 @@ class BusinessFacade:
                  media=None, academics=None, service_ids=None,
                  submissions_factory=None):
         self.owner = owner
-        self.env = dict(os.environ if env is None else env)
+        self._explicit_env: dict[str, str] | None = None if env is None else dict(env)
         self.clock = clock or time.time
         self.requests = RequestRegistry(clock=self.clock)
         # The 4.2 provider is kept apart from the ``resources`` read method
@@ -173,6 +173,15 @@ class BusinessFacade:
             academics=self.academics,
         )
 
+    @property
+    def env(self) -> dict[str, str]:
+        """Effective switch environment: live ``os.environ`` unless explicitly injected."""
+        return dict(os.environ) if self._explicit_env is None else self._explicit_env
+
+    @env.setter
+    def env(self, value: dict[str, str] | None) -> None:
+        self._explicit_env = None if value is None else dict(value)
+
     # -- registration ------------------------------------------------------
     def registrations(self, service_id: str | None = None) -> list[reg.Registration]:
         entries = self._cached_registrations()
@@ -184,15 +193,17 @@ class BusinessFacade:
         """Rebuild only when a switch or the catalog changed."""
         from ..queries import describe as describe_queries
         service_ids = self.service_ids()
-        signature = (tuple(sorted((key, str(value)) for key, value in self.env.items()
+        current_env = self.env
+        signature = (tuple(sorted((key, str(value)) for key, value in current_env.items()
                                   if key.startswith(('THU_', 'OPENTHU_')))),
-                     len(service_ids), tuple(service_ids[:3]))
+                     tuple(service_ids))
         now = time.monotonic()
         if (self._registration_cache is not None and signature == self._registration_signature
                 and now - self._registration_at < self._registration_ttl):
             return self._registration_cache
-        entries, failures = reg.registrations(self.providers(), service_ids=service_ids,
-                                              describe=describe_queries, env=self.env)
+        entries, failures = reg.registrations(
+            self.providers(), service_ids=service_ids,
+            describe=lambda sid: describe_queries(sid, env=current_env), env=current_env)
         self._registration_cache = entries
         self._registration_failures = failures
         self._registration_signature = signature
@@ -250,7 +261,7 @@ class BusinessFacade:
                     'note': '该服务不在校园服务目录中，描述来自能力登记表。'}
         else:
             try:
-                base = describe_queries(service_id)
+                base = describe_queries(service_id, env=self.env)
             except CampusError:
                 raise FacadeError('FACADE_SERVICE_UNKNOWN') from None
         by_operation = {(entry.service_id, entry.operation): entry.public() for entry in entries}

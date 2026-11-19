@@ -627,3 +627,12 @@ def test_cli_gate_returns_non_zero_for_a_failure(tmp_path):
                              "--commit", "deadbeef", "--output", str(output)])
     assert exit_code == 1
     assert json.loads(output.read_text(encoding="utf-8"))["status"] == "FAIL"
+
+
+def test_every_repository_test_file_is_mapped_to_a_module():
+    unmapped = [
+        path.relative_to(ROOT).as_posix()
+        for path in sorted((ROOT / "tests").rglob("test_*.py"))
+        if REPORT.module_for_file(path.relative_to(ROOT).as_posix()) == "unmapped"
+    ]
+    assert unmapped == []

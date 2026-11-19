@@ -2,14 +2,20 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from learn_assistant import auth as learn_auth
+from learn_assistant.core import LearnAssistant
+from learn_assistant.providers.mock import MockProvider
 from thu_assistant import catalog, paths
 from thu_assistant.action_store import ActionStore
 from thu_assistant.bridge import CampusError
+from thu_assistant.facade import BusinessFacade
 from thu_assistant.queries import QueryEngine, legacy_metadata
 from thu_assistant.snapshot_diff import SnapshotStore
 from thu_assistant.submissions.store import FileSetStore, SubmissionJournal
@@ -106,3 +112,92 @@ def test_account_bound_queries_fail_closed_without_an_identity():
     with pytest.raises(CampusError) as local:
         engine.query('local', 'agenda', {})
     assert local.value.code == 'AUTH_REQUIRED'
+
+
+def test_learn_assistant_follows_unified_state_and_download_roots(monkeypatch, tmp_path):
+    configured_state = tmp_path / 'cfg-state'
+    configured_downloads = tmp_path / 'cfg-downloads'
+    config_file = tmp_path / 'config.json'
+    config_file.write_text(
+        json.dumps({
+            'storage': {
+                'state_dir': str(configured_state),
+                'download_dir': str(configured_downloads),
+            }
+        }),
+        encoding='utf-8',
+    )
+    for name in ('OPENTHU_DATA_DIR', 'OPENTHU_STATE_DIR', 'THU_ASSISTANT_STATE_DIR',
+                 'OPENTHU_DOWNLOAD_DIR', 'OPENTHU_LEARN_SESSION_DIR', 'THU_LEARN_SESSION_DIR'):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('OPENTHU_CONFIG_FILE', str(config_file))
+
+    assistant = LearnAssistant(MockProvider())
+    assert assistant.system_data_root == configured_state.resolve()
+
+    sample = tmp_path / 'report.pdf'
+    sample.write_bytes(b'%PDF-1.4\n%synthetic\n')
+    summary = assistant.prepare_submission(
+        assignment_id='assignment-geology-1',
+        file_paths=[sample],
+    )
+    preview_file = configured_state / 'submission-previews' / f"{summary['operation_id']}.json"
+    assert preview_file.is_file()
+    assert summary['preview'] == f"submission-previews/{summary['operation_id']}.json"
+    assert str(tmp_path) not in json.dumps(summary, ensure_ascii=False)
+    if os.name != 'nt':
+        assert stat.S_IMODE(preview_file.stat().st_mode) == 0o600
+        assert stat.S_IMODE(preview_file.parent.stat().st_mode) == 0o700
+
+    download_result = assistant.download_files(file_ids=['file-geology-intro'])
+    assert Path(download_result['destination']) == configured_downloads.resolve()
+    assert download_result['ok'] is True
+
+    explicit_data = tmp_path / 'explicit-data'
+    monkeypatch.setenv('OPENTHU_DATA_DIR', str(explicit_data))
+    assert LearnAssistant(MockProvider()).system_data_root == explicit_data.resolve()
+
+    if os.name != 'nt':
+        assert learn_auth.default_session_dir() == configured_state.resolve() / 'LearnAssistant'
+
+
+def test_facade_tracks_live_env_changes_and_injected_env_switches(monkeypatch):
+    owner = SimpleNamespace(actions=object(), queries=object(), todos=object())
+    for key in ('THU_LIBRARY_WRITE', 'THU_LIBRARY_RENEW', 'THU_SPORTS_WRITE',
+                'THU_LIBRARY_READ', 'THU_SPACE_READ', 'THU_SPORTS_READ', 'THU_TODOS'):
+        monkeypatch.delenv(key, raising=False)
+
+    live_facade = BusinessFacade(owner)
+    assert live_facade.capability('library', 'create_seat_reservation').state == 'AVAILABLE'
+    assert live_facade.capability('library', 'renew_loan').state == 'BLOCKED'
+    assert live_facade.capability('sports', 'create_reservation').state == 'AVAILABLE'
+    assert live_facade.capability('local', 'agenda').state == 'AVAILABLE'
+
+    # Mutate os.environ within the 5-second cache TTL and verify immediate invalidation.
+    monkeypatch.setenv('THU_LIBRARY_WRITE', '0')
+    monkeypatch.setenv('THU_SPORTS_WRITE', '0')
+    monkeypatch.setenv('THU_TODOS', '0')
+    assert live_facade.capability('library', 'create_seat_reservation').state == 'DISABLED'
+    assert live_facade.capability('library', 'create_seat_reservation').reason == 'LIBRARY_WRITES_DISABLED'
+    assert live_facade.capability('library', 'renew_loan').state == 'DISABLED'
+    assert live_facade.capability('library', 'renew_loan').reason == 'LIBRARY_WRITES_DISABLED'
+    assert live_facade.capability('sports', 'create_reservation').state == 'DISABLED'
+    assert live_facade.capability('sports', 'create_reservation').reason == 'SPORTS_WRITES_DISABLED'
+    assert live_facade.capability('local', 'agenda').state == 'DISABLED'
+
+    for key in ('THU_LIBRARY_WRITE', 'THU_SPORTS_WRITE', 'THU_TODOS'):
+        monkeypatch.delenv(key, raising=False)
+
+    # Injected env must override switch checks without mutating os.environ.
+    injected = BusinessFacade(owner, env={
+        'THU_LIBRARY_WRITE': '0',
+        'THU_LIBRARY_RENEW': '0',
+        'THU_SPORTS_WRITE': '0',
+    })
+    assert injected.capability('library', 'create_seat_reservation').state == 'DISABLED'
+    assert injected.capability('library', 'renew_loan').state == 'DISABLED'
+    assert injected.capability('sports', 'create_reservation').state == 'DISABLED'
+    described = injected.describe_service('library')
+    by_op = {row['operation']: row for row in described['actions']}
+    assert by_op['create_seat_reservation']['enabled'] is False
+    assert by_op['create_seat_reservation']['reason'] == 'LIBRARY_WRITES_DISABLED'

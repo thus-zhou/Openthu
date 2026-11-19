@@ -47,12 +47,16 @@ def default_session_dir() -> Path:
     if os.name == "nt":
         base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
         return Path(base or Path.home()) / "LearnAssistant"
-    state = (
-        os.environ.get("OPENTHU_STATE_DIR")
-        or os.environ.get("THU_ASSISTANT_STATE_DIR")
-        or str(Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "openthu")
-    )
-    return Path(state).expanduser() / "LearnAssistant"
+    try:
+        from thu_assistant import catalog
+        return catalog.state_root() / "LearnAssistant"
+    except Exception:
+        state = (
+            os.environ.get("OPENTHU_STATE_DIR")
+            or os.environ.get("THU_ASSISTANT_STATE_DIR")
+            or str(Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "openthu")
+        )
+        return Path(state).expanduser() / "LearnAssistant"
 
 
 DEFAULT_LOGIN_URL = "https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/bb5df85216504820be7bba2b0ae1535b/0"
