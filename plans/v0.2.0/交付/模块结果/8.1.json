@@ -6,7 +6,7 @@
   "status": "accepted",
   "baseline_commit": "8d0606daf9bc121f3db1c5a5dba7ca62d343d0d8",
   "integration_parent_commit": "fb6edb1e4071f574430ef5d0259d918b67f3b0dc",
-  "delivery_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+  "delivery_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
   "implementation_commits": [
     "9b1bef5",
     "e98f42b",
@@ -17,7 +17,8 @@
     "2bd42cc",
     "43f19ef",
     "4a03ecd",
-    "50ce675"
+    "50ce675",
+    "71dbe9f"
   ],
   "record_commit": "the commit containing this record file",
   "branch": "hermes/8.1",
@@ -85,15 +86,15 @@
       "command": "python -m pytest -o addopts='' -q tests/test_local_api.py tests/test_facade_audit.py tests/test_batch6_integration.py tests/test_batch7_integration.py tests/test_docs_consistency.py"
     },
     "full_offline_suite_linux": {
-      "python_passed": 1842,
+      "python_passed": 1843,
       "python_skipped": 8,
       "python_failed": 0,
       "python_errors": 0,
-      "python_total": 1850,
+      "python_total": 1851,
       "node_passed": 66,
       "node_failed": 0,
       "command": "python -m pytest -o addopts='' -q -p no:cacheprovider --junitxml=.local/junit-a.xml; python scripts/dev.py test",
-      "note": "Python totals come from the JUnit cases; scripts/regression_report.py adds the 66 Node cases into its own totals (1908 passed, 8 skipped, 1916 total, 0 unmapped).",
+      "note": "Python totals come from the JUnit cases; scripts/regression_report.py adds the 66 Node cases into its own totals (1909 passed, 8 skipped, 1917 total, 0 unmapped).",
       "live_campus_calls": 0,
       "model_calls": 0,
       "business_submissions": 0
@@ -127,7 +128,7 @@
       "command": "python contracts/v0.2/sources/validate.py"
     },
     "candidate_build": {
-      "commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+      "commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
       "dirty": false,
       "artifacts": 4,
       "source_files": 568,
@@ -137,30 +138,30 @@
       "artifact_files": [
         {
           "name": "Openthu-0.2.0-source.tar.gz",
-          "size": 3704445,
-          "sha256": "12f8f04626710373b7ed090e16f439434d4640d607db102110ac5b57a8982d88"
+          "size": 3709412,
+          "sha256": "4381e95abc347a0c2228c7f731f8be189503ed42c4d662a27c4cfb2bead46f33"
         },
         {
           "name": "Openthu-0.2.0-source.zip",
-          "size": 4165186,
-          "sha256": "170b78436e6418ac101fd0b909f94d7540485a2c5716f66715f0e2a6a44938f2"
+          "size": 4170441,
+          "sha256": "21d0a87a9fb87b09c8b3d58a26d8a924897837239b2dc1eacc44a26b280f727f"
         },
         {
           "name": "openthu-0.2.0-py3-none-any.whl",
-          "size": 2811450,
-          "sha256": "497e862c2ea64f251d68a97b4260c0960ab71c3ccb10453f092121e7c36c6846"
+          "size": 2812279,
+          "sha256": "d15c2fc8fde2733f396813e5b9643e09b3eb73246d2db827c20a4e021e4aee31"
         },
         {
           "name": "openthu-0.2.0.tar.gz",
-          "size": 3467528,
-          "sha256": "89aed763555f4ac01087cde1a42a9c5b541fa40ef7b5ae68e8e649b315fa1959"
+          "size": 3471570,
+          "sha256": "a242ae64d6ad197246e1af230f78f8dca6e96f14f5928f7865ffaedff481da66"
         }
       ],
       "verify": "ok=true; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
       "release_status": "candidate-not-released",
       "published": false,
-      "command": "python scripts/package_release.py build (CI release gate at 50ce675)",
-      "note": "Hashes are from the CI release-gate build at 50ce675 (pre-batch-9 optimization and wrap-up on top of total-audit 43f19ef/4a03ecd). A local Windows rebuild at 50ce675 verified the exact same source.zip SHA256 and passed verify + out-of-repo install-check; Codex rebuilds at the final merged head before tagging."
+      "command": "python scripts/package_release.py build (CI release gate at 71dbe9f)",
+      "note": "Hashes are from the CI release-gate build at 71dbe9f (pre-batch-9 optimization and wrap-up on top of total-audit 43f19ef/4a03ecd). A local Windows rebuild at 71dbe9f verified the exact same source.zip SHA256 and passed verify + out-of-repo install-check; Codex rebuilds at the final merged head before tagging."
     },
     "install_check": {
       "source_root": null,
@@ -170,7 +171,7 @@
       "user_state_unchanged": true,
       "venv": "temporary",
       "command": "python scripts/package_release.py install-check --dist dist",
-      "note": "Run on a clean rebuild at 50ce675 outside the repository; member list, metadata, doctor and 29 MCP tools all pass."
+      "note": "Run on a clean rebuild at 71dbe9f outside the repository; member list, metadata, doctor and 29 MCP tools all pass."
     },
     "fresh_install": {
       "location": "a new venv outside the repository",
@@ -192,16 +193,16 @@
         "ok": true,
         "files_checked": 1849,
         "findings": 0,
-        "note": "Current candidate at 50ce675: 568 source members x2 + 214 wheel + 499 sdist = 1,849 (earlier 2bd42cc scanned 1,840; 9b1bef5 rehearsal scanned 1,825)."
+        "note": "Current candidate at 71dbe9f: 568 source members x2 + 214 wheel + 499 sdist = 1,849 (earlier 2bd42cc scanned 1,840; 9b1bef5 rehearsal scanned 1,825)."
       },
       "git_diff": "added absolute paths are synthetic test markers (alice/synthetic/example); no real host path, credential or private key block",
       "author_identity": "Openthu Maintainers <maintainers@openthu.invalid>"
     },
     "github_actions": {
-      "commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
-      "run": 44434121491,
+      "commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+      "run": 44468735503,
       "event": "push",
-      "pull_request_run": 44434129313,
+      "pull_request_run": 44468740959,
       "status": "completed",
       "conclusion": "success",
       "jobs": {
@@ -213,13 +214,13 @@
       "reports": {
         "linux": {
           "status": "PASS",
-          "passed": 1908,
+          "passed": 1909,
           "skipped": 8,
           "failed": 0,
-          "total": 1916,
+          "total": 1917,
           "unmapped": 0,
           "python": {
-            "passed": 1842,
+            "passed": 1843,
             "skipped": 8
           },
           "node": {
@@ -229,13 +230,13 @@
         },
         "windows": {
           "status": "PASS",
-          "passed": 1895,
+          "passed": 1896,
           "skipped": 21,
           "failed": 0,
-          "total": 1916,
+          "total": 1917,
           "unmapped": 0,
           "python": {
-            "passed": 1829,
+            "passed": 1830,
             "skipped": 21
           },
           "node": {
@@ -260,7 +261,7 @@
         }
       },
       "candidate": {
-        "commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+        "commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
         "artifacts": 4,
         "source_files": 568,
         "wheel_members": 214,
@@ -269,49 +270,49 @@
         "artifact_files": [
           {
             "name": "Openthu-0.2.0-source.tar.gz",
-            "size": 3704445,
-            "sha256": "12f8f04626710373b7ed090e16f439434d4640d607db102110ac5b57a8982d88"
+            "size": 3709412,
+            "sha256": "4381e95abc347a0c2228c7f731f8be189503ed42c4d662a27c4cfb2bead46f33"
           },
           {
             "name": "Openthu-0.2.0-source.zip",
-            "size": 4165186,
-            "sha256": "170b78436e6418ac101fd0b909f94d7540485a2c5716f66715f0e2a6a44938f2"
+            "size": 4170441,
+            "sha256": "21d0a87a9fb87b09c8b3d58a26d8a924897837239b2dc1eacc44a26b280f727f"
           },
           {
             "name": "openthu-0.2.0-py3-none-any.whl",
-            "size": 2811450,
-            "sha256": "497e862c2ea64f251d68a97b4260c0960ab71c3ccb10453f092121e7c36c6846"
+            "size": 2812279,
+            "sha256": "d15c2fc8fde2733f396813e5b9643e09b3eb73246d2db827c20a4e021e4aee31"
           },
           {
             "name": "openthu-0.2.0.tar.gz",
-            "size": 3467528,
-            "sha256": "89aed763555f4ac01087cde1a42a9c5b541fa40ef7b5ae68e8e649b315fa1959"
+            "size": 3471570,
+            "sha256": "a242ae64d6ad197246e1af230f78f8dca6e96f14f5928f7865ffaedff481da66"
           }
         ]
       },
       "notes": [
-        "Current code/CI/artifact run is push 44434121491 and pull_request 44434129313 at 50ce675; all four jobs succeeded with 0 unmapped test files and 0 release-gate gaps.",
+        "Current code/CI/artifact run is push 44468735503 and pull_request 44468740959 at 71dbe9f; all four jobs succeeded with 0 unmapped test files and 0 release-gate gaps.",
         "Previous total-audit green runs: push 44236818999 and pull_request 44236825532 at 4a03ecd (Linux 1905/8, Windows 1892/21).",
         "Earlier pre-total-audit candidate runs: push 44204917343 and pull_request 44204927343 at 2bd42cc (Linux 1879/8, Windows 1866/21)."
       ],
       "record_head_run": 44202750006,
       "record_head_commit": "9631d30da6a6719fd829d9ec24ff47b0a6bfe4b4",
       "head_run": {
-        "commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
-        "run": 44434121491,
+        "commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+        "run": 44468735503,
         "event": "push",
         "status": "completed",
         "conclusion": "success",
         "reports": {
           "linux": {
             "status": "PASS",
-            "passed": 1908,
+            "passed": 1909,
             "skipped": 8,
             "failed": 0,
-            "total": 1916,
+            "total": 1917,
             "unmapped": 0,
             "python": {
-              "passed": 1842,
+              "passed": 1843,
               "skipped": 8
             },
             "node": {
@@ -321,13 +322,13 @@
           },
           "windows": {
             "status": "PASS",
-            "passed": 1895,
+            "passed": 1896,
             "skipped": 21,
             "failed": 0,
-            "total": 1916,
+            "total": 1917,
             "unmapped": 0,
             "python": {
-              "passed": 1829,
+              "passed": 1830,
               "skipped": 21
             },
             "node": {
@@ -337,7 +338,7 @@
           }
         },
         "release_gate": "PASS, nine checks true, 0 gaps",
-        "note": "Artifact run at the pre-batch-9 optimization and wrap-up commit 50ce675."
+        "note": "Artifact run at the pre-batch-9 optimization and wrap-up commit 71dbe9f."
       }
     },
     "live_campus_calls": 0,
@@ -388,9 +389,9 @@
   "accepted_at": "2026-11-18",
   "integration_parent_note": "fb6edb1 is the batch-7 integration commit; 8d0606d is the branch point / record correction that 8.1 actually starts from.",
   "verification_commit": "the commit containing this record file",
-  "branch_head": "the record-only head containing this record (artifact_commit 50ce675; product code ends at 50ce675)",
+  "branch_head": "the record-only head containing this record (artifact_commit 71dbe9f; product code ends at 71dbe9f)",
   "integration_branch": "hermes/1-install-diagnostics",
-  "integration_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+  "integration_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
   "total_audit_remediation": {
     "snapshot_commit": "de1d2fc409c64fca57854100a2ee9870405756d2",
     "product_commit": "43f19ef65e4802092386c0dfab0f50da44590a3d",
@@ -408,15 +409,20 @@
     }
   },
   "pre_batch9_wrapup": {
-    "commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+    "commits": [
+      "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+      "71dbe9ffd79227a3f794b326a1498cbbc4045224"
+    ],
+    "commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
     "fixes": [
       "Mapped tests/test_error_registry.py, test_plan_validation.py and test_remediation_state_scope.py in scripts/regression_report.py with a repository-wide mapping guard (0 unmapped files)",
       "Unified LearnAssistant default state/download roots and non-Windows session dir with configuration/catalog state_root and atomic 0600 preview creation",
-      "Fixed BusinessFacade registration cache to track live os.environ and full service_ids, and threaded injected env through queries.describe, actions.describe_actions and library_contracts"
+      "Fixed BusinessFacade registration cache to track live os.environ and full service_ids, and threaded injected env through queries.describe, actions.describe_actions and library_contracts",
+      "Added bounded Windows WinError 5/32 sharing-violation retry on os.replace/read_bytes in action_store.py, submissions/store.py and consent/store.py, and deduplicated identical cacheable in-flight GETs in web_assets/assets/app.js"
     ],
     "runs": {
-      "push": 44434121491,
-      "pull_request": 44434129313
+      "push": 44468735503,
+      "pull_request": 44468740959
     }
   },
   "audit": {
@@ -441,8 +447,8 @@
       "P2-9: the contract names the local-session binding and records the account-switch boundary"
     ]
   },
-  "artifact_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
-  "candidate_head": "the commit containing this record file (record-only after 50ce675)",
+  "artifact_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+  "candidate_head": "the commit containing this record file (record-only after 71dbe9f)",
   "integration_fixes": [
     "S12: a concurrent take() could make peek() report STATE_READ_FAILED for a grant it had just consumed; peek now shares the consent lock and reports a vanished grant as absent, with a deterministic regression test.",
     "S13: the merge commit 5ec73d9 never became a checked head, so the machine gate could not find green test (ubuntu-24.04)/test (windows-2025) runs; batch 8 now records integration_commit 2bd42cc (CI green) and merge_commit 5ec73d9."

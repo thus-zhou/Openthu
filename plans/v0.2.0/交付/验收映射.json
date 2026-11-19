@@ -964,10 +964,10 @@
       ],
       "completion_standard": "全版本集成、候选构建、恢复安装验证和交审说明",
       "evidence": [
-        "8.1-audit P0=0/P1=3/P2=9 closed; total-audit 17/17 (P1x4, P2x11, P3x2) closed at 43f19ef/4a03ecd; pre-batch-9 optimization landed at 50ce675",
+        "8.1-audit P0=0/P1=3/P2=9 closed; total-audit 17/17 (P1x4, P2x11, P3x2) closed at 43f19ef/4a03ecd; pre-batch-9 optimization landed at 71dbe9f",
         "foreign or expired cursors on /todos and /calendar return 400 CURSOR_EXPIRED; a cursor from another route or account returns 400 CURSOR_QUERY_MISMATCH",
-        "CI push 44434121491 and PR 44434129313 at 50ce675 green on both platforms: Linux Python 1842/8 + Node 66 (1908/8), Windows Python 1829/21 + Node 66 (1895/21), 0 unmapped files, release gate PASS 9/9 checks, 0 gaps",
-        "candidate build/verify/install-check pass at 50ce675 (4 artifacts, source 568, wheel 214/54 bundled, sdist 499); batch 8 merged at 5ec73d9 and version PR #2 head carries the candidate"
+        "CI push 44468735503 and PR 44468740959 at 71dbe9f green on both platforms: Linux Python 1843/8 + Node 66 (1909/8), Windows Python 1830/21 + Node 66 (1896/21), 0 unmapped files, release gate PASS 9/9 checks, 0 gaps",
+        "candidate build/verify/install-check pass at 71dbe9f (4 artifacts, source 568, wheel 214/54 bundled, sdist 499); batch 8 merged at 5ec73d9 and version PR #2 head carries the candidate"
       ]
     },
     {

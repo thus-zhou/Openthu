@@ -1155,24 +1155,24 @@
       ],
       "integration_order": 23,
       "status": "accepted",
-      "delivery_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+      "delivery_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
       "evidence": [
         "audit 8.1-audit P0=0/P1=3/P2=9 closed; total-audit 17/17 (P1x4, P2x11, P3x2) closed at 43f19ef/4a03ecd",
-        "pre-batch-9 optimization 50ce675 maps all repository test files (0 unmapped), unifies learn_assistant default state/download roots with atomic 0600 previews, and fixes BusinessFacade live env and injected switch tracking",
-        "CI push 44434121491 and PR 44434129313 at 50ce675 green on both platforms: Linux Python 1842/8 + Node 66 (1908/8), Windows Python 1829/21 + Node 66 (1895/21), release gate PASS 9/9 checks, 0 gaps",
-        "candidate build/verify/install-check pass at 50ce675 (4 artifacts, source 568, wheel 214/54 bundled, sdist 499, privacy 571 source + 1849 archive members / 0 findings); batch 8 merged at 5ec73d9"
+        "pre-batch-9 optimization 71dbe9f maps all repository test files (0 unmapped), unifies learn_assistant default state/download roots with atomic 0600 previews, and fixes BusinessFacade live env and injected switch tracking",
+        "CI push 44468735503 and PR 44468740959 at 71dbe9f green on both platforms: Linux Python 1843/8 + Node 66 (1909/8), Windows Python 1830/21 + Node 66 (1896/21), release gate PASS 9/9 checks, 0 gaps",
+        "candidate build/verify/install-check pass at 71dbe9f (4 artifacts, source 568, wheel 214/54 bundled, sdist 499, privacy 571 source + 1849 archive members / 0 findings); batch 8 merged at 5ec73d9"
       ],
       "accepted_at": "2026-11-18",
-      "integration_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
-      "audit_fix": "8.1-audit P0=0/P1=3/P2=9; total-audit P0=0/P1=4/P2=11/P3=2; pre-batch-9 optimization 50ce675",
+      "integration_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+      "audit_fix": "8.1-audit P0=0/P1=3/P2=9; total-audit P0=0/P1=4/P2=11/P3=2; pre-batch-9 optimization 71dbe9f",
       "cross_module_handoffs": [
         "1.1 (contract owner): local-read-api-v1 was revised in place with an 8.1 revision row for the request-side cursor; error-classification.json holds 370 registered codes.",
         "4.4: the actions.py module docstring was corrected by the integrator because it contradicted the registered seat/room/sports operations; consent peek/take concurrency fixed at 2bd42cc.",
         "2.3: the source-matrix difference register was rewritten to the observed resolved/retained state; the v0.1 preview boundary is kept with 0600 atomic creation and no absolute path leaks.",
         "6.2: the QUERY_EXTENSION note and the describe_api query_extension field were removed after the contract declared the parameter; lac1 cursors bind account_scope.",
         "7.2 (.github/workflows/ci.yml, scripts/regression_report.py): the test job checks out full history and every test file in tests/ is mapped in MODULE_BY_FILE with a repository-wide test guard.",
-        "9.1: rebuild and re-verify the candidate at the final merged head before tagging; the recorded CI SHA256 set belongs to 50ce675.",
-        "2.1/6.1 (src/learn_assistant/core.py, auth.py, facade/core.py, registry.py, queries.py, actions.py, library_contracts.py): unified learn state/download defaults and live/injected switch env plumbing landed in 50ce675."
+        "9.1: rebuild and re-verify the candidate at the final merged head before tagging; the recorded CI SHA256 set belongs to 71dbe9f.",
+        "2.1/6.1 (src/learn_assistant/core.py, auth.py, facade/core.py, registry.py, queries.py, actions.py, library_contracts.py): unified learn state/download defaults and live/injected switch env plumbing landed in 71dbe9f."
       ],
       "merge_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed"
     },
@@ -1208,5 +1208,5 @@
       "status": "ready"
     }
   ],
-  "gate_note": "Batch 8 accepted: 8.1 accepted after 8.1-audit, total-audit 17/17 remediation and pre-batch-9 optimization 50ce675 (CI push 44434121491 / PR 44434129313 green on both platforms and release gate PASS); version PR #2 carries the candidate. Batch 9 is ready for Codex; no new PR, main merge, tag or release was created."
+  "gate_note": "Batch 8 accepted: 8.1 accepted after 8.1-audit, total-audit 17/17 remediation and pre-batch-9 optimization 71dbe9f (CI push 44468735503 / PR 44468740959 green on both platforms and release gate PASS); version PR #2 carries the candidate. Batch 9 is ready for Codex; no new PR, main merge, tag or release was created."
 }

@@ -414,7 +414,7 @@
         "8.1": "accepted"
       },
       "status": "accepted",
-      "integration_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+      "integration_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
       "accepted_at": "2026-11-18",
       "entry_condition": "all batch 7 modules accepted and integrated",
       "exit_condition": "all modules accepted; candidate built, restored and reviewed",
@@ -437,8 +437,8 @@
         ],
         "note": "Historical pre-audit checkpoint kept for traceability; the accepted state is the audit_fix block and the module_acceptance / checks fields.",
         "final_candidate": {
-          "commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
-          "run": 44434121491,
+          "commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+          "run": 44468735503,
           "artifacts": 4,
           "source_files": 568,
           "wheel_members": 214,
@@ -447,18 +447,18 @@
           "release_gate": "PASS, 0 gaps, nine checks true"
         }
       },
-      "gate_note": "8.1 accepted after the 8.1-audit remediation and merged into hermes/1-install-diagnostics at 5ec73d9; total-audit 17/17 remediation (43f19ef/4a03ecd) and pre-batch-9 optimization (50ce675) are integrated with both platforms and the release gate green. Batch 9 is ready for Codex review; no PR was created, main was not merged, nothing was tagged or released.",
+      "gate_note": "8.1 accepted after the 8.1-audit remediation and merged into hermes/1-install-diagnostics at 5ec73d9; total-audit 17/17 remediation (43f19ef/4a03ecd) and pre-batch-9 optimization (71dbe9f) are integrated with both platforms and the release gate green. Batch 9 is ready for Codex review; no PR was created, main was not merged, nothing was tagged or released.",
       "acceptance_record": "the commit containing this accepted record",
       "module_acceptance": {
         "8.1": {
           "accepted_at": "2026-11-18",
-          "delivery_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
-          "integration_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+          "delivery_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+          "integration_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
           "previous_candidates": [
             "4a03ecd1fc4cc1059f544381a16c3d3f348712ef",
             "2bd42cc6ea414a246b71abe530b99eb759b78930"
           ],
-          "evidence": "audit 8.1-audit P0=0/P1=3/P2=9 closed; total-audit 17/17 (P1x4, P2x11, P3x2) closed at 43f19ef/4a03ecd; pre-batch-9 optimization 50ce675 maps all repository test files (0 unmapped), unifies learn_assistant state/download roots with atomic 0600 previews, and fixes BusinessFacade live env and injected switch tracking; CI push 44434121491 / PR 44434129313 green on both platforms (Linux 1908/8, Windows 1895/21, Node 66, release gate PASS 9/9 checks, 0 gaps).",
+          "evidence": "audit 8.1-audit P0=0/P1=3/P2=9 closed; total-audit 17/17 (P1x4, P2x11, P3x2) closed at 43f19ef/4a03ecd; pre-batch-9 optimization 71dbe9f maps all repository test files (0 unmapped), unifies learn_assistant state/download roots with atomic 0600 previews, and fixes BusinessFacade live env and injected switch tracking; CI push 44468735503 / PR 44468740959 green on both platforms (Linux 1909/8, Windows 1896/21, Node 66, release gate PASS 9/9 checks, 0 gaps).",
           "merge_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed"
         }
       },
@@ -478,15 +478,20 @@
         }
       },
       "pre_batch9_wrapup": {
-        "commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+        "commits": [
+          "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+          "71dbe9ffd79227a3f794b326a1498cbbc4045224"
+        ],
+        "commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
         "fixes": [
           "Mapped tests/test_error_registry.py, test_plan_validation.py and test_remediation_state_scope.py in scripts/regression_report.py with a repository-wide mapping guard (0 unmapped files)",
           "Unified LearnAssistant default state/download roots and non-Windows session dir with configuration/catalog state_root and atomic 0600 preview creation",
-          "Fixed BusinessFacade registration cache to track live os.environ and full service_ids, and threaded injected env through queries.describe, actions.describe_actions and library_contracts"
+          "Fixed BusinessFacade registration cache to track live os.environ and full service_ids, and threaded injected env through queries.describe, actions.describe_actions and library_contracts",
+          "Added bounded Windows WinError 5/32 sharing-violation retry on os.replace/read_bytes in action_store.py, submissions/store.py and consent/store.py, and deduplicated identical cacheable in-flight GETs in web_assets/assets/app.js"
         ],
         "runs": {
-          "push": 44434121491,
-          "pull_request": 44434129313
+          "push": 44468735503,
+          "pull_request": 44468740959
         }
       },
       "audit_fix": {
@@ -519,11 +524,11 @@
         "contract validator ok: 8 contracts + 1 compatibility baseline; 370 error codes; local-read-api revision 8.1",
         "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures",
         "scripts/dev.py check: 571 files, 0 findings, 29 MCP tools",
-        "Linux (CI 3.12 and 3.13): Python 1842 passed/8 platform skips/0 failed + Node 66 passed (1908/8, 0 unmapped, 0 gaps)",
-        "Windows (CI 3.12): Python 1829 passed/21 platform skips/0 failed + Node 66 passed (1895/21, 0 unmapped, 0 gaps)",
-        "GitHub Actions push 44434121491 and pull_request 44434129313 at 50ce675: ubuntu-24.04, ubuntu-24.04 (3.13), windows-2025 and the release gate all successful; the gate returns PASS with all nine checks true and 0 gaps",
-        "final candidate rebuilt by the release gate at 50ce675: 4 artifacts, 568 source files, wheel 214 members (54 bundled), sdist 499 members, privacy archives 1849 members/0 findings",
-        "local Windows verify and out-of-repository install-check at 50ce675: ok=true, 29 MCP tools, doctor_ok=true, user_state_unchanged=true"
+        "Linux (CI 3.12 and 3.13): Python 1843 passed/8 platform skips/0 failed + Node 66 passed (1909/8, 0 unmapped, 0 gaps)",
+        "Windows (CI 3.12): Python 1830 passed/21 platform skips/0 failed + Node 66 passed (1896/21, 0 unmapped, 0 gaps)",
+        "GitHub Actions push 44468735503 and pull_request 44468740959 at 71dbe9f: ubuntu-24.04, ubuntu-24.04 (3.13), windows-2025 and the release gate all successful; the gate returns PASS with all nine checks true and 0 gaps",
+        "final candidate rebuilt by the release gate at 71dbe9f: 4 artifacts, 568 source files, wheel 214 members (54 bundled), sdist 499 members, privacy archives 1849 members/0 findings",
+        "local Windows verify and out-of-repository install-check at 71dbe9f: ok=true, 29 MCP tools, doctor_ok=true, user_state_unchanged=true"
       ],
       "merge_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed"
     },
@@ -543,5 +548,5 @@
       "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
     }
   ],
-  "gate_note": "Batches 1-8 accepted and integrated on hermes/1-install-diagnostics (version PR #2). Batch 8 (8.1) accepted with total-audit 17/17 remediation and pre-batch-9 optimization green at 50ce675 (check 571/0, Linux 1908/8, Windows 1895/21, Node 66, release gate PASS 9/9 checks, 0 gaps, 0 unmapped files). Batch 9 (9.1 Codex review and release) is ready; main is not merged, no tag or Release exists."
+  "gate_note": "Batches 1-8 accepted and integrated on hermes/1-install-diagnostics (version PR #2). Batch 8 (8.1) accepted with total-audit 17/17 remediation and pre-batch-9 optimization green at 71dbe9f (check 571/0, Linux 1909/8, Windows 1896/21, Node 66, release gate PASS 9/9 checks, 0 gaps, 0 unmapped files). Batch 9 (9.1 Codex review and release) is ready; main is not merged, no tag or Release exists."
 }

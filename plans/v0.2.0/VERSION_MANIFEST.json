@@ -121,7 +121,7 @@
     "total": 9,
     "current": 8,
     "current_status": "accepted",
-    "module_status_note": "Batches 1-8 accepted; 8.1 accepted after the 8.1-audit remediation and merged into hermes/1-install-diagnostics at 5ec73d9; total-audit 17/17 remediation (43f19ef/4a03ecd) and pre-batch-9 optimization (50ce675) are integrated and CI green. Batch 9 is ready for Codex review on version PR #2.",
+    "module_status_note": "Batches 1-8 accepted; 8.1 accepted after the 8.1-audit remediation and merged into hermes/1-install-diagnostics at 5ec73d9; total-audit 17/17 remediation (43f19ef/4a03ecd) and pre-batch-9 optimization (71dbe9f) are integrated and CI green. Batch 9 is ready for Codex review on version PR #2.",
     "next": 9,
     "gate_file": "交付/批次门禁.json",
     "status_model": "accepted prefix -> one ready -> locked remainder; all accepted only at version completion",
@@ -209,7 +209,7 @@
   },
   "candidate": {
     "status": "candidate-not-released",
-    "code_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+    "code_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
     "previous_candidates": [
       "4a03ecd1fc4cc1059f544381a16c3d3f348712ef",
       "2bd42cc6ea414a246b71abe530b99eb759b78930"
@@ -225,35 +225,35 @@
     "bundled_files": 54,
     "sdist_members": 499,
     "source_files": 568,
-    "verify": "ok=true at 50ce675; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
+    "verify": "ok=true at 71dbe9f; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
     "install_check": "outside the repository; 29 MCP tools, doctor ok, user state unchanged",
     "published": false,
     "record": "交付/候选版本记录.md",
-    "release_gate": "PASS; nine checks true, 0 gaps; run 44434121491 (push) and 44434129313 (pull_request)",
+    "release_gate": "PASS; nine checks true, 0 gaps; run 44468735503 (push) and 44468740959 (pull_request)",
     "artifact_files": [
       {
         "name": "Openthu-0.2.0-source.tar.gz",
-        "size": 3704445,
-        "sha256": "12f8f04626710373b7ed090e16f439434d4640d607db102110ac5b57a8982d88"
+        "size": 3709412,
+        "sha256": "4381e95abc347a0c2228c7f731f8be189503ed42c4d662a27c4cfb2bead46f33"
       },
       {
         "name": "Openthu-0.2.0-source.zip",
-        "size": 4165186,
-        "sha256": "170b78436e6418ac101fd0b909f94d7540485a2c5716f66715f0e2a6a44938f2"
+        "size": 4170441,
+        "sha256": "21d0a87a9fb87b09c8b3d58a26d8a924897837239b2dc1eacc44a26b280f727f"
       },
       {
         "name": "openthu-0.2.0-py3-none-any.whl",
-        "size": 2811450,
-        "sha256": "497e862c2ea64f251d68a97b4260c0960ab71c3ccb10453f092121e7c36c6846"
+        "size": 2812279,
+        "sha256": "d15c2fc8fde2733f396813e5b9643e09b3eb73246d2db827c20a4e021e4aee31"
       },
       {
         "name": "openthu-0.2.0.tar.gz",
-        "size": 3467528,
-        "sha256": "89aed763555f4ac01087cde1a42a9c5b541fa40ef7b5ae68e8e649b315fa1959"
+        "size": 3471570,
+        "sha256": "a242ae64d6ad197246e1af230f78f8dca6e96f14f5928f7865ffaedff481da66"
       }
     ],
-    "artifact_commit": "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
-    "candidate_head": "the commit containing this record file (record-only after 50ce675)",
-    "note": "code_commit is the final pre-batch-9 product-code and CI artifact commit (50ce675); record-only commits after 50ce675 synchronize ledgers without changing wheel product code, and Codex rebuilds at the final merged head before tagging."
+    "artifact_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+    "candidate_head": "the commit containing this record file (record-only after 71dbe9f)",
+    "note": "code_commit is the final pre-batch-9 product-code and CI artifact commit (71dbe9f); record-only commits after 71dbe9f synchronize ledgers without changing wheel product code, and Codex rebuilds at the final merged head before tagging."
   }
 }
