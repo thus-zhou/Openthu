@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/sources/data-models/course.schema.json",
+  "title": "Openthu v0.2 canonical course",
+  "description": "A course record normalized from one campus source. Identity comes from the source, semester and source record identifier. A display title is never an identity and must not merge two otherwise different courses.",
+  "x-contract-version": "course-v1",
+  "x-owner": "2.3/Hermes",
+  "x-status": "frozen",
+  "x-semantics": "Internal normalized record. Field names are Openthu names, not upstream school field names. The mapping from upstream fields is recorded in contracts/v0.2/sources/source-registry.json.",
+  "x-identity-rule": "course_uid = <source_id>:COURSE:<semester_id>:<source_record_id>. If the source record id or the semester id is unavailable, course_uid is null and identity_state is MISSING_STABLE_ID. Title, teacher names and array position never participate.",
+  "x-unknown-values": {
+    "source_record_id": null,
+    "semester_id": null,
+    "course_uid": null,
+    "role": "UNKNOWN",
+    "dedupe_state": "NOT_DEDUPED",
+    "null_meaning": "missing or unavailable; never a fabricated identifier and never a reason to merge"
+  },
+  "type": "object",
+  "required": [
+    "source_id",
+    "source_record_id",
+    "course_uid",
+    "semester_id",
+    "title",
+    "teacher_names",
+    "role",
+    "identity_state",
+    "dedupe_state",
+    "observed_at",
+    "source_evidence_id",
+    "synthetic"
+  ],
+  "properties": {
+    "source_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{2,120}$"
+    },
+    "source_record_id": {
+      "type": ["string", "null"],
+      "maxLength": 240
+    },
+    "course_uid": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z][a-z0-9_.-]{1,80}:COURSE:[A-Za-z0-9_.:-]{1,180}$",
+      "maxLength": 280
+    },
+    "semester_id": {
+      "type": ["string", "null"],
+      "maxLength": 80
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "teacher_names": {
+      "type": "array",
+      "maxItems": 40,
+      "items": {"type": "string", "minLength": 1, "maxLength": 200}
+    },
+    "role": {
+      "type": "string",
+      "enum": ["STUDENT", "TEACHER", "UNKNOWN"]
+    },
+    "identity_state": {
+      "type": "string",
+      "enum": ["STABLE", "MISSING_STABLE_ID", "CONFLICT"]
+    },
+    "dedupe_state": {
+      "type": "string",
+      "enum": ["UNIQUE", "SAME_TITLE_DIFFERENT_IDENTITY", "NOT_DEDUPED"]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_evidence_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 200}
+    },
+    "synthetic": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {"identity_state": {"const": "STABLE"}},
+        "required": ["identity_state"]
+      },
+      "then": {
+        "properties": {
+          "source_record_id": {"type": "string", "minLength": 1},
+          "semester_id": {"type": "string", "minLength": 1},
+          "course_uid": {"type": "string"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"identity_state": {"const": "MISSING_STABLE_ID"}},
+        "required": ["identity_state"]
+      },
+      "then": {
+        "properties": {"course_uid": {"type": "null"}}
+      }
+    },
+    {
+      "if": {
+        "properties": {"identity_state": {"const": "CONFLICT"}},
+        "required": ["identity_state"]
+      },
+      "then": {
+        "properties": {"course_uid": {"type": "null"}}
+      }
+    }
+  ],
+  "x-compatibility-sample": {
+    "source_id": "learn.courses",
+    "source_record_id": "SYNTHETIC-COURSE-1",
+    "course_uid": "learn.courses:COURSE:2026-2027-1:SYNTHETIC-COURSE-1",
+    "semester_id": "2026-2027-1",
+    "title": "合成课程",
+    "teacher_names": ["合成教师"],
+    "role": "STUDENT",
+    "identity_state": "STABLE",
+    "dedupe_state": "UNIQUE",
+    "observed_at": "2026-11-16T12:00:00+00:00",
+    "source_evidence_id": "learn.courses",
+    "warnings": [],
+    "synthetic": true
+  },
+  "x-rejection-samples": [
+    {
+      "why": "a stable course without a source record id has no identity",
+      "value": {
+        "source_id": "learn.courses",
+        "source_record_id": null,
+        "course_uid": "learn.courses:COURSE:2026-2027-1:SYNTHETIC-COURSE-1",
+        "semester_id": "2026-2027-1",
+        "title": "合成课程",
+        "teacher_names": [],
+        "role": "STUDENT",
+        "identity_state": "STABLE",
+        "dedupe_state": "UNIQUE",
+        "observed_at": "2026-11-16T12:00:00+00:00",
+        "source_evidence_id": "learn.courses",
+        "synthetic": true
+      }
+    },
+    {
+      "why": "a missing stable id must not carry a fabricated course_uid",
+      "value": {
+        "source_id": "learn.courses",
+        "source_record_id": null,
+        "course_uid": "learn.courses:COURSE:2026-2027-1:SYNTHETIC-COURSE-1",
+        "semester_id": "2026-2027-1",
+        "title": "合成课程",
+        "teacher_names": [],
+        "role": "STUDENT",
+        "identity_state": "MISSING_STABLE_ID",
+        "dedupe_state": "NOT_DEDUPED",
+        "observed_at": "2026-11-16T12:00:00+00:00",
+        "source_evidence_id": "learn.courses",
+        "synthetic": true
+      }
+    },
+    {
+      "why": "a display title is not a valid stable course identifier",
+      "value": {
+        "source_id": "learn.courses",
+        "source_record_id": "SYNTHETIC-COURSE-1",
+        "course_uid": "同名课程",
+        "semester_id": "2026-2027-1",
+        "title": "同名课程",
+        "teacher_names": [],
+        "role": "STUDENT",
+        "identity_state": "STABLE",
+        "dedupe_state": "UNIQUE",
+        "observed_at": "2026-11-16T12:00:00+00:00",
+        "source_evidence_id": "learn.courses",
+        "synthetic": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/source-evidence.schema.json",
+  "title": "Openthu v0.2 source evidence",
+  "description": "Evidence attached to a query or action result. It records what source was read, how far it was read, and what remains unknown. Raw pages, cookies, headers and private data never enter this contract.",
+  "x-contract-version": "source-evidence-v1",
+  "x-owner": "1.1/Hermes",
+  "x-status": "frozen",
+  "x-semantics": "State names describe Openthu internal evidence. They do not assert a school status value.",
+  "x-unknown-values": {
+    "enum": "UNKNOWN",
+    "upstream_total": null,
+    "checked_at": "Never null for a completed check",
+    "missing_pages": "an empty array means no missing page was observed; it does not prove source completeness",
+    "null_meaning": "unknown or unavailable, never success"
+  },
+  "x-three-state-rule": {
+    "source_failure": "status is an error and data is null; never an empty list",
+    "real_empty": "status=EMPTY, complete=true, source_complete=true and rows=[]",
+    "partial": "status=PARTIAL, complete=false, source_complete=false, optionally with retained rows",
+    "unverified": "status=UNKNOWN and complete=false; do not infer success or emptiness"
+  },
+  "type": "object",
+  "required": [
+    "source_id",
+    "service_domain",
+    "operation",
+    "adapter_version",
+    "checked_at",
+    "state",
+    "read_scope",
+    "source_complete",
+    "complete",
+    "missing_pages",
+    "warnings",
+    "synthetic",
+    "raw_payload_included"
+  ],
+  "properties": {
+    "source_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,120}$",
+      "description": "Stable local identifier for this source adapter and operation."
+    },
+    "service_domain": {
+      "type": "string",
+      "enum": ["INFO", "LEARN", "LIBRARY", "SPORTS", "MADMODEL", "LOCAL", "UNKNOWN"]
+    },
+    "operation": {"type": "string", "minLength": 1, "maxLength": 120},
+    "adapter_version": {"type": "string", "minLength": 1, "maxLength": 80},
+    "checked_at": {"type": "string", "format": "date-time"},
+    "url": {
+      "type": ["string", "null"],
+      "maxLength": 2000,
+      "description": "Sanitized URL without credentials, tickets, cookies, signatures or session parameters."
+    },
+    "http_status": {
+      "type": ["integer", "null"],
+      "minimum": 100,
+      "maximum": 599
+    },
+    "auth_state": {
+      "type": "string",
+      "enum": ["AUTHENTICATED", "PUBLIC", "EXPIRED", "FORBIDDEN", "UNKNOWN"]
+    },
+    "state": {
+      "type": "string",
+      "enum": ["OK", "EMPTY", "PARTIAL", "AUTH_REQUIRED", "FORBIDDEN", "RATE_LIMITED", "MAINTENANCE", "NETWORK_ERROR", "UPSTREAM_ERROR", "UNKNOWN"]
+    },
+    "read_scope": {
+      "type": "object",
+      "required": ["kind", "offset", "limit", "pages_read", "expected_pages"],
+      "properties": {
+        "kind": {"type": "string", "enum": ["PAGE", "WINDOW", "FULL_LIST", "RECORD"]},
+        "offset": {"type": "integer", "minimum": 0},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 100000},
+        "pages_read": {"type": "integer", "minimum": 0},
+        "expected_pages": {"type": ["integer", "null"], "minimum": 0},
+        "query_time": {"type": "string", "format": "date-time"},
+        "window": {
+          "type": ["object", "null"],
+          "properties": {
+            "start": {"type": ["string", "null"]},
+            "end": {"type": ["string", "null"]}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "rows": {
+      "type": "array",
+      "description": "Optional normalized rows. Raw upstream payloads are not allowed."
+    },
+    "row_count": {"type": "integer", "minimum": 0},
+    "upstream_total": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Null means unknown. Never invent zero when the source did not provide a total."
+    },
+    "deduplicated_entries": {"type": "integer", "minimum": 0},
+    "source_complete": {"type": "boolean"},
+    "complete": {"type": "boolean"},
+    "missing_pages": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 200}
+    },
+    "content_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Optional hash of a normalized snapshot. Do not hash or publish raw authenticated pages."
+    },
+    "verification_level": {
+      "type": "string",
+      "enum": ["NONE", "TRANSPORT_READ", "PAGE_READ", "AUTHENTICATED_PAGE", "PUBLIC_PAGE", "DIRECTORY_READ", "DIRECTORY_CACHE", "BUSINESS_READ", "LIVE_BUSINESS_READ", "LIVE_PARTIAL_DIRECTORY", "REMOTE_RECORD_VERIFIED", "LOCAL_EXECUTION_STATE", "SEE_OPERATION_EVIDENCE"]
+    },
+    "synthetic": {
+      "type": "boolean",
+      "description": "True for fixtures and synthetic transport. Real campus evidence must be recorded separately."
+    },
+    "raw_payload_included": {
+      "const": false,
+      "description": "This contract never carries raw HTML, headers, cookies or authenticated response bodies."
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {"auth_state": {"enum": ["EXPIRED", "FORBIDDEN"]}},
+        "required": ["auth_state"]
+      },
+      "then": {
+        "properties": {
+          "state": {"not": {"enum": ["EMPTY", "OK"]}},
+          "complete": {"const": false},
+          "source_complete": {"const": false}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"state": {"enum": ["AUTH_REQUIRED", "FORBIDDEN", "RATE_LIMITED", "MAINTENANCE", "NETWORK_ERROR", "UPSTREAM_ERROR", "UNKNOWN"]}},
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "complete": {"const": false},
+          "source_complete": {"const": false}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"warnings": {"contains": {"const": "UPSTREAM_TOTAL_UNKNOWN"}}},
+        "required": ["warnings"]
+      },
+      "then": {
+        "properties": {"upstream_total": {"type": "null"}}
+      }
+    }
+  ],
+  "x-compatibility-sample": {
+    "source_id": "learn.assignments",
+    "service_domain": "LEARN",
+    "operation": "assignments",
+    "adapter_version": "learn-read-v1",
+    "checked_at": "2026-11-16T12:00:00+00:00",
+    "url": "https://learn.tsinghua.edu.cn/",
+    "http_status": 200,
+    "auth_state": "AUTHENTICATED",
+    "state": "OK",
+    "read_scope": {
+      "kind": "FULL_LIST",
+      "offset": 0,
+      "limit": 200,
+      "pages_read": 2,
+      "expected_pages": 2,
+      "query_time": "2026-11-16T12:00:00+00:00",
+      "window": null
+    },
+    "row_count": 2,
+    "upstream_total": 2,
+    "source_complete": true,
+    "complete": true,
+    "missing_pages": [],
+    "warnings": [],
+    "content_sha256": null,
+    "verification_level": "BUSINESS_READ",
+    "synthetic": true,
+    "raw_payload_included": false
+  },
+  "x-rejection-samples": [
+    {
+      "why": "an authentication failure cannot be a complete empty source",
+      "value": {
+        "source_id": "learn.assignments",
+        "service_domain": "LEARN",
+        "operation": "assignments",
+        "adapter_version": "learn-read-v1",
+        "checked_at": "2026-11-16T12:00:00+00:00",
+        "http_status": 401,
+        "auth_state": "EXPIRED",
+        "state": "EMPTY",
+        "read_scope": {"kind": "FULL_LIST", "offset": 0, "limit": 200, "pages_read": 0, "expected_pages": null, "window": null},
+        "row_count": 0,
+        "upstream_total": 0,
+        "source_complete": true,
+        "complete": true,
+        "missing_pages": [],
+        "warnings": [],
+        "synthetic": true,
+        "raw_payload_included": false
+      }
+    },
+    {
+      "why": "unknown upstream total must be null, not a fabricated zero",
+      "value": {
+        "source_id": "library.catalog_search",
+        "service_domain": "LIBRARY",
+        "operation": "catalog_search",
+        "adapter_version": "library-read-v1",
+        "checked_at": "2026-11-16T12:00:00+00:00",
+        "http_status": 200,
+        "auth_state": "PUBLIC",
+        "state": "PARTIAL",
+        "read_scope": {"kind": "WINDOW", "offset": 0, "limit": 20, "pages_read": 1, "expected_pages": null, "window": null},
+        "row_count": 20,
+        "upstream_total": 0,
+        "source_complete": false,
+        "complete": false,
+        "missing_pages": [],
+        "warnings": ["UPSTREAM_TOTAL_UNKNOWN"],
+        "synthetic": true,
+        "raw_payload_included": false
+      }
+    },
+    {
+      "why": "raw authenticated payloads are forbidden",
+      "value": {
+        "source_id": "learn.assignments",
+        "service_domain": "LEARN",
+        "operation": "assignments",
+        "adapter_version": "learn-read-v1",
+        "checked_at": "2026-11-16T12:00:00+00:00",
+        "state": "OK",
+        "read_scope": {"kind": "FULL_LIST", "offset": 0, "limit": 200, "pages_read": 1, "expected_pages": 1, "window": null},
+        "row_count": 1,
+        "upstream_total": 1,
+        "source_complete": true,
+        "complete": true,
+        "missing_pages": [],
+        "warnings": [],
+        "synthetic": true,
+        "raw_payload_included": false,
+        "raw_html": "<html>synthetic authenticated page</html>"
+      }
+    }
+  ]
+}

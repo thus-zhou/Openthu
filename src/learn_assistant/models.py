@@ -13,6 +13,7 @@ class LoginStatus:
     account: str | None = None
     expires_at: str | None = None
     message: str = ""
+    error_code: str | None = None
 
 
 @dataclass(frozen=True)

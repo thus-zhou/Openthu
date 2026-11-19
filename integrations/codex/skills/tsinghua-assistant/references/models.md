@@ -4,7 +4,7 @@ list_models(refresh=false) 返回学校官方前端当前列出的模型 ID、�
 
 model_chat 保留 prompt、model、max_tokens。model 必须存在于返回目录，不存在时不会发送生成。省略 model 时优先选目录中仍存在的原配置模型，否则选目录第一项；结果明确返回实际选用模型与目录时间。若历史目录被使用，结果附 MODEL_SELECTED_FROM_STALE_CATALOG，需按实际响应判断可用性。
 
-可选 messages 用于多轮对话，仅接受 user/assistant 文本消息，最多 40 条，首尾须为 user。prompt 和 messages 必须且只能选一个。用户文本与附加资料的最终总长度最多 65,536 个字符，max_tokens 为 1—8192。不接受模型工具调用、函数、任意请求头或认证字段。目录的图片能力只作官方标注，本工具目前仅支持文本。
+可选 messages 用于多轮对话，仅接受 user/assistant 文本消息，最多 40 条，首尾须为 user。prompt 和 messages 必须且只能选一个。用户文本与附加资料的最终总长度最多 65,536 个字符，max_tokens 为 1—8192。不接受模型工具调用、函数、任意请求头或认证字段。目录的图片能力只作官方标注。`model_chat` 可接受 `images` 媒体引用，但需要本地媒体登记和已登记的图片协议；当前出厂协议注册表为空，图片输入返回 `MODEL_IMAGE_INPUT_UNAVAILABLE` 或 `MODEL_IMAGE_PROTOCOL_UNVERIFIED`，实际可用路径仍是文本。图片工程上限为单图 8 MiB、每次 4 图、合计 16 MiB、单图 1600 万像素，只接受 JPEG/PNG/WebP；平台契约更严格时取较小值。
 
 source_refs 最多 20 项，每项包含唯一 source_id 和用户指定的 text（最多 20,000 字符），可附 HTTPS url/title。这里只发送传入文本，不抓取 URL、不自动带入其他课程、预约或会话资料。原文按来源标识加入上下文，输出 sources 保留 URL、原文摘要片段、长度及 SHA256；不会持久保存提示词或回答。
 

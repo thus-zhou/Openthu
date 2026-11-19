@@ -263,6 +263,7 @@ class WebProvider:
         if self.browser_session is None and load_persisted:
             self.browser_session = self.session_store.load()
             self._csrf_token = self.browser_session.csrf_token if self.browser_session else ""
+        self.session_error = None if self.browser_session else getattr(self.session_store, "last_error", None)
         if session_adapter is not None and self.browser_session is None:
             cookies = session_adapter.extract_cookies()
             self.browser_session = browser_session_from_cookies(
@@ -367,9 +368,9 @@ class WebProvider:
         if persist:
             persisted = self.session_store.save(session)
         message = (
-            "会话已使用 Windows DPAPI 加密保存。"
+            f"会话已使用 {self.session_store.protection} 加密保存。"
             if persisted
-            else "会话仅保留在当前进程；DPAPI 不可用或未启用，不会明文落盘。"
+            else "会话仅保留在当前进程；安全密钥不可用或未启用，不会明文落盘。"
         )
         return {
             "authenticated": True,
@@ -396,10 +397,26 @@ class WebProvider:
 
     def get_login_status(self) -> LoginStatus:
         if self.browser_session is None or not self.browser_session.cookies:
+            error_code = self.session_error
+            if error_code in {
+                "SECURE_KEY_NOT_CONFIGURED",
+                "SECURE_KEY_UNREADABLE",
+                "SECURE_KEY_UNAVAILABLE",
+                "SECURE_LEGACY_UNAVAILABLE",
+                "STATE_DECRYPT_FAILED",
+                "STATE_CORRUPT",
+                "LEARN_ACCOUNT_REQUIRED",
+            }:
+                return LoginStatus(
+                    authenticated=False,
+                    provider=self.name,
+                    message=f"无法读取加密会话（{error_code}）；请检查主密钥和会话文件，不能把解密失败当作退出登录。",
+                    error_code=error_code,
+                )
             return LoginStatus(
                 authenticated=False,
                 provider=self.name,
-                message="未找到 DPAPI 会话；请运行 login 并通过可用浏览器/桌面工具完成认证，或直接使用已登录的浏览器读取网页。",
+                message="未找到可用的网络学堂会话；请运行 login 并通过可用浏览器/桌面工具完成认证，或直接使用已登录的浏览器读取网页。",
             )
         try:
             response = self._request("GET", self.homepage_path, add_csrf=False)

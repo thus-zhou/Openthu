@@ -5,9 +5,10 @@
 ## 开始前
 
 1. 在云端项目副本检查 `git status`、当前分支和远端，不覆盖已有改动。目录已存在时先获取最新代码；首次使用则克隆仓库。
-2. 阅读 `AGENTS.md`、`docs/HANDOVER.md`、`docs/CAPABILITIES.md`、`docs/MANUAL_RELAY.md` 和 `docs/ROADMAP.md`。
+2. 阅读 `AGENTS.md`、`docs/HANDOVER.md`、`docs/USER_GUIDE.md`、`docs/CAPABILITIES.md`、`docs/TOOLS.md`、`docs/MANUAL_RELAY.md`、`docs/ROADMAP.md` 和当前版本计划 `plans/v0.2.0/00-总控与批次调度.md`。
 3. 激活当前环境的 Python 虚拟环境与 Node.js 24。若维护者已在该机器准备 `.local/activate.sh`，可在终端执行 `source .local/activate.sh`；否则按 README 安装。
 4. 运行 `python scripts/dev.py check` 和必要测试。云端开发不需要本机学校密码、Cookie、个人记录或模型登录凭据。
+5. 文档与能力状态同步：新增或改名登记操作必须更新能力矩阵与工具对照；文档一致性测试会比对运行中的登记表。
 
 ## 工作方式
 

@@ -1,0 +1,21 @@
+{
+  "schema": "version-evidence-floor-v1",
+  "min_total": 1600,
+  "max_skip_ratio": 0.05,
+  "require_node": true,
+  "require_dev_results": true,
+  "required_platforms": [
+    "linux",
+    "windows"
+  ],
+  "required_python": {
+    "linux": [
+      "3.12",
+      "3.13"
+    ],
+    "windows": [
+      "3.12"
+    ]
+  },
+  "_note": "A passing version report must execute at least 1600 cases, include the Node suite, include dev-results side-effect counters, explain no more than 5% skips, and cover every test file of a covered coverage-matrix module. The Python matrix is checked by the release gate when --require-python-matrix is used."
+}

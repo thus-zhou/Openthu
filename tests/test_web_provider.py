@@ -227,6 +227,19 @@ def test_dpapi_session_store_never_writes_plaintext_cookie(tmp_path):
     assert loaded.cookies[0].value == "fixture-session"
 
 
+def test_missing_secure_session_reports_key_error_not_logout(tmp_path):
+    class Store:
+        last_error = "SECURE_KEY_NOT_CONFIGURED"
+        path = tmp_path / "session.secure"
+        def load(self):
+            return None
+    provider = WebProvider(transport=FakeTransport(), session_store=Store(), load_persisted=True)
+    status = provider.get_login_status()
+    assert status.authenticated is False
+    assert status.error_code == "SECURE_KEY_NOT_CONFIGURED"
+    assert "SECURE_KEY_NOT_CONFIGURED" in status.message
+
+
 def test_session_store_does_not_fallback_to_plaintext(monkeypatch, tmp_path):
     monkeypatch.setattr(auth_module, "_dpapi_protect", lambda raw: None)
     store = SecureSessionStore(tmp_path / "session.dpapi")

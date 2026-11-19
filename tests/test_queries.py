@@ -6,7 +6,9 @@ from thu_assistant.queries import Snapshots,describe,pointer,metadata,page_metad
 
 def assistant(raw):
     calls=[]
-    def bridge(command,**kwargs):calls.append((command,kwargs));return deepcopy(raw)
+    def bridge(command,**kwargs):
+        if command=='action_identity':return {'account_id':'synthetic-test-account'}
+        calls.append((command,kwargs));return deepcopy(raw)
     return CampusAssistant(learning_factory=lambda:None,bridge=bridge),calls
 
 def json_page(data):return {'status':'JSON_READ_VERIFIED','httpStatus':200,'url':'https://lib.tsinghua.edu.cn/api?token=synthetic','data':data,'checked_at':'fixed','authentication_state':'UNKNOWN'}
@@ -87,7 +89,8 @@ def test_partial_directory_keeps_missing_pages_and_is_not_empty_success():
 def test_verified_empty_course_list_and_business_error_remain_distinct():
     class Learning:
         def call_tool(self,*args):return {'courses':[],'count':0}
-    a=CampusAssistant(learning_factory=Learning)
+    a=CampusAssistant(learning_factory=Learning,
+        bridge=lambda *args,**kwargs:{'account_id':'synthetic-test-account'})
     r=a.call('query_service',{'service_id':'learn','operation':'courses','parameters':{}})
     assert r['status']=='EMPTY' and r['complete'] and r['verification_level']=='BUSINESS_READ'
     from learn_assistant.errors import InterfaceDriftError

@@ -1,0 +1,293 @@
+{
+  "module": "3.1",
+  "title": "跨平台认证会话与网关迁移",
+  "batch": 3,
+  "owner": "Hermes",
+  "status": "accepted",
+  "baseline_commit": "4d60e8bbca91d771dc6c4db478de4863922a2b07",
+  "integration_parent_commit": "d897ccc7d1e6b4b75e344a28aaa6b4adcb392eef",
+  "delivery_commit": "b0ecc64c803b144a6050816764cc6eb5232224ee",
+  "code_commits": [
+    "24ecdb7",
+    "e81ceb9",
+    "19f68e9",
+    "4528b0a",
+    "feb3a79",
+    "4895404",
+    "0784367",
+    "6930dde",
+    "b4bcecb",
+    "6972ef8",
+    "1cc0d1a",
+    "b0ecc64"
+  ],
+  "branch": "hermes/1-install-diagnostics",
+  "version_pr": 2,
+  "paths": [
+    "src/thu_assistant/gateway.js",
+    "src/thu_assistant/gateway_client.py",
+    "src/thu_assistant/session-store.js",
+    "src/thu_assistant/session-policy.js",
+    "src/thu_assistant/browser.py",
+    "src/thu_assistant/crypto-bridge.js",
+    "src/thu_assistant/crypto_service.py",
+    "src/learn_assistant/auth.py",
+    "runtime/windows/access.js",
+    "runtime/windows/import-session.py",
+    "runtime/windows/session-store.py",
+    "tests/test_session_gateway.py",
+    "tests/campus-session-v3.test.js",
+    "tests/campus-crypto-bridge.test.js",
+    "tests/test_campus.py",
+    "tests/test_gateway_bridge.py",
+    "tests/fixtures/session-writer.js",
+    "src/learn_assistant/providers/web.py",
+    "src/learn_assistant/models.py",
+    "src/thu_assistant/mcp_stdio.py"
+  ],
+  "contracts": [
+    "secure-storage-header-v1",
+    "source-evidence-v1",
+    "result-envelope-v1"
+  ],
+  "read_write_inventory": [
+    {
+      "location": "vendor/madmodel-proxy/platform/credentials",
+      "operations": [
+        "readAccount",
+        "writeAccount",
+        "readToken",
+        "writeToken"
+      ],
+      "legacy": "Windows DPAPI or Linux machine-bound AES",
+      "change": "not modified; project wrapper remains a 4.4/6.1 handoff"
+    },
+    {
+      "location": "runtime/windows/access.js",
+      "operations": [
+        "restoreSession",
+        "saveSession"
+      ],
+      "legacy": "THUAccess/session.dpapi",
+      "change": "session-store.py prefers secure store; DPAPI only without a configured key"
+    },
+    {
+      "location": "src/thu_assistant/gateway.js",
+      "operations": [
+        "SessionStore.load",
+        "SessionStore.commit",
+        "sealBrowser",
+        "learningSignature"
+      ],
+      "legacy": "campus-v2.dpapi and Windows DPAPI",
+      "change": "campus-v3.secure plus legacy read-only"
+    },
+    {
+      "location": "src/thu_assistant/browser.py",
+      "operations": [
+        "browser_state",
+        "unseal_browser_state",
+        "import_browser_state"
+      ],
+      "legacy": "direct Python DPAPI protect/unprotect",
+      "change": "owned gateway seals/opens state; no plaintext on disk"
+    },
+    {
+      "location": "src/learn_assistant/auth.py",
+      "operations": [
+        "SecureSessionStore.load",
+        "SecureSessionStore.save",
+        "_dpapi_protect",
+        "_dpapi_unprotect"
+      ],
+      "legacy": "LA-DPAPI-1 session.dpapi",
+      "change": "session.secure preferred; legacy readable, never rewritten automatically"
+    },
+    {
+      "location": "src/thu_assistant/action_store.py",
+      "operations": [
+        "default protect=_dpapi_protect",
+        "default unprotect=_dpapi_unprotect"
+      ],
+      "legacy": "THU-ACTION-1 plus DPAPI",
+      "change": "captured wrapper reference now reaches the secure provider; outer container and business logic remain 4.4"
+    },
+    {
+      "location": "src/thu_assistant/todos.py",
+      "operations": [
+        "TodoCache protect/unprotect"
+      ],
+      "legacy": "THU-TODOS-1 plus DPAPI",
+      "change": "captured wrapper reference now reaches the secure provider; business logic remains 5.4"
+    }
+  ],
+  "captured_references": [
+    "action_store.ActionStore.__init__ captures _dpapi_protect/_dpapi_unprotect at import; the same names and signatures now select the configured secure provider and fail closed when a configured key is unusable.",
+    "todos.TodoCache captures the same pair; no module edit was required.",
+    "gateway.js captures helper.dpapi into SessionStore; it is now the explicit legacyDpapi slot, while the secure provider is injected separately.",
+    "browser.py no longer imports _dpapi_protect/_dpapi_unprotect; it calls gateway commands."
+  ],
+  "secure_envelope": {
+    "purpose": "SESSION",
+    "account_domain": "CAMPUS",
+    "service_domain": "LOCAL",
+    "session_record_id": "campus-session",
+    "browser_record_id": "browser-session",
+    "learn_record_id": "learn-session",
+    "state_version": 3,
+    "legacy_state_version": 2,
+    "revision_binding": "envelope AAD revision equals decrypted state revision",
+    "account_binding": "state account hash plus envelope account_ref plus current account check"
+  },
+  "migration": {
+    "order": [
+      "read secure state",
+      "read legacy DPAPI state when secure is absent",
+      "copy legacy ciphertext to .before-v3 with COPYFILE_EXCL",
+      "seal new state and fsync the private binary file",
+      "unseal the written bytes and compare the exact plaintext",
+      "retain the legacy ciphertext"
+    ],
+    "result_fields": [
+      "source",
+      "target",
+      "legacyPresent",
+      "legacyReadable",
+      "saved",
+      "verified",
+      "legacyRetained"
+    ],
+    "failure_codes": [
+      "STATE_DECRYPT_FAILED",
+      "STATE_CORRUPT",
+      "SECURE_LEGACY_UNAVAILABLE",
+      "SECURE_KEY_NOT_CONFIGURED",
+      "SECURE_KEY_LOCATION",
+      "SECURE_KEY_UNREADABLE",
+      "STATE_ENCRYPT_FAILED",
+      "STATE_WRITE_FAILED"
+    ]
+  },
+  "controlled_protocol": {
+    "transport": "one owned Node child to one private Python line service",
+    "actions": [
+      "health",
+      "inspect",
+      "seal",
+      "unseal"
+    ],
+    "request_id": "opaque string, echoed by the service, matched before use",
+    "request_limit_bytes": 2097152,
+    "response_limit_bytes": 2162688,
+    "timeout_default_ms": 15000,
+    "cancel": "abort kills the current child; the next call starts a new child",
+    "replay": "never",
+    "forbidden_request_fields": [
+      "program",
+      "argv",
+      "python",
+      "path",
+      "key_file",
+      "key_path",
+      "data_dir",
+      "env",
+      "module",
+      "executable"
+    ],
+    "child_environment": "minimal OS variables plus THU_SECURE_KEY_FILE, THU_SECURE_DATA_DIR and optional THU_SECURE_BACKEND",
+    "plaintext_boundary": "private pipe and process memory only; never an MCP result or log"
+  },
+  "checks": {
+    "module_tests": {
+      "python_passed": 14,
+      "node_v3_passed": 7,
+      "node_crypto_passed": 5,
+      "failed": 0,
+      "commands": [
+        "python -m pytest -o addopts='' -q tests/test_session_gateway.py",
+        "node --test tests/campus-session-v3.test.js",
+        "node --test tests/campus-crypto-bridge.test.js"
+      ],
+      "python_skipped": 2,
+      "python_windows_passed": 16
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 645,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "check_files": 402,
+      "check_findings": 0,
+      "commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "note": "Shared tree includes the accepted 3.2 and 3.3 modules; these are not 3.1-only counts."
+    },
+    "full_offline_suite_windows": {
+      "python_passed": 641,
+      "python_skipped": 11,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "check_files": 402,
+      "check_findings": 0
+    },
+    "contracts": {
+      "plan_validator": "ok: 24 modules, 9 batches",
+      "contract_validator": "ok: 8 contracts + 1 compatibility baseline, 9 schema samples, 35 rejection samples, 8 extra fixtures",
+      "source_validator": "ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures"
+    },
+    "github_actions": {
+      "head_sha": "b0ecc64c803b144a6050816764cc6eb5232224ee",
+      "run_id": 43956001264,
+      "ubuntu_24_04": "success",
+      "windows_2025": "success",
+      "ubuntu_result": "645 passed, 7 skipped, 0 failed; Node 66 passed",
+      "windows_result": "641 passed, 11 skipped, 0 failed; Node 66 passed"
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0
+  },
+  "accepted_cases": [
+    "legacy campus-v2.dpapi is read by the real Windows DPAPI helper, copied to .before-v3 and retained after a verified campus-v3.secure write",
+    "Linux without a key fails protected session operations with SECURE_KEY_NOT_CONFIGURED while public reads and the static catalog remain available",
+    "two secure processes merge independent cookies and report STATE_CONFLICT without overwriting a conflicting value",
+    "switching the account rejects both load and commit with STATE_ACCOUNT_MISMATCH and writes no new state",
+    "a simulated browser persistence failure returns sessionPersisted=false with a concrete error",
+    "crypto timeout and cancellation kill the private child and the next call starts independently; no request is replayed",
+    "cross-domain and expired browser cookies do not widen injection scope; out-of-scope cookies are ignored",
+    "gateway stdout contains only the sealed browser state and never a cookie value",
+    "Learn session envelopes are account-bound; another account cannot load the file",
+    "configured secure keys fail closed when the Windows session helper is unavailable"
+  ],
+  "limits": [
+    "The cloud Linux host cannot run Windows DPAPI/ACL; Windows behavior is proven by the GitHub windows-2025 runner, including the new real-DPAPI migration test.",
+    "A full directory rollback that replaces both state and pointer is outside the revision/record-id guarantee.",
+    "action_store and todos retain their outer THU-ACTION-1 / THU-TODOS-1 container magic; full record identity and business migration belong to 4.4 and 5.4.",
+    "The upstream Windows CookieJar stores name/value/path only; expires/secure/httpOnly/sameSite are enforced where available but cannot be fully round-tripped without changing vendor/madmodel-proxy.",
+    "The Linux key file must be created explicitly by the user; this module does not generate or export a key.",
+    "Custom configuration-file state selection and a few standalone gateway paths still need the 2.1/6.3 resolver; the normal GatewayClient path is covered.",
+    "No real campus login, write, payment or submission was performed."
+  ],
+  "rollback": "Stop new session writes, keep campus-v3.secure, session.secure, .before-v3 and campus-v2.dpapi, and switch to the compatibility wrapper. Do not roll back a runtime that cannot read a pending new-format transaction; require explicit re-authentication instead of deleting state.",
+  "next": "Batch integration must reconnect 3.1 with the accepted 3.2 and 3.3 commits, run the batch check and full offline suite, and record Ubuntu/Windows CI. The batch gate remains ready until that integration commit is recorded.",
+  "cross_module_requests": [
+    "src/thu_assistant/secure_store/keys.py (2.2 owner): the private DPAPI backend now calls _dpapi_protect_legacy/_dpapi_unprotect_legacy from learn_assistant.auth so creating or unwrapping the provider master key cannot re-enter the secure provider. The primitive behavior is unchanged; owner review requested.",
+    "src/learn_assistant/models.py, providers/web.py and thu_assistant/mcp_stdio.py (6.1/7.3): LoginStatus.error_code and the account-scoped Learn session require these integration changes; wording now follows SecureSessionStore.protection.",
+    "error-classification.json owner (1.1): register SECURE_KEY_NOT_CONFIGURED, SECURE_LEGACY_UNAVAILABLE, SECURE_KEY_LOCATION, LEARN_ACCOUNT_REQUIRED and related storage codes before the facade exposes them as classified errors.",
+    "4.4: give action_store records a stable record_id and migrate the outer THU-ACTION-1 container; the compatibility wrapper already routes captured protect/unprotect references to the secure provider and now rejects non-ACTION envelopes.",
+    "5.4: give the todo cache a stable record_id and migrate the outer THU-TODOS-1 container.",
+    "6.3: provide the default key-file setup command and packaging for crypto_service.py / crypto-bridge.js; the module now discovers the default key but does not create it automatically."
+  ],
+  "privacy": {
+    "raw_payload_included": false,
+    "personal_records_included": false,
+    "native_paths_included": false,
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0
+  }
+}

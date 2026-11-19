@@ -1,0 +1,70 @@
+{
+  "x-schema-version": 1,
+  "x-contract-version": "domain-models-v1",
+  "x-owner": "2.3/Hermes",
+  "x-status": "frozen",
+  "x-semantics": "The canonical records consumed by later modules. Event uses the 1.1 calendar-event-v1 contract rather than a duplicate schema.",
+  "models": [
+    {
+      "name": "event",
+      "contract": "calendar-event-v1",
+      "schema": "../calendar-event.schema.json",
+      "reused_from": "1.1",
+      "description": "Frozen calendar event with date-only and date-time shapes; reused by 2.3."
+    },
+    {
+      "name": "course",
+      "contract": "course-v1",
+      "schema": "data-models/course.schema.json",
+      "description": "Course identity from source, semester and source record id."
+    },
+    {
+      "name": "resource",
+      "contract": "resource-v1",
+      "schema": "data-models/resource.schema.json",
+      "description": "Course file, library book, database entry or external link."
+    },
+    {
+      "name": "grade",
+      "contract": "grade-v1",
+      "schema": "data-models/grade.schema.json",
+      "description": "Course-level grade with unknown/ungraded/withheld states; never zero-filled."
+    },
+    {
+      "name": "order",
+      "contract": "order-v1",
+      "schema": "data-models/order.schema.json",
+      "description": "Reservation, loan or payment-bearing record with separate approval/payment/refund axes."
+    },
+    {
+      "name": "attachment",
+      "contract": "attachment-v1",
+      "schema": "data-models/attachment.schema.json",
+      "description": "Source attachment descriptor linked to an optional media reference."
+    },
+    {
+      "name": "assignment",
+      "contract": "assignment-v1",
+      "schema": "data-models/assignment.schema.json",
+      "description": "Read-only assignment record; submission receipts are separate."
+    },
+    {
+      "name": "submission",
+      "contract": "submission-v1",
+      "schema": "data-models/submission.schema.json",
+      "description": "Upload, draft-save and final-submit state separation."
+    },
+    {
+      "name": "renewal",
+      "contract": "renewal-v1",
+      "schema": "data-models/renewal.schema.json",
+      "description": "Renewal eligibility, execution and due-date result."
+    },
+    {
+      "name": "model-image-capability",
+      "contract": "model-image-capability-v1",
+      "schema": "data-models/model-image-capability.schema.json",
+      "description": "Catalog listing versus actual image transport capability."
+    }
+  ]
+}

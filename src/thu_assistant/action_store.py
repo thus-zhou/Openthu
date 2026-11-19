@@ -7,19 +7,61 @@ from .bridge import CampusError
 from .catalog import state_root
 
 STATES={'PREPARED','NEEDS_USER_ACTION','AWAITING_OFFICIAL','DISPATCHING','PENDING_PAYMENT','PENDING_APPROVAL','SUCCEEDED','FAILED','UNKNOWN'}
+EFFECT_STATES={'NOT_SENT','SENT','UNKNOWN'}
+_OPERATION=re.compile('[a-f0-9]{32}')
+_CHALLENGE=re.compile('[a-f0-9]{64}')
+_EFFECT_STEP=re.compile('[a-z][a-z0-9_-]{0,39}')
+
+
+def _win_transient(error):
+    return os.name=='nt' and getattr(error,'winerror',None) in (5,32)
+
+
+def _read_bytes_safe(path):
+    for attempt in range(20):
+        try:return path.read_bytes()
+        except OSError as error:
+            if not _win_transient(error) or attempt==19:raise
+            time.sleep(min(0.02,0.002*(attempt+1)))
+
+
+def _replace_safe(temporary,target):
+    for attempt in range(20):
+        try:os.replace(temporary,target);return
+        except OSError as error:
+            if not _win_transient(error) or attempt==19:raise
+            time.sleep(min(0.02,0.002*(attempt+1)))
+
+def _check_effects(value):
+    if value is None:return []
+    if not isinstance(value,list):return None
+    for row in value:
+        if not isinstance(row,dict) or set(row)-{'step','status','at','history'}:return None
+        if not isinstance(row.get('step'),str) or not _EFFECT_STEP.fullmatch(row['step']):return None
+        if row.get('status') not in EFFECT_STATES:return None
+        if 'at' in row and (isinstance(row['at'],bool) or not isinstance(row['at'],(int,float))):return None
+        history=row.get('history',[])
+        if not isinstance(history,list) or any(not isinstance(old,dict) or old.get('status') not in EFFECT_STATES for old in history):return None
+    return value
 
 class ActionStore:
     def __init__(self,root=None,protect=_dpapi_protect,unprotect=_dpapi_unprotect):
         self.root=Path(root) if root else state_root()/'actions-v1'
         self.protect=protect;self.unprotect=unprotect
     def path(self,operation_id):
-        if not isinstance(operation_id,str) or not re.fullmatch('[a-f0-9]{32}',operation_id):raise CampusError('INVALID_OPERATION_ID')
+        if not isinstance(operation_id,str) or not _OPERATION.fullmatch(operation_id):raise CampusError('INVALID_OPERATION_ID')
         return self.root/(operation_id+'.dpapi')
     @contextmanager
     def lock(self,name):
-        self.root.mkdir(parents=True,exist_ok=True)
-        file=open(self.root/(name+'.lock'),'a+b');file.seek(0,2)
-        if not file.tell():file.write(b'0');file.flush()
+        try:self.root.mkdir(parents=True,exist_ok=True)
+        except OSError:raise CampusError('STATE_WRITE_FAILED') from None
+        try:file=open(self.root/(name+'.lock'),'a+b')
+        except OSError:raise CampusError('STATE_WRITE_FAILED') from None
+        try:
+            file.seek(0,2)
+            if not file.tell():file.write(b'0');file.flush()
+        except OSError:
+            file.close();raise CampusError('STATE_WRITE_FAILED') from None
         deadline=time.monotonic()+3;held=False
         try:
             while not held:
@@ -43,8 +85,14 @@ class ActionStore:
                 else:fcntl.flock(file,fcntl.LOCK_UN)
             file.close()
     def read(self,oid):
-        try:blob=self.path(oid).read_bytes()
-        except FileNotFoundError:raise CampusError('ACTION_NOT_FOUND') from None
+        path=self.path(oid)
+        try:blob=_read_bytes_safe(path)
+        except FileNotFoundError:
+            # Windows reports a path below a file as FileNotFoundError; only a
+            # missing record inside an existing journal directory is NOT_FOUND.
+            if path.parent.exists() and not path.parent.is_dir():raise CampusError('STATE_READ_FAILED') from None
+            raise CampusError('ACTION_NOT_FOUND') from None
+        except OSError:raise CampusError('STATE_READ_FAILED') from None
         if not blob.startswith(b'THU-ACTION-1\0'):raise CampusError('ACTION_LOG_CORRUPT')
         try:raw=self.unprotect(blob[len(b'THU-ACTION-1\0'):])
         except Exception:raise CampusError('ACTION_LOG_DECRYPT_FAILED') from None
@@ -53,17 +101,30 @@ class ActionStore:
         except Exception:raise CampusError('ACTION_LOG_CORRUPT') from None
         if record.get('version')!=1 or record.get('operation_id')!=oid or record.get('state') not in STATES or type(record.get('revision')) is not int:
             raise CampusError('ACTION_LOG_CORRUPT')
+        challenge=record.get('challenge')
+        if challenge is not None and (not isinstance(challenge,str) or not _CHALLENGE.fullmatch(challenge)):
+            raise CampusError('ACTION_LOG_CORRUPT')
+        if _check_effects(record.get('effects')) is None:
+            raise CampusError('ACTION_LOG_CORRUPT')
+        protocol=record.get('consent_protocol')
+        if protocol is not None and (not isinstance(protocol,str) or len(protocol)>80):
+            raise CampusError('ACTION_LOG_CORRUPT')
         return record
     def write(self,record):
-        target=self.path(record['operation_id']);self.root.mkdir(parents=True,exist_ok=True)
+        target=self.path(record['operation_id'])
+        try:self.root.mkdir(parents=True,exist_ok=True)
+        except OSError:raise CampusError('STATE_WRITE_FAILED') from None
         try:blob=self.protect(json.dumps(record,ensure_ascii=False,sort_keys=True).encode())
         except Exception:raise CampusError('ACTION_LOG_ENCRYPT_FAILED') from None
         if not blob:raise CampusError('ACTION_LOG_ENCRYPT_FAILED')
         temporary=target.with_name(target.name+'.'+uuid.uuid4().hex+'.tmp')
         try:
             with open(temporary,'xb') as f:f.write(b'THU-ACTION-1\0'+blob);f.flush();os.fsync(f.fileno())
-            os.replace(temporary,target)
-        finally:temporary.unlink(missing_ok=True)
+            _replace_safe(temporary,target)
+        except OSError:raise CampusError('STATE_WRITE_FAILED') from None
+        finally:
+            try:temporary.unlink(missing_ok=True)
+            except OSError:pass
     def create(self,record):
         with self.lock('index'):
             for file in self.root.glob('*.dpapi'):
@@ -72,7 +133,10 @@ class ActionStore:
                     if old['state'] in {'AWAITING_OFFICIAL','DISPATCHING','UNKNOWN','PENDING_PAYMENT','PENDING_APPROVAL','SUCCEEDED'} or old['state'] in {'PREPARED','NEEDS_USER_ACTION'} and old['expires_at']>time.time() and old['context']==record['context'] and old['adapter_version']==record['adapter_version']:return old
             if self.path(record['operation_id']).exists():raise CampusError('ACTION_ID_CONFLICT')
             self.write(record);return record
-    def update(self,oid,change):
+    def update(self,oid,change,expected_revision=None):
         self.path(oid)
         with self.lock('index'),self.lock(oid):
-            record=self.read(oid);change(record);record['revision']+=1;self.write(record);return record
+            record=self.read(oid)
+            if expected_revision is not None and record['revision']!=expected_revision:
+                raise CampusError('ACTION_RESULT_CHANGED_RECHECK')
+            change(record);record['revision']+=1;self.write(record);return record

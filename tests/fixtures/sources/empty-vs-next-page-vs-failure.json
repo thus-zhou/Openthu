@@ -1,0 +1,116 @@
+{
+  "fixture_id": "empty-vs-next-page-vs-failure",
+  "synthetic": true,
+  "description": "Three distinct source states: a proven complete empty result, a first page that is empty while more pages are expected, and a source failure. They must not collapse into one empty success.",
+  "schema": "contracts/v0.2/source-evidence.schema.json",
+  "cases": [
+    {
+      "name": "full_empty",
+      "expected": "EMPTY",
+      "evidence": {
+        "source_id": "learn.assignments",
+        "service_domain": "LEARN",
+        "operation": "assignments",
+        "adapter_version": "learn-read-v1",
+        "checked_at": "2026-11-16T12:00:00+00:00",
+        "url": "https://learn.tsinghua.edu.cn/",
+        "http_status": 200,
+        "auth_state": "AUTHENTICATED",
+        "state": "EMPTY",
+        "read_scope": {
+          "kind": "FULL_LIST",
+          "offset": 0,
+          "limit": 200,
+          "pages_read": 1,
+          "expected_pages": 1,
+          "query_time": "2026-11-16T12:00:00+00:00",
+          "window": null
+        },
+        "rows": [],
+        "row_count": 0,
+        "upstream_total": 0,
+        "deduplicated_entries": 0,
+        "source_complete": true,
+        "complete": true,
+        "missing_pages": [],
+        "warnings": [],
+        "content_sha256": null,
+        "verification_level": "BUSINESS_READ",
+        "synthetic": true,
+        "raw_payload_included": false
+      }
+    },
+    {
+      "name": "first_page_empty_but_more",
+      "expected": "PARTIAL",
+      "evidence": {
+        "source_id": "library.catalog_search",
+        "service_domain": "LIBRARY",
+        "operation": "catalog_search",
+        "adapter_version": "library-read-v1",
+        "checked_at": "2026-11-16T12:00:00+00:00",
+        "url": "https://discover.lib.tsinghua.edu.cn/",
+        "http_status": 200,
+        "auth_state": "PUBLIC",
+        "state": "PARTIAL",
+        "read_scope": {
+          "kind": "WINDOW",
+          "offset": 0,
+          "limit": 20,
+          "pages_read": 1,
+          "expected_pages": 2,
+          "query_time": "2026-11-16T12:00:00+00:00",
+          "window": null
+        },
+        "rows": [],
+        "row_count": 0,
+        "upstream_total": 5,
+        "deduplicated_entries": 0,
+        "source_complete": false,
+        "complete": false,
+        "missing_pages": [2],
+        "warnings": ["FIRST_PAGE_EMPTY_BUT_NEXT_PAGE_EXPECTED"],
+        "content_sha256": null,
+        "verification_level": "BUSINESS_READ",
+        "synthetic": true,
+        "raw_payload_included": false
+      }
+    },
+    {
+      "name": "source_failure",
+      "expected": "FAILURE_NOT_EMPTY",
+      "evidence": {
+        "source_id": "sports.orders",
+        "service_domain": "SPORTS",
+        "operation": "orders",
+        "adapter_version": "sports-v1",
+        "checked_at": "2026-11-16T12:00:00+00:00",
+        "url": null,
+        "http_status": 503,
+        "auth_state": "UNKNOWN",
+        "state": "NETWORK_ERROR",
+        "read_scope": {
+          "kind": "FULL_LIST",
+          "offset": 0,
+          "limit": 50,
+          "pages_read": 0,
+          "expected_pages": null,
+          "query_time": "2026-11-16T12:00:00+00:00",
+          "window": null
+        },
+        "rows": [],
+        "row_count": 0,
+        "upstream_total": null,
+        "deduplicated_entries": 0,
+        "source_complete": false,
+        "complete": false,
+        "missing_pages": [],
+        "warnings": ["SOURCE_UNAVAILABLE"],
+        "content_sha256": null,
+        "verification_level": "NONE",
+        "synthetic": true,
+        "raw_payload_included": false
+      }
+    }
+  ]
+}

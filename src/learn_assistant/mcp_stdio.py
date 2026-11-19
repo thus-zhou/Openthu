@@ -15,6 +15,9 @@ from typing import Any
 from .core import LearnAssistant
 from .factory import create_provider
 
+# One product version for the whole distribution; see thu_assistant.version.
+from thu_assistant.version import __version__ as PRODUCT_VERSION
+
 PROTOCOL_VERSION = "2024-11-05"
 
 TOOL_DEFINITIONS: list[dict[str, Any]] = [
@@ -135,7 +138,7 @@ class McpServer:
                     "capabilities": {"tools": {}},
                     "serverInfo": {
                         "name": self.server_name,
-                        "version": "0.1.0",
+                        "version": PRODUCT_VERSION,
                     },
                     "instructions": "智能体可以使用已授权会话、凭据与验证码，通过可用浏览器/桌面控制工具完成清华官方登录；login 仅打开可见浏览器等待认证并捕获会话，不接收密码参数。公告使用浏览器读取，严格遵守用户只读/不下载要求。正式提交未实现，prepare_submission 只生成本地确认摘要。",
                 },

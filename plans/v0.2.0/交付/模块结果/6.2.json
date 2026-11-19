@@ -1,0 +1,329 @@
+{
+  "module": "6.2",
+  "title": "本地看板读取 API 与进程边界",
+  "batch": 6,
+  "owner": "Hermes",
+  "status": "accepted",
+  "status_note": "The audit findings P1-1..P1-3 and P2-1..P2-16 are fixed or explicitly documented, each with an executable verification. Batch reconnection is still the integration owner's step; this record accepts the module, not the batch.",
+  "target_version": "0.2.0",
+  "baseline_commit": "bb1f963d7aaa8f38ca861fad7259d05ee5d243ec",
+  "integration_parent_commit": "bb1f963d7aaa8f38ca861fad7259d05ee5d243ec",
+  "delivery_commit": "198aeb19c4d0105a0726d51490a5ac9ee936e8c0",
+  "implementation_commits": [
+    "396d3dce0ebf980cc74891658579dcdafaf74912",
+    "e1f99a3fcb96ca3c7c024abf0c9d22ade21fad95",
+    "198aeb19c4d0105a0726d51490a5ac9ee936e8c0"
+  ],
+  "audit_report": ".local/audits/6.2-audit.md",
+  "audit_baseline_commit": "396d3dce0ebf980cc74891658579dcdafaf74912",
+  "audited_record_commit": "2c8a218b54e6bb8048566f5d9a8bd6329b995542",
+  "accepted_at": "2026-11-17",
+  "record_commit": "the commit containing this record file",
+  "branch": "hermes/6.2",
+  "worktree": "~/projects/Openthu/.local/worktrees/6.2",
+  "worktree_note": "Recorded with ~ for the user home because the frozen contract privacy validator rejects absolute home-directory paths inside plans/; the absolute path stays in the execution session.",
+  "version_pr": null,
+  "batch_state": "batch 6 is open; this module opens no PR, merges nothing and publishes nothing",
+  "evidence_tree": "clean checkout of 198aeb1 after `python scripts/dev.py setup-node` (or an equivalent src/thu_assistant/node_modules link); dev.py test needs the tough-cookie runtime dependency",
+  "paths": [
+    "src/thu_assistant/local_api/__init__.py",
+    "src/thu_assistant/local_api/contract.py",
+    "src/thu_assistant/local_api/facade.py",
+    "src/thu_assistant/local_api/security.py",
+    "src/thu_assistant/local_api/projection.py",
+    "src/thu_assistant/local_api/paging.py",
+    "src/thu_assistant/local_api/server.py",
+    "src/thu_assistant/local_api/client.py",
+    "src/thu_assistant/local_api/samples.py",
+    "tests/test_local_api.py",
+    "contracts/v0.2/error-classification.json",
+    "src/thu_assistant/source_state.py"
+  ],
+  "contracts": [
+    "local-read-api-v1",
+    "business-facade-v1",
+    "result-envelope-v1",
+    "error-classification-v1",
+    "source-evidence-v1"
+  ],
+  "outputs": [
+    "exactly the seven frozen routes plus an optional static shell: /api/v1/health, /services, /services/{service_id}, /query/{service_id}/{operation}, /todos, /calendar, /resources; no prepare, execute, payment, upload, model, key or config route exists",
+    "GET and HEAD only; every other method returns 405 with Allow: GET, HEAD before the facade is reached; GET/HEAD bodies are refused and above 64 KiB is 413",
+    "loopback binding only: 0.0.0.0, ::, localhost and any external address are refused before a socket opens; port 0 gives an ephemeral port and an explicit port is honoured",
+    "Host header exact allowlist with the bound port; Origin and Sec-Fetch-Site checks run before both API and static routes, so a cross-site page cannot read JSON or static assets; no Access-Control-Allow-Origin header is ever emitted",
+    "process-bound sessions: a single-use 0600 bootstrap file plus X-Openthu-Bootstrap for automated clients, and a trusted loopback navigation for the browser shell; the token never enters a URL, a log line or the shared configuration and is deleted after one exchange",
+    "session cookie is HttpOnly, SameSite=Strict, Path=/, without Domain and with a bounded Max-Age; Secure is deliberately not set because some browsers drop it on loopback HTTP; ids are stored only as SHA-256 digests",
+    "session capacity never evicts an active session: a full store returns LOCAL_API_SESSION_LIMIT and the browser keeps its cookie; duplicate same-name cookies from another loopback port are all verified",
+    "bootstrap reads use O_NOFOLLOW plus fstat and a bounded read from one descriptor; a symlink, a non-regular file, a loose mode or a foreign owner is rejected",
+    "per-session sliding-window rate limit (120 requests / 10 s) with a local code and local text; a 10 s minimum interval for an identical expensive read is committed only after a non-5xx response, and HEAD or a cursor resume does not consume it",
+    "request bounds: 2048-character path, 8192-character query, 4096-character parameters object, ASCII-only page_size 1..200 with default 50; duplicate or unknown query parameters are rejected",
+    "parameters accept only a bounded JSON object with safe keys; url/uri/href/method/headers/endpoint/target/destination/source/origin/address/return_url and similar keys are rejected; NaN/Infinity literals are rejected before the facade",
+    "path traversal, encoded dot segments, backslashes, NULs and double slashes are rejected before routing; static assets resolve under the configured directory and a symlink escape is not served",
+    "local paging slices a facade page larger than page_size, mints an opaque lac1 cursor bound to session, route, parameters and page size, expires it after 600 s and carries a trailing facade cursor forward on the last slice; caps are aligned with the 8 MiB response ceiling",
+    "two executor pools: health/services/detail use a two-worker priority pool; expensive reads use eight workers whose capacity is held by the worker, so eight stuck adapters cannot block health and the next read fails fast with LOCAL_API_BUSY",
+    "per-request deadline (default 30 s) with cooperative cancellation; a timed-out source returns 504/TIMEOUT while other cards keep serving, and stop() cancels this instance's tokens and closes its socket in bounded time",
+    "facade envelopes are checked against every declared result-envelope-v1 property (types, enums, lengths, items array, snapshot_complete, missing_pages, source_errors, error object, finite numbers); an invalid optional field is 502 LOCAL_API_FACADE_INVALID_RESPONSE, never a 200/READY",
+    "the envelope source.service_id/operation must equal the requested route (query exact, todos agenda/todos, calendar agenda/calendar, resources resources/resources), so a mis-routed adapter cannot paint another service's data on a card",
+    "a facade without a method returns 501 LOCAL_API_FACADE_UNAVAILABLE, not a 500 or a fabricated empty result",
+    "display projection drops exact credential/member/private-path keys and credential-shaped key segments (cookie_header, csrf_token_value, auth, *_header, *_api_key); it redacts home/Windows/temp paths and token shapes, caps text and depth, and replaces non-finite numbers",
+    "links are filtered in string, array and mapping shapes for links/link/*_url/*_link/*_href; only https tsinghua.edu.cn without a CAS/SSO/login/ticket marker survives, arrays keep their length with null entries, and withheld paths are reported as LOCAL_API_LINK_WITHHELD_AT:<path>",
+    "every response is a result-envelope-v1 object carrying request_id, display.state, display.message, display.next_step, display.completeness, display.provenance and display.paging; the encoded body is capped at max_response_bytes (8 MiB) and a larger body becomes 502 LOCAL_API_RESPONSE_TOO_LARGE",
+    "AUTH_REQUIRED from a campus source stays HTTP 200 with display.state LOGIN_REQUIRED and a next step pointing to the existing controlled entry; the local API never retries a campus login",
+    "static shell is optional and served only from the configured directory with an allowlisted content type, no-store, CSP and X-Frame-Options; without it the API still runs and / returns LOCAL_API_UI_NOT_INSTALLED",
+    "serve(host, port, facade, ...) is exported for the 6.1 CLI dashboard command and maps localhost to 127.0.0.1; no subprocess, signal, os.kill or outbound HTTP import exists in the module",
+    "32 LOCAL_API_* error codes are registered in error-classification-v1 and mirrored in source_state; the block sits at the head of both registries so a batch merge with 6.1 has no conflict and keeps the union"
+  ],
+  "checks": {
+    "module_tests": {
+      "passed": 162,
+      "failed": 0,
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_local_api.py"
+    },
+    "related_regression": {
+      "passed": 57,
+      "failed": 0,
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_query_contracts.py tests/test_source_contracts.py tests/test_v020_contracts.py tests/test_batch5_integration.py"
+    },
+    "audit_probes": {
+      "ok": true,
+      "probes": 18,
+      "command": "PYTHONPATH=src python ~/projects/Openthu/.local/audits/6.2-audit-probes.py all",
+      "result": "P1-1 all five malformed envelopes 502; P1-2 arrays filtered to null with path warnings; P1-3 health 200 with eight stuck reads; P2-1..P2-15 all show the fixed behaviour"
+    },
+    "merge_with_6_1": {
+      "ok": true,
+      "conflicts": 0,
+      "registry_conflicts": 0,
+      "full_tree_conflicts": 5,
+      "ledger_conflict_files": [
+        "plans/v0.2.0/交付/批次门禁.json",
+        "plans/v0.2.0/交付/批次门禁记录.md",
+        "plans/v0.2.0/交付/模块负责表.md",
+        "plans/v0.2.0/版本总清单.md",
+        "plans/v0.2.0/进度清单.md"
+      ],
+      "merged_codes": 359,
+      "both_sets_present": true,
+      "command": "git merge-tree --write-tree --name-only hermes/6.2 hermes/6.1",
+      "note": "conflicts/registry_conflicts count the error registries: both modules' codes auto-merge with no loss. The full tree also reports five content conflicts in the shared delivery ledgers because 6.1 and 6.2 both accepted in batch 6; those are status-row/count conflicts to resolve by union (18 accepted / 6 pending), not code or contract losses."
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "compatibility_baselines": 1,
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8,
+      "legacy_tools": 29,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "fixtures": 7,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "dev_check": {
+      "ok": true,
+      "files_checked": 505,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check",
+      "note": "505 tracked files at delivery commit 198aeb1; the record commit adds the two module-result files"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 1430,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test",
+      "evidence_tree": "clean checkout of 198aeb1 after setup-node"
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0,
+    "browser_launches": 0,
+    "message_sends": 0,
+    "background_processes": 0
+  },
+  "verified_cases": [
+    "the implemented GET route set equals the frozen local-read-api-v1 endpoint list, and the method set is exactly GET plus HEAD",
+    "a scan of the route inventory finds no execute, prepare, action, payment, submit, upload, cancel, renew, book, model, generate, key, credential, config, proxy or download path",
+    "Host: evil.example and Host with the wrong port return 403 before any facade call; the localhost alias with the bound port is accepted",
+    "cross-site Origin values and Sec-Fetch-Site cross-site/same-site return 403 before any facade call and before the static shell; the exact origin returns 200",
+    "POST/PUT/PATCH/DELETE/OPTIONS/TRACE return 405 with Allow: GET, HEAD and never reach the facade, including POST / on the static shell",
+    "a GET body returns 400 and a body above 65536 bytes returns 413 without routing",
+    "unknown routes, execute routes, encoded traversal and backslash paths return 400/404 without routing, file access or a facade call",
+    "an eight-case malformed-envelope matrix (items, verification_level, snapshot_complete, implementation_state, adapter_version, warnings, missing_pages, non-finite numbers) returns 502 with a schema-valid error body",
+    "a list-shaped links/link/entry_url field is filtered item by item and reports LOCAL_API_LINK_WITHHELD_AT paths; a safe school link in the same array survives",
+    "eight non-cooperative slow reads leave /health at 200 in under one second, make the ninth expensive read 503 LOCAL_API_BUSY, and stop() returns within two seconds",
+    "a single-use bootstrap token mints one session and the second exchange returns 401 LOCAL_API_BOOTSTRAP_USED with the file already deleted",
+    "with max_sessions=1, a browser navigation session survives a rejected bootstrap exchange (429 LOCAL_API_SESSION_LIMIT) and still reads /health",
+    "a symlinked bootstrap file is rejected with LOCAL_API_BOOTSTRAP_INVALID",
+    "valid/attacker cookie pairs in either order all authenticate through the valid value",
+    "a facade envelope attributed to library/loans on a learn/courses route returns 502 LOCAL_API_FACADE_INVALID_RESPONSE",
+    "a method whose body raises TypeError('cannot cancel ...') is invoked exactly once with the cancel token",
+    "endpoint/target/destination/source/origin/address/return_url parameters return 400 LOCAL_API_PARAMETER_FORBIDDEN before the facade",
+    "non-ASCII page_size forms (superscript two, Arabic-Indic 123, Han one) all return 400 INVALID_ARGUMENT_TYPE, never 500",
+    "NaN/Infinity/-Infinity parameters return 400 LOCAL_API_QUERY_INVALID and never reach the facade",
+    "a failed read leaves the refresh slot free, so the immediate retry returns 200 instead of 429",
+    "HEAD does not consume the refresh slot; the following GET returns 200",
+    "auth/cookie_header/csrf_token_value are dropped while ordinary keys such as text and sort_key survive",
+    "an oversized projected body returns 502 LOCAL_API_RESPONSE_TOO_LARGE with a body under 8 MiB",
+    "a local 429 reports LOCAL_API_RATE_LIMITED with local error and display text, not a school-source message",
+    "the shared stores tolerate eight threads of concurrent issue/validate/rate/page operations without an unexpected exception",
+    "serve() maps localhost to 127.0.0.1, starts and stops through the 6.1 CLI contract",
+    "the 6.2 and 6.1 error registries merge with zero conflicts and contain 359 codes from both modules"
+  ],
+  "limits": [
+    "The real 6.1 facade adapter is still the batch integration step. 6.2 now requires all seven methods (health, services, query, describe, todos, calendar, resources), exact source.service_id/operation, a declared cancel parameter and bounded upstream I/O; a missing method is 501 LOCAL_API_FACADE_UNAVAILABLE, not a fabricated result.",
+    "local-read-api-v1 declares next_cursor on /todos, /calendar and /resources but omits the request field. The server accepts an opaque cursor on those routes as a documented extension; 1.1/8.1 must revise the frozen contract or drop paging there.",
+    "The static shell is only a seam: 6.2 serves an optional static_dir and owns no HTML. 7.1 owns src/thu_assistant/web_assets and must pass it; without it / returns LOCAL_API_UI_NOT_INSTALLED while the JSON API keeps working.",
+    "Bootstrap tokens are single-use and their file is deleted on exchange. A session that expires later requires restarting the local instance to obtain a new token; the browser navigation path is unaffected. This is the cost of removing the replayable 300-second token.",
+    "The browser session bootstrap trusts a loopback navigation with Sec-Fetch-Site none/same-origin; another process of the same OS account is treated as trusted because it can already read the profile, while remote pages are blocked by Host, Origin and fetch metadata.",
+    "Secure is not set on the session cookie because some browsers refuse it over http://127.0.0.1. Protection is the loopback-only bind plus Host/Origin checks; a future TLS front end must add Secure.",
+    "No non-read route exists, so the CSRF helper is tested but unused. Any future refresh or write route must require both an allowed origin and the CSRF token before doing work.",
+    "Rate limits are engineering bounds: 120 requests / 10 s per session, a 10 s interval for an identical expensive read, and a fast LOCAL_API_BUSY when all eight read slots are held. HEAD performs one facade read (same metadata semantics as GET) but does not consume the refresh slot and remains subject to the per-session limit.",
+    "A non-cooperative adapter thread cannot be killed in-process. Health/services stay available, expensive reads fail fast and stop() returns, but Python joins executor threads at interpreter exit, so 6.1 must bound its HTTP timeouts; a permanently blocked adapter can still delay process exit.",
+    "Bootstrap mode/owner checks and O_NOFOLLOW are POSIX-only; on Windows the explicit symlink check is used and the file stays under the per-user state directory, but the 0600 assertion is skipped.",
+    "Display projection is not a general DLP. It drops exact and credential-shaped keys (auth_state is intentionally dropped) and redacts known token/path shapes, but adapters must still keep raw credentials, member values and private paths out of envelopes.",
+    "The response ceiling is 8 MiB and the local paging store shares it; a larger facade page becomes 502 LOCAL_API_RESPONSE_TOO_LARGE instead of a truncated success. A correct facade should page at the source.",
+    "One earlier full-suite attempt hit tests/test_action_framework.py::test_concurrent_execute_dispatches_once with STATE_READ_FAILED. It is a 4.4-owned concurrency race, touches no 6.2 code and did not reproduce in the audit or the final two full runs; it stays visible for 4.4/8.1.",
+    "The error-registry block was moved to the head of both files. `git merge-tree` against hermes/6.1 reports zero conflicts in the error registries and 359 union codes. Because 6.2's acceptance also updates the shared delivery ledgers, the full tree has five expected ledger-status conflicts (the 6.1/6.2 rows and the 17/17 counts); the integrator resolves them by union (18 accepted / 6 pending) and reruns both contract validators rather than choosing one side.",
+    "This module was verified with synthetic facades and loopback HTTP only. No real campus account, source, model or browser was used, and no booking, submission or payment exists in the route table."
+  ],
+  "rollback": "Revert to 2c8a218 for the accepted pre-audit tree or delete src/thu_assistant/local_api/ and tests/test_local_api.py and revert the additive LOCAL_API_* registrations in contracts/v0.2/error-classification.json and src/thu_assistant/source_state.py. There is no store or schema migration. Remove leftover <state>/local-api/bootstrap-*.json files from a crashed instance; sessions are memory-only and expire with the process. MCP, CLI, campus adapters and the dashboard assets are untouched.",
+  "next": "Batch 6 integration reconnects 6.1, 6.2 and 6.3. 6.1 implements the seven-method adapter with exact source fields and bounded cancel; 7.1 consumes describe_api()/samples() and the static_dir seam; 8.1 takes the union of the error registries (now merge-clean) and reruns the module, full suite and validators. This module opens no PR, merges nothing and publishes nothing.",
+  "cross_module_requests": [
+    "6.1: implement health, services, query, describe, todos, calendar and resources; return source.service_id/operation exactly as the route requests (agenda/todos, agenda/calendar, resources/resources); declare cancel and bound upstream I/O; a missing method is now a 501 capability gap.",
+    "1.1/8.1: revise local-read-api-v1 to freeze the cursor request field on /todos, /calendar and /resources, or remove the next_cursor claim from those routes.",
+    "7.1: build the dashboard against describe_api() and samples(); pass static_dir=src/thu_assistant/web_assets; use display.state/next_step; expect a single-use bootstrap token, HEAD without a refresh charge, and LOCAL_API_BUSY under capacity pressure.",
+    "7.2: add the 18 audit probes and the non-cooperative-adapter case to the cross-platform security regression; keep the loopback bind, Host/Origin and one-time bootstrap assertions.",
+    "6.3: no new runtime dependency and no package-data change are required (stdlib only, pure Python package). Keep the local_api directory in the wheel and verify the installed layout can import it.",
+    "8.1: merge the two error registries as a union (the error registries are clean at 359 codes), resolve the five shared-ledger status rows by union, rerun tests/test_local_api.py plus the full offline suite, and confirm the installed route inventory still equals the frozen contract."
+  ],
+  "audit_fixes": {
+    "P0": [],
+    "P1": [
+      {
+        "id": "P1-1",
+        "fix": "check_envelope now validates every declared result-envelope-v1 property (types, enums, lengths, items array, snapshot_complete, missing_pages, source_errors, error object shape, finite numbers) and _validate rejects a mismatch with 502 instead of a 200/READY",
+        "verification": "test_optional_envelope_fields_are_validated_before_a_200 (8 cases) and audit probe envelope_passthrough (all five 502)"
+      },
+      {
+        "id": "P1-2",
+        "fix": "_link_value filters string, array and mapping shapes for links/link/*_url/*_link/*_href, keeps array length with null entries and reports LOCAL_API_LINK_WITHHELD_AT paths",
+        "verification": "test_list_shaped_link_fields_are_filtered_item_by_item and audit probe links_list_bypass"
+      },
+      {
+        "id": "P1-3",
+        "fix": "health/services/detail moved to a two-worker priority executor; expensive reads hold a semaphore slot in the worker and fail fast with LOCAL_API_BUSY when all eight slots are stuck; stop() cancels and returns; the protocol now states the adapter cancel requirement",
+        "verification": "test_non_cooperative_adapter_cannot_starve_health_or_stop and audit probe worker_starvation (health 200 in 0.0 s)"
+      }
+    ],
+    "P2": [
+      {
+        "id": "P2-1",
+        "fix": "page_size accepts ASCII digits only; non-ASCII forms are 400 INVALID_ARGUMENT_TYPE",
+        "verification": "test_page_size_accepts_ascii_digits_only and audit probe page_size_unicode"
+      },
+      {
+        "id": "P2-2",
+        "fix": "json.loads uses parse_constant to reject NaN/Infinity/-Infinity before the facade",
+        "verification": "test_json_non_finite_constants_are_rejected_before_the_facade and audit probe parameters_nan"
+      },
+      {
+        "id": "P2-3",
+        "fix": "local 429 emits LOCAL_API_RATE_LIMITED with local error and display text; the previously dead branch is live",
+        "verification": "test_request_rate_limit_returns_429_with_retry_after and audit probe rate_limit_display"
+      },
+      {
+        "id": "P2-4",
+        "fix": "the refresh interval is peeked before the read and recorded only after a non-5xx response",
+        "verification": "test_failed_read_does_not_consume_the_refresh_slot and audit probe failed_read_refresh"
+      },
+      {
+        "id": "P2-5",
+        "fix": "HEAD bypasses the refresh interval and never records it; it still performs the same read as GET and is subject to the per-session limit (documented)",
+        "verification": "test_head_does_not_consume_the_refresh_slot and audit probe head_consumes_read (GET 200)"
+      },
+      {
+        "id": "P2-6",
+        "fix": "credential-shaped key segments are dropped in addition to the exact list (auth, cookie_header, csrf_token_value, *_header, *_api_key)",
+        "verification": "test_credential_shaped_keys_are_dropped, test_sensitive_key_patterns_drop_credentials_without_dropping_ordinary_keys and audit probe denykey_gaps"
+      },
+      {
+        "id": "P2-7",
+        "fix": "the encoded body is capped at max_response_bytes and a larger body returns 502 LOCAL_API_RESPONSE_TOO_LARGE; the paging store shares the same cap",
+        "verification": "test_response_size_ceiling_is_enforced and audit probe response_size_ceiling"
+      },
+      {
+        "id": "P2-8",
+        "fix": "the Sec-Fetch-Site/Origin check now runs before the static branch, so a cross-site page cannot read assets",
+        "verification": "test_cross_site_navigation_is_refused_before_the_static_shell and audit probe static_cross_site (403)"
+      },
+      {
+        "id": "P2-9",
+        "fix": "bootstrap tokens are single-use and the file is deleted on exchange; session capacity raises LOCAL_API_SESSION_LIMIT instead of evicting an active session",
+        "verification": "test_bootstrap_token_is_single_use, test_session_cap_does_not_evict_an_active_browser_session and audit probe bootstrap_replay (1 session after 20 attempts)"
+      },
+      {
+        "id": "P2-10",
+        "fix": "read_bootstrap opens with O_NOFOLLOW, verifies a regular file/mode/owner through fstat and reads from that descriptor",
+        "verification": "test_bootstrap_symlink_is_rejected and audit probe bootstrap_symlink"
+      },
+      {
+        "id": "P2-11",
+        "fix": "all same-name cookie candidates are verified; one valid value authenticates regardless of order",
+        "verification": "test_duplicate_cookie_values_are_all_verified and audit probe cookie_shadow"
+      },
+      {
+        "id": "P2-12",
+        "fix": "_validate checks source.service_id and source.operation against the requested route and rejects a mismatch",
+        "verification": "test_envelope_source_must_match_the_requested_route and audit probe envelope_source_mismatch (502)"
+      },
+      {
+        "id": "P2-13",
+        "fix": "call_with_token uses inspect.signature to decide whether cancel is accepted and never retries a call",
+        "verification": "test_call_with_token_never_invokes_a_method_twice and audit probe facade_double_call (1 invocation)"
+      },
+      {
+        "id": "P2-14",
+        "fix": "the parameter denylist covers endpoint/target/destination/dest/source/origin/address/addr/callback/webhook/redirect_uri/return_url/next",
+        "verification": "test_url_bearing_parameter_keys_are_rejected and audit probe parameter_url_keys"
+      },
+      {
+        "id": "P2-15",
+        "fix": "SessionStore, PageStore and RateLimiter use re-entrant locks; PageStore removes cursors in place instead of rebuilding the dict",
+        "verification": "test_shared_stores_tolerate_concurrent_access and audit probe shared_state_stress"
+      },
+      {
+        "id": "P2-16",
+        "fix": "the LOCAL_API_* block moved to the head of both error registries, away from 6.1's tail append; the record instructs the integrator to take the union. The shared delivery ledgers now also record 6.2's acceptance, so the full merge-tree reports five expected ledger-status conflicts (6.1/6.2 same-batch rows plus the 17/17 counts); those are resolved by union, not by dropping either module.",
+        "verification": "git merge-tree --write-tree --name-only hermes/6.2 hermes/6.1 reports zero conflicts in the error registries and 359 codes from both modules; the five ledger-status conflicts are listed in checks.merge_with_6_1 and are a documented integration-union step"
+      }
+    ]
+  },
+  "privacy": {
+    "raw_payload_included": false,
+    "personal_records_included": false,
+    "native_paths_included": false,
+    "synthetic_only": true
+  },
+  "batch_reconnection": {
+    "batch": 6,
+    "integration_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
+    "accepted_at": "2026-11-17",
+    "seam_notes": "X1/X2/X3 the real facade feeds services/todos/calendar/resources, /resources forwards the semester and /todos and /calendar split one agenda snapshot; X6 a busy port is refused on Windows with SO_EXCLUSIVEADDRUSE; the seven routes and the frozen argument lists are unchanged."
+  }
+}

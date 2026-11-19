@@ -2,7 +2,9 @@
 
 // Reuse the user's deployed protocol implementation. Never copy its password.
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
 const { execFileSync } = require('node:child_process');
 const deployed = process.env.THU_MADMODEL_DIR || path.resolve(__dirname, '../../vendor/madmodel-proxy');
@@ -12,7 +14,9 @@ const credentials = upstreamRequire('./platform/credentials');
 const locks = upstreamRequire('./platform/process-lock');
 const paths = upstreamRequire('./platform/paths');
 const { atomicWrite } = upstreamRequire('./platform/file-store');
-const stateDir = process.env.THU_ACCESS_STATE_DIR || path.join(process.env.LOCALAPPDATA, 'THUAccess');
+const stateDir = process.env.THU_ACCESS_STATE_DIR || process.env.OPENTHU_STATE_DIR ||
+  (process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'THUAccess')
+    : path.join(os.homedir(), '.local', 'state', 'openthu', 'THUAccess'));
 const sessionFile = path.join(stateDir, 'session.dpapi');
 const summaryFile = path.join(__dirname, 'last-verification.json');
 const origins = new Set(['https://id.tsinghua.edu.cn', 'https://webvpn.tsinghua.edu.cn',
@@ -37,13 +41,71 @@ function dpapi(mode, input) {
   }).toString().trim(), 'base64');
 }
 
+function accountIdentity() {
+  try {
+    const account = credentials.readAccount();
+    if (!account?.username) return '';
+    return crypto.createHash('sha256').update(String(account.username)).digest('hex');
+  } catch {
+    return '';
+  }
+}
+
+function sessionEnvironment() {
+  const env = {...process.env};
+  const identity = accountIdentity();
+  if (identity) env.THU_LEARN_ACCOUNT = identity;
+  else delete env.THU_LEARN_ACCOUNT;
+  return env;
+}
+
+function sessionHelper(mode, payload) {
+  try {
+    const output = execFileSync(process.env.THU_PYTHON || 'python', [path.join(__dirname, 'session-store.py'), mode], {
+      input: payload === undefined ? '' : JSON.stringify(payload), encoding: 'utf8', windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'], timeout: 20000, env: sessionEnvironment(),
+    });
+    const parsed = JSON.parse(output);
+    return parsed && typeof parsed === 'object' ? parsed : {ok: false, errorCode: 'HELPER_INVALID_RESPONSE'};
+  } catch {
+    return {ok: false, errorCode: 'HELPER_UNAVAILABLE'};
+  }
+}
+
 function saveSession(jar) {
   const selected = Object.fromEntries(Object.entries(jar.cookies).filter(([origin]) => origins.has(origin)));
+  const cookies = Object.entries(selected).flatMap(([origin, rows]) => rows.map(c => ({
+    ...c, domain: new URL(origin).hostname,
+  })));
+  const saved = sessionHelper('write', {cookies});
+  if (saved?.ok) return;
+  if (process.env.THU_SECURE_KEY_FILE || process.env.OPENTHU_SECURE_KEY_FILE) {
+    throw failure(saved?.errorCode || 'STATE_ENCRYPT_FAILED');
+  }
+  // Windows compatibility fallback.  A configured secure key never reaches
+  // this branch because session-store.py fails closed instead of downgrading.
   atomicWrite(sessionFile, dpapi('protect', Buffer.from(JSON.stringify({ version: 1, cookies: selected }))).toString('base64'));
 }
 
 // The file is base64-wrapped ciphertext; no cookie/token is ever written raw.
 function restoreSession() {
+  const stored = sessionHelper('read');
+  const secureKey = Boolean(process.env.THU_SECURE_KEY_FILE || process.env.OPENTHU_SECURE_KEY_FILE);
+  if (stored?.ok && Array.isArray(stored.cookies)) {
+    const jar = new auth.CookieJar();
+    for (const cookie of stored.cookies) {
+      const host = String(cookie.domain || '').replace(/^\./, '');
+      const origin = 'https://' + host;
+      if (!origins.has(origin) || typeof cookie.name !== 'string' || typeof cookie.value !== 'string') continue;
+      if (typeof cookie.expires === 'number' && cookie.expires > 0 && cookie.expires * 1000 <= Date.now()) continue;
+      (jar.cookies[origin] ||= []).push({name: cookie.name, value: cookie.value, path: cookie.path || '/'});
+    }
+    if (Object.keys(jar.cookies).length) return jar;
+    if (secureKey) throw failure('STATE_DECRYPT_FAILED');
+  }
+  if (secureKey && !(stored && stored.ok === false && stored.errorCode === 'NO_SESSION')) {
+    throw failure(stored?.errorCode || 'SECURE_KEY_UNAVAILABLE');
+  }
   try {
     const encoded = fs.readFileSync(sessionFile, 'utf8');
     const jar = new auth.CookieJar();

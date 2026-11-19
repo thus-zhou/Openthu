@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/sources/data-models/submission.schema.json",
+  "title": "Openthu v0.2 assignment submission state",
+  "description": "The explicit boundary between a local upload, a saved draft and a final submission. Upload success does not mean a draft was saved, and a saved draft does not mean the assignment was submitted.",
+  "x-contract-version": "submission-v1",
+  "x-owner": "2.3/Hermes",
+  "x-status": "frozen",
+  "x-semantics": "Internal state record for the future submission adapter. It is not a claim that an upload or final submit endpoint exists today.",
+  "x-identity-rule": "submission_uid = <source_id>:SUBMISSION:<assignment_uid-or-source-record-id>; each attempt has its own version. A final submission cannot be inferred from a file upload receipt.",
+  "x-unknown-values": {
+    "version": null,
+    "remote_submission_id": null,
+    "upload_receipt_id": null,
+    "submitted_at": null,
+    "null_meaning": "not provided or not observed; never evidence of a final submission"
+  },
+  "type": "object",
+  "required": [
+    "submission_uid",
+    "assignment_uid",
+    "source_id",
+    "state",
+    "is_final",
+    "version",
+    "remote_submission_id",
+    "upload_receipt_id",
+    "submitted_at",
+    "result_observed",
+    "automatic_replay_allowed",
+    "source_evidence_id",
+    "synthetic"
+  ],
+  "properties": {
+    "submission_uid": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{1,80}:SUBMISSION:[A-Za-z0-9_.:-]{1,180}$",
+      "maxLength": 280
+    },
+    "assignment_uid": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{1,80}:ASSIGNMENT:[A-Za-z0-9_.:-]{1,180}$",
+      "maxLength": 280
+    },
+    "source_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{2,120}$"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "PREPARED_LOCAL",
+        "UPLOAD_STARTED",
+        "UPLOADED_STAGING",
+        "DRAFT_SAVED",
+        "SUBMITTED",
+        "SUPERSEDED",
+        "FAILED",
+        "UNKNOWN"
+      ]
+    },
+    "is_final": {
+      "type": "boolean"
+    },
+    "version": {
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "remote_submission_id": {
+      "type": ["string", "null"],
+      "maxLength": 240
+    },
+    "upload_receipt_id": {
+      "type": ["string", "null"],
+      "maxLength": 240
+    },
+    "submitted_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "result_observed": {
+      "type": "boolean"
+    },
+    "automatic_replay_allowed": {
+      "const": false
+    },
+    "source_evidence_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 200}
+    },
+    "synthetic": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {"state": {"enum": ["PREPARED_LOCAL", "UPLOAD_STARTED", "UPLOADED_STAGING", "DRAFT_SAVED"]}},
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {"is_final": {"const": false}}
+      }
+    },
+    {
+      "if": {
+        "properties": {"state": {"const": "SUBMITTED"}},
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {"is_final": {"const": true}}
+      }
+    },
+    {
+      "if": {
+        "properties": {"state": {"const": "SUPERSEDED"}},
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {"is_final": {"const": false}}
+      }
+    }
+  ],
+  "x-compatibility-sample": {
+    "submission_uid": "learn.submission:SUBMISSION:SYNTHETIC-ASSIGNMENT-1:1",
+    "assignment_uid": "learn.assignments:ASSIGNMENT:SYNTHETIC-ASSIGNMENT-1",
+    "source_id": "learn.submission",
+    "state": "SUBMITTED",
+    "is_final": true,
+    "version": 1,
+    "remote_submission_id": "SYNTHETIC-SUBMISSION-1",
+    "upload_receipt_id": "SYNTHETIC-UPLOAD-1",
+    "submitted_at": "2026-11-20T22:00:00+08:00",
+    "result_observed": true,
+    "automatic_replay_allowed": false,
+    "source_evidence_id": "learn.submission",
+    "warnings": [],
+    "synthetic": true
+  },
+  "x-rejection-samples": [
+    {
+      "why": "a saved draft is not a final submission",
+      "value": {
+        "submission_uid": "learn.submission:SUBMISSION:SYNTHETIC-ASSIGNMENT-1:1",
+        "assignment_uid": "learn.assignments:ASSIGNMENT:SYNTHETIC-ASSIGNMENT-1",
+        "source_id": "learn.submission",
+        "state": "DRAFT_SAVED",
+        "is_final": true,
+        "version": 1,
+        "remote_submission_id": null,
+        "upload_receipt_id": null,
+        "submitted_at": null,
+        "result_observed": false,
+        "automatic_replay_allowed": false,
+        "source_evidence_id": "learn.submission",
+        "synthetic": true
+      }
+    },
+    {
+      "why": "a final submit record cannot be marked non-final",
+      "value": {
+        "submission_uid": "learn.submission:SUBMISSION:SYNTHETIC-ASSIGNMENT-1:1",
+        "assignment_uid": "learn.assignments:ASSIGNMENT:SYNTHETIC-ASSIGNMENT-1",
+        "source_id": "learn.submission",
+        "state": "SUBMITTED",
+        "is_final": false,
+        "version": 1,
+        "remote_submission_id": "SYNTHETIC-SUBMISSION-1",
+        "upload_receipt_id": "SYNTHETIC-UPLOAD-1",
+        "submitted_at": "2026-11-20T22:00:00+08:00",
+        "result_observed": true,
+        "automatic_replay_allowed": false,
+        "source_evidence_id": "learn.submission",
+        "synthetic": true
+      }
+    },
+    {
+      "why": "an uncertain write is never replayed automatically",
+      "value": {
+        "submission_uid": "learn.submission:SUBMISSION:SYNTHETIC-ASSIGNMENT-1:1",
+        "assignment_uid": "learn.assignments:ASSIGNMENT:SYNTHETIC-ASSIGNMENT-1",
+        "source_id": "learn.submission",
+        "state": "UNKNOWN",
+        "is_final": false,
+        "version": null,
+        "remote_submission_id": null,
+        "upload_receipt_id": null,
+        "submitted_at": null,
+        "result_observed": false,
+        "automatic_replay_allowed": true,
+        "source_evidence_id": "learn.submission",
+        "synthetic": true
+      }
+    },
+    {
+      "why": "a final submission requires an observed remote result; upload or draft receipts are not enough",
+      "value": {
+        "submission_uid": "learn.submission:SUBMISSION:SYNTHETIC-ASSIGNMENT-1:2",
+        "assignment_uid": "learn.assignments:ASSIGNMENT:SYNTHETIC-ASSIGNMENT-1",
+        "source_id": "learn.submission",
+        "state": "SUBMITTED",
+        "is_final": true,
+        "version": 2,
+        "remote_submission_id": null,
+        "upload_receipt_id": "SYNTHETIC-UPLOAD-2",
+        "submitted_at": null,
+        "result_observed": false,
+        "automatic_replay_allowed": false,
+        "source_evidence_id": "learn.submission",
+        "synthetic": true
+      }
+    }
+  ]
+}

@@ -7,7 +7,7 @@ import os
 import re
 import threading
 import time
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from .bridge import CampusError
 from .gateway_client import _control
 from .catalog import state_root
@@ -26,6 +26,22 @@ USER = '/system/login/getLoginUser'
 FORM_BRIEF = '/workflow/process/brief/'
 CREATE = '/api/reserve/addReserve'
 CANCEL = '/api/reserve/cancelReserve'
+# Only these exact official routes may leave the adapter.  The reservation
+# front end signs requests in the page, so a copied URL can carry appId, nonce,
+# sign or timeStamp; those query values are never forwarded in a plan, a todo
+# or an action result.
+PUBLIC_ROUTES = (HOME, HOME + '#/sports', HOME + '#/swim', PERSONAL)
+
+
+def redact_official_url(value=None):
+    """Return a registered official route, dropping credentials and query."""
+    parts = urlsplit(str(value or PERSONAL))
+    candidate = urlunsplit((parts.scheme, parts.netloc, parts.path, '', parts.fragment))
+    if (parts.scheme == 'https' and parts.hostname == 'www.sports.tsinghua.edu.cn'
+            and not parts.username and not parts.password and candidate in PUBLIC_ROUTES):
+        return candidate
+    return PERSONAL
+
 READS = {SCENE:'GET', LOCATION:'GET', PAGE:'POST', DETAIL:'GET', RECORDS:'POST', CAPTCHA:'GET', USER:'GET'}
 READ_KEYS = {
     PAGE: {'sceneUuid', 'siteType', 'sceneUseType', 'classTypeUuid', 'classTypeEnum', 'reserveDate',

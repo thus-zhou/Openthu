@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/sources/data-models/model-image-capability.schema.json",
+  "title": "Openthu v0.2 model image capability",
+  "description": "A capability conclusion for image input. A model catalog flag says a model is listed as supporting images; it does not prove that the current authenticated proxy can transport image content.",
+  "x-contract-version": "model-image-capability-v1",
+  "x-owner": "2.3/Hermes",
+  "x-status": "frozen",
+  "x-semantics": "Internal capability assessment. catalog_state, catalog_support_image and protocol_state are separate evidence axes; capability_state is the conservative conclusion.",
+  "x-identity-rule": "A capability row is keyed by model_id and source_id. Catalog listing does not imply runtime availability.",
+  "x-unknown-values": {
+    "catalog_support_image": null,
+    "reason_code": null,
+    "null_meaning": "not verified; never promoted to AVAILABLE"
+  },
+  "type": "object",
+  "required": [
+    "model_id",
+    "source_id",
+    "catalog_state",
+    "catalog_support_image",
+    "protocol_state",
+    "capability_state",
+    "reason_code",
+    "evidence_level",
+    "checked_at",
+    "source_evidence_id",
+    "synthetic"
+  ],
+  "properties": {
+    "model_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$"
+    },
+    "source_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{2,120}$"
+    },
+    "catalog_state": {
+      "type": "string",
+      "enum": ["LISTED", "NOT_LISTED", "UNKNOWN"]
+    },
+    "catalog_support_image": {
+      "type": ["boolean", "null"]
+    },
+    "protocol_state": {
+      "type": "string",
+      "enum": ["VERIFIED", "UNVERIFIED", "MISMATCH", "UNAVAILABLE"]
+    },
+    "capability_state": {
+      "type": "string",
+      "enum": ["AVAILABLE", "UNAVAILABLE", "UNVERIFIED"]
+    },
+    "reason_code": {
+      "type": ["string", "null"],
+      "maxLength": 120
+    },
+    "evidence_level": {
+      "type": "string",
+      "enum": ["NONE", "OFFLINE_CONTRACT", "SYNTHETIC_TRANSPORT", "LIVE_READ", "UNKNOWN"]
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_evidence_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "warning": {
+      "type": ["string", "null"],
+      "maxLength": 300
+    },
+    "synthetic": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {"capability_state": {"const": "AVAILABLE"}},
+        "required": ["capability_state"]
+      },
+      "then": {
+        "properties": {
+          "catalog_state": {"const": "LISTED"},
+          "catalog_support_image": {"const": true},
+          "protocol_state": {"const": "VERIFIED"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"capability_state": {"const": "UNAVAILABLE"}},
+        "required": ["capability_state"]
+      },
+      "then": {
+        "properties": {
+          "protocol_state": {"enum": ["UNAVAILABLE", "MISMATCH"]}
+        }
+      }
+    }
+  ],
+  "x-compatibility-sample": {
+    "model_id": "synthetic-model-a",
+    "source_id": "model.image_input",
+    "catalog_state": "LISTED",
+    "catalog_support_image": true,
+    "protocol_state": "UNVERIFIED",
+    "capability_state": "UNVERIFIED",
+    "reason_code": "IMAGE_PROTOCOL_NOT_VERIFIED",
+    "evidence_level": "OFFLINE_CONTRACT",
+    "checked_at": "2026-11-16T12:00:00+00:00",
+    "source_evidence_id": "model.image_input",
+    "warning": "目录标记支持图片不等于当前代理可传输图片",
+    "synthetic": true
+  },
+  "x-rejection-samples": [
+    {
+      "why": "a catalog listing alone cannot make image input available",
+      "value": {
+        "model_id": "synthetic-model-a",
+        "source_id": "model.image_input",
+        "catalog_state": "LISTED",
+        "catalog_support_image": true,
+        "protocol_state": "UNVERIFIED",
+        "capability_state": "AVAILABLE",
+        "reason_code": null,
+        "evidence_level": "OFFLINE_CONTRACT",
+        "checked_at": "2026-11-16T12:00:00+00:00",
+        "source_evidence_id": "model.image_input",
+        "synthetic": true
+      }
+    },
+    {
+      "why": "an unavailable capability cannot claim a verified protocol",
+      "value": {
+        "model_id": "synthetic-model-a",
+        "source_id": "model.image_input",
+        "catalog_state": "LISTED",
+        "catalog_support_image": true,
+        "protocol_state": "VERIFIED",
+        "capability_state": "UNAVAILABLE",
+        "reason_code": "SYNTHETIC",
+        "evidence_level": "OFFLINE_CONTRACT",
+        "checked_at": "2026-11-16T12:00:00+00:00",
+        "source_evidence_id": "model.image_input",
+        "synthetic": true
+      }
+    },
+    {
+      "why": "AVAILABLE requires transport evidence, not only an offline contract sample",
+      "value": {
+        "model_id": "synthetic-model-a",
+        "source_id": "model.image_input",
+        "catalog_state": "LISTED",
+        "catalog_support_image": true,
+        "protocol_state": "VERIFIED",
+        "capability_state": "AVAILABLE",
+        "reason_code": "SYNTHETIC",
+        "evidence_level": "OFFLINE_CONTRACT",
+        "checked_at": "2026-11-16T12:00:00+00:00",
+        "source_evidence_id": "model.image_input",
+        "synthetic": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "fixture_id": "login-200-no-business",
+  "synthetic": true,
+  "description": "An authenticated-looking login shell returned HTTP 200 but contains no business rows. It must not be reported as a successful empty business result.",
+  "observations": {
+    "http_status": 200,
+    "content_type": "text/html",
+    "page_markers": ["统一认证", "登录"],
+    "business_rows": []
+  },
+  "expected": {
+    "classification": "AUTH_REQUIRED",
+    "business_result": "NOT_EMPTY_SUCCESS",
+    "is_success": false,
+    "is_real_empty": false
+  }
+}

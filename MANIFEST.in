@@ -1,8 +1,13 @@
 include README.md LICENSE THIRD_PARTY.md CHANGELOG.md AGENTS.md
-include ACTION-FRAMEWORK.md LEARN-READ.md requirements-dev.txt provenance.json
+include ACTION-FRAMEWORK.md LEARN-READ.md requirements.txt requirements-dev.txt provenance.json
+include setup.py pyproject.toml MANIFEST.in
+recursive-include build_support *.py *.json
 recursive-include src *.py *.js *.json *.txt LICENSE
+recursive-include src/thu_assistant/web_assets *.html *.css *.js
+include src/thu_assistant/consent/README.md
+include src/thu_assistant/renewal/README.md
 recursive-include runtime *.py *.js
-recursive-include vendor *.js *.json *.md *.txt LICENSE
+recursive-include vendor *.js *.json *.md LICENSE *LICENSE
 recursive-include scripts *.py
 recursive-include docs *.md
 recursive-include plans *.md
@@ -10,4 +15,5 @@ recursive-include configs *.json
 recursive-include integrations *.md *.yaml *.json
 recursive-include tests *.py *.js *.json *.html *.pdf
 recursive-exclude * node_modules/* __pycache__/* *.pyc
+global-exclude .env
 prune src/thu_assistant/node_modules

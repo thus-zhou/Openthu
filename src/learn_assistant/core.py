@@ -54,6 +54,28 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _default_download_root() -> Path:
+    explicit = (os.environ.get("OPENTHU_DOWNLOAD_DIR") or "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
+    try:
+        from thu_assistant.configuration import ConfigurationError, load_config
+        return load_config().storage.download_dir
+    except (ConfigurationError, ImportError, OSError, ValueError):
+        return DEFAULT_DOWNLOAD_ROOT
+
+
+def _default_system_data_root() -> Path:
+    explicit = (os.environ.get("OPENTHU_DATA_DIR") or "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
+    try:
+        from thu_assistant import catalog
+        return catalog.state_root()
+    except (ImportError, OSError, ValueError):
+        return DEFAULT_SYSTEM_DATA_ROOT
+
+
 def _safe_destination(destination: str | os.PathLike[str] | None) -> Path:
     """解析允许的下载目录。
 
@@ -62,7 +84,7 @@ def _safe_destination(destination: str | os.PathLike[str] | None) -> Path:
     """
 
     if destination is None or str(destination).strip() == "":
-        path = DEFAULT_DOWNLOAD_ROOT
+        path = _default_download_root()
     else:
         path = Path(destination).expanduser()
         if not path.is_absolute():
@@ -174,10 +196,11 @@ class LearnAssistant:
         self,
         provider: LearningProvider,
         *,
-        system_data_root: str | os.PathLike[str] = DEFAULT_SYSTEM_DATA_ROOT,
+        system_data_root: str | os.PathLike[str] | None = None,
     ) -> None:
         self.provider = provider
-        self.system_data_root = Path(system_data_root).expanduser().resolve()
+        root = _default_system_data_root() if system_data_root is None else system_data_root
+        self.system_data_root = Path(root).expanduser().resolve()
 
     def get_login_status(self) -> dict[str, Any]:
         return {"status": to_dict(self.provider.get_login_status())}
@@ -352,16 +375,19 @@ class LearnAssistant:
             path = Path(raw_path).expanduser().resolve()
             path_key = str(path).casefold()
             if path_key in seen_paths:
-                errors.append(f"重复指定文件：{path}")
+                errors.append(f"重复指定文件：{path.name}")
                 continue
             seen_paths.add(path_key)
-            record: dict[str, Any] = {"path": str(path), "exists": path.exists()}
+            # Only the display name, size and hash cross the local boundary.
+            # The absolute path stays inside this method; it is not copied to
+            # the MCP result or to the plaintext confirmation preview.
+            record: dict[str, Any] = {"name": path.name, "exists": path.exists()}
             if not path.exists():
-                errors.append(f"文件不存在：{path}")
+                errors.append(f"文件不存在：{path.name}")
                 files.append(record)
                 continue
             if not path.is_file():
-                errors.append(f"路径不是普通文件：{path}")
+                errors.append(f"路径不是普通文件：{path.name}")
                 files.append(record)
                 continue
             size = path.stat().st_size
@@ -404,10 +430,27 @@ class LearnAssistant:
                 else "本地校验未通过；未生成可提交的文件集合。"
             ),
         }
-        preview_path = self.system_data_root / "submission-previews" / f"{operation_id}.json"
-        summary["preview_path"] = str(preview_path)
-        preview_path.parent.mkdir(parents=True, exist_ok=True)
-        preview_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        # The preview is legacy plaintext (documented in the source matrix);
+        # keep it owner-only and return a logical name, never a local path.
+        preview_name = f"submission-previews/{operation_id}.json"
+        preview_dir = self.system_data_root / "submission-previews"
+        preview_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if os.name != "nt":
+            os.chmod(preview_dir, 0o700)
+        preview_path = preview_dir / f"{operation_id}.json"
+        summary["preview"] = preview_name
+        payload = json.dumps(summary, ensure_ascii=False, indent=2).encode("utf-8")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+        descriptor = os.open(preview_path, flags, 0o600)
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                descriptor = None
+                handle.write(payload)
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+        if os.name != "nt":
+            os.chmod(preview_path, 0o600)
         return summary
 
     def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
