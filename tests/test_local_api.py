@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 from copy import deepcopy
+from types import SimpleNamespace
 from urllib.parse import quote, urlencode
 
 import jsonschema
@@ -737,7 +738,7 @@ def test_windows_bootstrap_fails_closed_when_acl_cannot_be_verified(tmp_path, mo
 def test_simulated_windows_publish_fails_before_writing_token_when_temp_acl_unverified(
     tmp_path, monkeypatch
 ) -> None:
-    monkeypatch.setattr(security.os, 'name', 'nt')
+    monkeypatch.setattr(security, 'os', SimpleNamespace(**{**vars(os), 'name': 'nt'}))
     monkeypatch.setattr(secure_keys, '_harden_windows_acl', lambda path, *, directory=False: None)
     monkeypatch.setattr(secure_keys, '_windows_acl_owner_only', lambda path: Path(path).name == 'local-api')
     channel = security.BootstrapChannel(tmp_path, instance_id='c' * 32)
@@ -764,7 +765,7 @@ def test_simulated_windows_read_rejects_unverified_parent_or_file_acl(tmp_path, 
         'api_version': 'local-read-api-v1',
     }), encoding='utf-8')
 
-    monkeypatch.setattr(security.os, 'name', 'nt')
+    monkeypatch.setattr(security, 'os', SimpleNamespace(**{**vars(os), 'name': 'nt'}))
     monkeypatch.setattr(secure_keys, '_windows_acl_owner_only', lambda path: Path(path) != target)
     with pytest.raises(local_api.LocalApiError) as err_file:
         security.read_bootstrap(target, clock=FakeWallClock())
