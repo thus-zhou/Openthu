@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import zipfile
 import pytest
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -646,7 +647,7 @@ def test_wheel_installs_outside_the_repository_without_source_fallback(installed
     assert "site-packages" in report["file"] or "dist-packages" in report["file"]
 
 
-def test_install_check_accepts_a_verified_explicit_wheelhouse(candidate, tmp_path):
+def test_install_check_accepts_a_verified_explicit_wheelhouse(candidate, tmp_path, monkeypatch):
     module = candidate["module"]
     wheel = next(candidate["dist"].glob("*.whl"))
     wheelhouse = tmp_path / "wheelhouse"
@@ -661,6 +662,7 @@ def test_install_check_accepts_a_verified_explicit_wheelhouse(candidate, tmp_pat
         cwd=workdir,
     )
     assert {"cryptography", "pillow", "requests"} <= set(staged)
+    monkeypatch.setenv("PIP_CONSTRAINT", str(tmp_path / "missing-constraint.txt"))
     report = module.install_check(wheel, wheelhouse=wheelhouse)
     assert report["dependency_source"] == "wheelhouse"
     assert report["isolated_venv"] is True
@@ -670,7 +672,9 @@ def test_install_check_accepts_a_verified_explicit_wheelhouse(candidate, tmp_pat
     assert report["user_state_unchanged"] is True
 
 
-def test_install_check_fails_closed_when_wheelhouse_misses_declared_dependency(candidate, tmp_path):
+def test_install_check_fails_closed_when_wheelhouse_misses_declared_dependency(
+    candidate, tmp_path, monkeypatch,
+):
     module = candidate["module"]
     wheel = next(candidate["dist"].glob("*.whl"))
     wheelhouse = tmp_path / "incomplete-wheelhouse"
@@ -686,8 +690,11 @@ def test_install_check_fails_closed_when_wheelhouse_misses_declared_dependency(c
     )
     removed = list(wheelhouse.glob("requests-*.whl"))
     assert removed
+    other_wheelhouse = tmp_path / "ambient-wheelhouse"
+    other_wheelhouse.mkdir()
     for item in removed:
-        item.unlink()
+        item.rename(other_wheelhouse / item.name)
+    monkeypatch.setenv("PIP_FIND_LINKS", str(other_wheelhouse))
     with pytest.raises(module.ReleaseError) as caught:
         module.install_check(wheel, wheelhouse=wheelhouse)
     assert caught.value.code == "INSTALL_PIP_FAILED"
@@ -708,6 +715,19 @@ def test_install_check_rejects_empty_or_invalid_wheelhouse(candidate, tmp_path):
     with pytest.raises(module.ReleaseError) as corrupt_err:
         module.install_check(wheel, wheelhouse=corrupt)
     assert corrupt_err.value.code == "INSTALL_WHEELHOUSE_INVALID"
+
+
+def test_install_check_rejects_direct_dependency_references(tmp_path):
+    module = load_script("package_release")
+    wheel = tmp_path / "example-1.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr(
+            "example-1.0.dist-info/METADATA",
+            "Metadata-Version: 2.4\nName: example\nVersion: 1.0\n"
+            "Requires-Dist: demo @ file:///unused/demo.whl\n",
+        )
+    with pytest.raises(module.ReleaseError, match="direct dependency reference"):
+        module.install_check(wheel)
 
 
 # --- diagnostics name the missing capability -------------------------------

@@ -27,6 +27,7 @@ the network.  Artifacts are written to ``dist/`` and described by
 from __future__ import annotations
 
 import argparse
+from email.parser import BytesParser
 import gzip
 import hashlib
 import io
@@ -949,13 +950,34 @@ print(json.dumps({"ok": True, "packages": sorted(dists)}))
 
 
 def _install_environment() -> dict[str, str]:
-    """Child environment without the ambient import path of the checkout."""
+    """Exclude ambient import paths and pip configuration."""
     env = {
         key: value
         for key, value in os.environ.items()
-        if key not in {"PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "VIRTUAL_ENV"}
+        if key.upper() not in {"PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "VIRTUAL_ENV"}
+        and not key.upper().startswith("PIP_")
     }
+    env["PIP_CONFIG_FILE"] = os.devnull
     return env
+
+
+def _verify_offline_wheel(path: Path) -> None:
+    if path.is_symlink() or not path.is_file():
+        raise ReleaseError("INSTALL_WHEELHOUSE_INVALID", path.name)
+    try:
+        with zipfile.ZipFile(path) as archive:
+            members = [
+                name for name in archive.namelist()
+                if name.count("/") == 1 and name.endswith(".dist-info/METADATA")
+            ]
+            if len(members) != 1 or archive.testzip() is not None:
+                raise ReleaseError("INSTALL_WHEELHOUSE_INVALID", path.name)
+            metadata = BytesParser().parsebytes(archive.read(members[0]), headersonly=True)
+            dependencies = metadata.get_all("Requires-Dist", [])
+            if any("@" in dependency.partition(";")[0] for dependency in dependencies):
+                raise ReleaseError("INSTALL_WHEELHOUSE_INVALID", "direct dependency reference")
+    except (OSError, zipfile.BadZipFile) as error:
+        raise ReleaseError("INSTALL_WHEELHOUSE_INVALID", path.name) from error
 
 
 def _validate_wheelhouse(path: Path) -> Path:
@@ -966,14 +988,7 @@ def _validate_wheelhouse(path: Path) -> Path:
     if not wheels:
         raise ReleaseError("INSTALL_WHEELHOUSE_INVALID", "no wheel files found")
     for wheel_file in wheels:
-        if wheel_file.is_symlink() or not wheel_file.is_file():
-            raise ReleaseError("INSTALL_WHEELHOUSE_INVALID", wheel_file.name)
-        try:
-            with zipfile.ZipFile(wheel_file) as archive:
-                if archive.testzip() is not None:
-                    raise ReleaseError("INSTALL_WHEELHOUSE_INVALID", wheel_file.name)
-        except (OSError, zipfile.BadZipFile):
-            raise ReleaseError("INSTALL_WHEELHOUSE_INVALID", wheel_file.name) from None
+        _verify_offline_wheel(wheel_file)
     return resolved.resolve()
 
 
@@ -1012,6 +1027,8 @@ def install_check(
     wheelhouse: Path | None = None,
 ) -> dict:
     python = python or sys.executable
+    _verify_offline_wheel(wheel)
+    wheel = wheel.resolve()
     required = ["source.windows_auth", "source.madmodel_proxy"]
     env = _install_environment()
     with tempfile.TemporaryDirectory(prefix="openthu-install-") as tmp:
@@ -1052,22 +1069,26 @@ def install_check(
                 env=env,
                 cwd=workdir,
             )
-            find_links = staged
+            find_links = _validate_wheelhouse(staged)
             dependency_source = "local-cache"
         target_python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         installed = subprocess.run(
             [
                 str(target_python),
+                "-I",
                 "-m",
                 "pip",
                 "install",
                 "--no-index",
+                "--no-cache-dir",
+                "--only-binary=:all:",
                 "--find-links",
                 str(find_links),
                 "--force-reinstall",
                 "--disable-pip-version-check",
                 str(wheel),
             ],
+            cwd=workdir,
             capture_output=True,
             text=True,
             check=False,

@@ -382,7 +382,8 @@ def _windows_acl_snapshot(path: Path) -> tuple[str, str]:
 
 
 _SDDL_SECTIONS = re.compile(r"O:(.*?)(?:G:|D:|S:|$)")
-_SDDL_ACE = re.compile(r"\((?:A|OA);([^)]*)\)")
+_SDDL_DACL_FLAGS = re.compile(r"(?:P|AI|AR)*")
+_SDDL_ACE = re.compile(r"\((A|OA|D|OD);(?:[^();]*;){4}([A-Za-z0-9-]+)\)")
 # SDDL uses two-letter aliases for well-known principals.  A host may emit
 # either the alias or the full SID, so comparisons normalise both forms.
 _WELL_KNOWN_SIDS = {
@@ -408,13 +409,25 @@ def _sddl_owner_token(sddl: str) -> str | None:
     return token or None
 
 
-def _sddl_ace_trustees(sddl: str) -> list[str]:
-    """Return the trustee token of every allow ACE in one SDDL string."""
+def _sddl_ace_trustees(sddl: str) -> list[str] | None:
+    """Read a complete DACL, rejecting unsupported or malformed rules."""
+    _, marker, tail = sddl.partition("D:")
+    if not marker:
+        return None
+    dacl = tail.partition("S:")[0]
+    flags, _, _ = dacl.partition("(")
+    if not _SDDL_DACL_FLAGS.fullmatch(flags):
+        return None
     trustees = []
-    for body in _SDDL_ACE.findall(sddl or ""):
-        token = body.rsplit(";", 1)[-1].strip()
-        if token:
-            trustees.append(token)
+    position = len(flags)
+    while position < len(dacl):
+        match = _SDDL_ACE.match(dacl, position)
+        if match is None:
+            return None
+        kind, trustee = match.groups()
+        if kind in {"A", "OA"}:
+            trustees.append(trustee)
+        position = match.end()
     return trustees
 
 
@@ -439,8 +452,6 @@ def _windows_acl_owner_only(path: Path) -> bool:
     if owner_token is None:
         return False
     if not (_same_principal(owner_token, current) or owner_token == "OW"):
-        return False
-    if "NO_ACCESS_CONTROL" in sddl or "D:" not in sddl:
         return False
     trustees = _sddl_ace_trustees(sddl)
     if not trustees:

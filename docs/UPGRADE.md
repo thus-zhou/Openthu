@@ -99,10 +99,11 @@ Windows 的默认状态目录仍是 `%LOCALAPPDATA%\TsinghuaAssistant`，与旧�
 python scripts/package_release.py build
 python scripts/package_release.py verify            # 默认要求产物 commit == HEAD
 python scripts/package_release.py verify --expected-commit <SHA>
-python scripts/package_release.py install-check
+python -m pip download --only-binary=:all: -r requirements.txt -d wheelhouse
+python scripts/package_release.py install-check --wheelhouse wheelhouse
 ```
 
-`build` 从已提交的 Git 内容生成确定性源码归档、sdist 与 wheel，全部成功后才原子替换 `dist/`（失败保留上一份候选），并写出 `release-manifest.json` 与 `SHA256SUMS`。`verify` 核对版本、产物与 `HEAD` 的提交绑定、`Requires-Python`、`Requires-Dist`、7 个入口点、包内资源与只读模式、许可证精确路径、校验和与 CHANGELOG 候选说明；`install-check` 在仓库外的临时虚拟环境安装 wheel、运行 `openthu-doctor`、启动 29 个 MCP 工具，并确认用户状态目录未被改写。以上均为候选准备，不代表发布，也不代表真实校园业务可用。
+`build` 从已提交的 Git 内容生成确定性源码归档、sdist 与 wheel，全部成功后才原子替换 `dist/`（失败保留上一份候选），并写出 `release-manifest.json` 与 `SHA256SUMS`。`verify` 核对版本、产物与 `HEAD` 的提交绑定、`Requires-Python`、`Requires-Dist`、7 个入口点、包内资源与只读模式、许可证精确路径、校验和与 CHANGELOG 候选说明；`install-check` 在仓库外的临时虚拟环境安装 wheel、运行 `openthu-doctor`、列出 29 个 MCP 工具，并确认合成用户状态目录未被改写。正式验证使用仓库外的 `--wheelhouse`，只放来源及校验值已核对的原始依赖 wheel；安装检查不使用宿主 pip 配置、缓存、索引或直连依赖。省略 `--wheelhouse` 时从本机已安装依赖重制临时 wheel，仅供离线冒烟，不作正式发行证据。以上均为候选准备，不代表发布，也不代表真实校园业务可用。
 
 ## 6. 升级后的最小核对
 

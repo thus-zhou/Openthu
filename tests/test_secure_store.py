@@ -831,6 +831,15 @@ def test_sddl_owner_parser_requires_a_dacl_and_an_owner(monkeypatch):
     assert _owner_only(monkeypatch, "O:G:D:PAI") is False
 
 
+@pytest.mark.parametrize("suffix", ["(UNKNOWN;;FA;;;SY)", "(D;;FA;;;SY", "unparsed"])
+def test_sddl_owner_parser_rejects_an_unverified_dacl(monkeypatch, suffix):
+    assert _owner_only(monkeypatch, _synthetic_sddl() + suffix) is False
+
+
+def test_sddl_owner_parser_distinguishes_deny_rules_from_grants(monkeypatch):
+    assert _owner_only(monkeypatch, _synthetic_sddl() + "(D;;FA;;;WD)") is True
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows DPAPI only")
 def test_windows_legacy_record_is_readable_without_rewrite(tmp_path):
     from learn_assistant.auth import _dpapi_protect
