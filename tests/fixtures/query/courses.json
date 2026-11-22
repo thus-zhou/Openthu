@@ -1,0 +1,27 @@
+{
+  "synthetic": true,
+  "description": "Synthetic course rows for module 3.2 normalization. No real student record.",
+  "rows": [
+    {
+      "course_id": "SYN-COURSE-A",
+      "course_name": "合成同名课程",
+      "role": "student",
+      "teacher_names": ["合成教师甲"]
+    },
+    {
+      "course_id": "SYN-COURSE-B",
+      "course_name": "合成同名课程",
+      "role": "Teacher",
+      "teacherName": "合成教师乙"
+    },
+    {
+      "course_name": "合成无编号课程",
+      "role": "student"
+    },
+    {
+      "course_id": "SYN-COURSE-C",
+      "course_name": "   ",
+      "role": "student"
+    }
+  ]
+}

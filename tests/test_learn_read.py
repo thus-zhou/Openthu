@@ -136,7 +136,8 @@ def test_attachment_link_does_not_register_untrusted_target(url):
     assert attachment_links('<a href="'+url+'">file</a>','c1','notice','n1')==[]
 
 def test_query_schema_paging_and_legacy_tool_contracts():
-    p,t=provider();a=CampusAssistant(learning_factory=lambda:LearnAssistant(p))
+    p,t=provider();a=CampusAssistant(learning_factory=lambda:LearnAssistant(p),
+        bridge=lambda *args,**kwargs:{'account_id':'synthetic-test-account'})
     r=a.call('query_service',{'service_id':'learn','operation':'notices','parameters':{'course_id':'c1'},'page_size':1})
     assert r['next_cursor'] and not r['complete'] and r['source_complete']
     r=a.call('query_service',{'service_id':'learn','operation':'notices','parameters':{'course_id':'c1'},'page_size':1,'cursor':r['next_cursor']})
@@ -177,7 +178,8 @@ def test_missing_total_is_unknown_and_true_empty_requires_both_categories():
         r=original(method,url,**kwargs)
         if 'pageListXsby' in url:r._json_data['object']={'aaData':[],'iTotalDisplayRecords':0}
         return r
-    t.request=empty;a=CampusAssistant(learning_factory=lambda:LearnAssistant(p))
+    t.request=empty;a=CampusAssistant(learning_factory=lambda:LearnAssistant(p),
+        bridge=lambda *args,**kwargs:{'account_id':'synthetic-test-account'})
     args={'service_id':'learn','operation':'notices','parameters':{'course_id':'c1'}}
     assert a.call('query_service',args)['status']=='EMPTY'
     def unknown(method,url,**kwargs):

@@ -6,9 +6,11 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import zipfile
 import pytest
 
 ROOT=Path(__file__).resolve().parents[1]
+
 
 
 @pytest.mark.skipif(os.name=='nt',reason='Non-Windows production encryption failure contract')
@@ -73,3 +75,1142 @@ def test_manual_handoff_refuses_to_lose_dirty_work(tmp_path):
     result=subprocess.run([sys.executable,str(tmp_path/'scripts/handoff.py'),'T1','--to','codex'],cwd=tmp_path,capture_output=True,text=True)
     assert result.returncode!=0
     assert not (tmp_path/'handoffs/T1.json').exists()
+
+
+# ---------------------------------------------------------------------------
+# 6.3 complete distribution layout: version source, resource manifest, build,
+# verification, install check and diagnostics capability reporting.
+# ---------------------------------------------------------------------------
+
+import tomllib
+
+
+def load_script(name):
+    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_materialize():
+    spec = importlib.util.spec_from_file_location(
+        "distribution_materialize", ROOT / "build_support" / "materialize.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def project_metadata():
+    return tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+
+def declared_version():
+    reference = project_metadata()["tool"]["setuptools"]["dynamic"]["version"]["attr"]
+    module_name, _, attribute = reference.rpartition(".")
+    namespace = {}
+    path = ROOT / "src" / Path(*module_name.split(".")).with_suffix(".py")
+    exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), namespace)
+    return namespace[attribute]
+
+
+def manifest():
+    return load_materialize().load_manifest(ROOT)
+
+
+def test_one_version_source_feeds_package_metadata_and_changelog():
+    version = declared_version()
+    assert project_metadata()["project"]["dynamic"] == ["version"]
+    assert version == "0.2.0"
+    sys.path.insert(0, str(ROOT / "src"))
+    try:
+        import thu_assistant
+        import learn_assistant
+
+        assert thu_assistant.__version__ == version
+        assert learn_assistant.__version__ == version
+    finally:
+        sys.path.pop(0)
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert version in changelog.split("\n", 3)[1] or version in changelog[:400]
+
+
+def test_python_and_node_floor_are_declared_once_in_the_manifest():
+    spec = project_metadata()
+    data = manifest()
+    assert spec["project"]["requires-python"] == data["product"]["python_requires"] == ">=3.12"
+    assert data["product"]["node_requires"] == ">=24"
+    assert data["product"]["node_lockfile"] == "src/thu_assistant/package-lock.json"
+
+
+def test_pinned_dependencies_match_the_metadata_and_requirement_files():
+    spec = project_metadata()
+    data = manifest()
+    runtime = {row.split("==")[0]: row.split("==")[1] for row in spec["project"]["dependencies"]}
+    assert runtime == data["dependencies"]["runtime"]
+    browser = {
+        row.split("==")[0]: row.split("==")[1]
+        for row in spec["project"]["optional-dependencies"]["browser"]
+    }
+    assert browser == data["dependencies"]["optional"]["browser"]
+    pinned = {}
+    for line in (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            name, _, value = line.partition("==")
+            pinned[name] = value
+    assert pinned == data["dependencies"]["runtime"]
+    development = (ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
+    assert development.splitlines()[0].strip() == "-r requirements.txt"
+
+
+def test_no_development_tool_is_a_runtime_dependency():
+    runtime = project_metadata()["project"]["dependencies"]
+    for tool in ("pytest", "build", "jsonschema", "playwright"):
+        assert all(tool not in row for row in runtime), tool
+
+
+def test_development_pins_match_the_manifest():
+    pins = {}
+    for line in (ROOT / "requirements-dev.txt").read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or line.startswith("-r"):
+            continue
+        name, _, value = line.partition("==") if "==" in line else line.partition(">=")
+        pins[name] = ("==" if "==" in line else ">=") + value
+    expected = {
+        name: ("==" + value if not str(value).startswith((">=", "<=", "==")) else str(value))
+        for name, value in manifest()["dependencies"]["development"].items()
+    }
+    assert pins == expected
+
+
+def test_glob_translation_matches_double_star_without_matching_everything():
+    module = load_materialize()
+    assert module.matches_any("core/tokenizer.js", ["**/*.js"])
+    assert module.matches_any("proxy.js", ["**/*.js"])
+    assert not module.matches_any("docs/README.md", ["**/*.js"])
+    assert module.matches_any("vendor/licenses/x", ["vendor/**"])
+    assert module.matches_any("test/a.test.js", ["test/**"])
+    assert not module.matches_any("platform/a.js", ["test/**"])
+
+
+def test_materialize_copies_bundles_and_writes_the_layout(tmp_path):
+    module = load_materialize()
+    source = tmp_path / "repo"
+    (source / "runtime" / "windows").mkdir(parents=True)
+    (source / "runtime" / "windows" / "access.js").write_text("// helper\n", encoding="utf-8")
+    (source / "runtime" / "windows" / "import-session.py").write_text("# helper\n", encoding="utf-8")
+    data = {
+        "schema_version": "openthu-distribution-manifest-v1",
+        "bundles": [
+            {
+                "id": "runtime.windows",
+                "source": "runtime/windows",
+                "install": "runtime/windows",
+                "include": ["*.js", "*.py"],
+                "must_include": ["access.js", "import-session.py"],
+            }
+        ],
+        "resource_map": {"source.windows_auth": "runtime/windows/access.js"},
+        "forbidden": {"names": [".env"], "suffixes": [".key"], "directories": ["logs"]},
+        "licenses": {"openthu": "MIT"},
+    }
+    package = tmp_path / "pkg"
+    package.mkdir()
+    summary = module.materialize(source, package, data, version="9.9.9", commit="deadbeef")
+    assert summary["files"] == 2
+    assert (package / "_bundled" / "runtime/windows/access.js").is_file()
+    layout = json.loads((package / "_bundled" / "layout.json").read_text(encoding="utf-8"))
+    assert layout["product_version"] == "9.9.9"
+    assert layout["commit"] == "deadbeef"
+    assert layout["resources"] == {"source.windows_auth": "runtime/windows/access.js"}
+    if os.name != "nt":
+        # Program resources are shipped read-only on POSIX.
+        assert oct((package / "_bundled/runtime/windows/access.js").stat().st_mode & 0o777) == "0o444"
+        assert os.access(package / "_bundled/runtime/windows/access.js", os.W_OK) is False
+    assert os.access(package / "_bundled/runtime/windows/access.js", os.R_OK)
+
+
+def test_materialize_refuses_an_incomplete_bundle(tmp_path):
+    module = load_materialize()
+    source = tmp_path / "repo"
+    (source / "runtime").mkdir(parents=True)
+    (source / "runtime" / "access.js").write_text("", encoding="utf-8")
+    data = {
+        "schema_version": "openthu-distribution-manifest-v1",
+        "bundles": [
+            {
+                "id": "runtime",
+                "source": "runtime",
+                "install": "runtime",
+                "include": ["*.js"],
+                "must_include": ["missing.js"],
+            }
+        ],
+        "resource_map": {},
+        "forbidden": {},
+        "licenses": {},
+    }
+    package = tmp_path / "pkg"
+    package.mkdir()
+    with pytest.raises(module.DistributionError) as caught:
+        module.materialize(source, package, data, version="0")
+    assert caught.value.code == "DISTRIBUTION_BUNDLE_INCOMPLETE"
+    bundled = package / "_bundled"
+    if bundled.exists():
+        assert not list(bundled.rglob("*"))
+
+
+def test_forbidden_scan_flags_keys_caches_logs_and_user_files():
+    module = load_materialize()
+    rows = module.scan_forbidden(
+        [
+            "src/thu_assistant/gateway.js",
+            ".env",
+            ".env.example",
+            "keys/master.key",
+            "session.dpapi",
+            "logs/app.log",
+            "node_modules/tough-cookie/index.js",
+            "cache/session.json",
+            "docs/README.md",
+        ],
+        manifest(),
+    )
+    flagged = {row["file"]: row["rule"] for row in rows}
+    assert ".env.example" not in flagged
+    assert "docs/README.md" not in flagged
+    assert "src/thu_assistant/gateway.js" not in flagged
+    for name in ("keys/master.key", "session.dpapi", "logs/app.log", "node_modules/tough-cookie/index.js"):
+        assert name in flagged
+
+
+# --- resource resolution ---------------------------------------------------
+
+
+def _package_with_bundle(root, *, resources, version="0.2.0", commit="abc"):
+    package = root / "site-packages" / "thu_assistant"
+    package.mkdir(parents=True)
+    bundled = package / "_bundled"
+    (bundled / "runtime" / "windows").mkdir(parents=True)
+    (bundled / "runtime" / "windows" / "access.js").write_text("// bundled\n", encoding="utf-8")
+    (bundled / "vendor" / "madmodel-proxy").mkdir(parents=True)
+    (bundled / "vendor" / "madmodel-proxy" / "package.json").write_text("{}\n", encoding="utf-8")
+    (bundled / "layout.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "openthu-bundled-layout-v1",
+                "product_version": version,
+                "commit": commit,
+                "resources": resources,
+            }
+        ),
+        encoding="utf-8",
+    )
+    for name in ("gateway.js", "services.json", "security.js", "cookies.js"):
+        (package / name).write_text("", encoding="utf-8")
+    (package / "package-lock.json").write_text("{}\n", encoding="utf-8")
+    return package
+
+
+def test_a_wheel_install_resolves_bundled_resources_without_a_checkout(tmp_path):
+    from thu_assistant import paths
+
+    package = _package_with_bundle(
+        tmp_path,
+        resources={
+            "source.windows_auth": "runtime/windows/access.js",
+            "source.madmodel_proxy": "vendor/madmodel-proxy/package.json",
+        },
+    )
+    helper = paths.resolve_resource(
+        "source.windows_auth", package_root_value=package, source_root_value=None
+    )
+    assert helper.available
+    assert helper.location == "bundled"
+    assert helper.path.parent.name == "windows"
+    vendor = paths.resolve_resource(
+        "source.madmodel_proxy", package_root_value=package, source_root_value=None
+    )
+    assert vendor.location == "bundled"
+    assert vendor.path.parent.name == "madmodel-proxy"
+    rows = paths.resource_manifest(package_root_value=package, source_root_value=None)
+    assert all("path" not in row for row in rows)
+    locations = {row["id"]: row["location"] for row in rows if row["scope"] == "source"}
+    assert locations["source.windows_auth"] == "bundled"
+    assert locations["source.madmodel_proxy"] == "bundled"
+    assert locations["source.tests"] is None
+
+
+def test_a_live_checkout_wins_over_a_stale_bundled_copy(tmp_path):
+    from thu_assistant import paths
+
+    package = _package_with_bundle(
+        tmp_path, resources={"source.windows_auth": "runtime/windows/access.js"}
+    )
+    checkout = tmp_path / "checkout"
+    (checkout / "runtime" / "windows").mkdir(parents=True)
+    (checkout / "runtime" / "windows" / "access.js").write_text("// live\n", encoding="utf-8")
+    resolved = paths.resolve_resource(
+        "source.windows_auth", package_root_value=package, source_root_value=checkout
+    )
+    assert resolved.location == "source"
+    assert resolved.path == (checkout / "runtime" / "windows" / "access.js").resolve()
+
+
+def test_a_layout_path_escape_is_refused(tmp_path):
+    from thu_assistant import paths
+
+    package = _package_with_bundle(
+        tmp_path, resources={"source.windows_auth": "../../../etc/passwd"}
+    )
+    resolved = paths.resolve_resource(
+        "source.windows_auth", package_root_value=package, source_root_value=None
+    )
+    assert resolved.available is False
+    broken = package / "_bundled" / "layout.json"
+    broken.write_text("{not json", encoding="utf-8")
+    assert paths.bundled_layout(package_root_value=package) is None
+    assert not paths.resolve_resource(
+        "source.windows_auth", package_root_value=package, source_root_value=None
+    ).available
+
+
+# --- candidate build -------------------------------------------------------
+
+DECOYS = {
+    ".local/synthetic-master.key": b"SYNTHETIC-NOT-A-KEY\n",
+    "cache/session.json": b'{"token": "synthetic"}',
+    "logs/synthetic.log": b"synthetic log line\n",
+    "downloads/synthetic.pdf": b"%PDF-1.4 synthetic\n",
+    ".env": b"OPENTHU_SECRET_SYNTHETIC=dummy\n",
+}
+
+
+@pytest.fixture(scope="module")
+def candidate(tmp_path_factory):
+    module = load_script("package_release")
+    created = []
+    for name, data in DECOYS.items():
+        path = ROOT / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        created.append(path)
+    dist = tmp_path_factory.mktemp("candidate-dist")
+    try:
+        try:
+            release = module.build_candidate(dist)
+        except module.ReleaseError as error:
+            pytest.fail(
+                "the candidate build only runs on a clean tracked tree; "
+                f"commit or stash the pending change first ({error.code})"
+            )
+        report = module.verify(dist)
+    finally:
+        for path in created:
+            path.unlink(missing_ok=True)
+        for directory in (".local", "cache", "logs", "downloads"):
+            leftover = ROOT / directory
+            if leftover.is_dir() and not any(leftover.iterdir()):
+                leftover.rmdir()
+    return {"module": module, "dist": dist, "release": release, "report": report}
+
+
+def test_candidate_build_produces_the_declared_artifact_set(candidate):
+    names = sorted(path.name for path in candidate["dist"].iterdir())
+    assert names == [
+        "Openthu-0.2.0-source.tar.gz",
+        "Openthu-0.2.0-source.zip",
+        "SHA256SUMS",
+        "openthu-0.2.0-py3-none-any.whl",
+        "openthu-0.2.0.tar.gz",
+        "release-manifest.json",
+    ]
+    release = candidate["release"]
+    assert release["version"] == declared_version()
+    assert release["release_status"] == "candidate-not-released"
+    assert release["published"] is False
+    assert release["commit"] == candidate["module"].git_commit()
+    assert candidate["report"]["ok"] is True
+
+
+def test_release_manifest_checksums_match_the_files(candidate):
+    dist = candidate["dist"]
+    release = json.loads((dist / "release-manifest.json").read_text(encoding="utf-8"))
+    sums = {}
+    for line in (dist / "SHA256SUMS").read_text(encoding="ascii").splitlines():
+        digest, _, name = line.partition("  ")
+        sums[name] = digest
+    import hashlib
+
+    for row in release["artifact_files"]:
+        assert sums[row["name"]] == row["sha256"]
+        assert hashlib.sha256((dist / row["name"]).read_bytes()).hexdigest() == row["sha256"]
+
+
+def test_wheel_is_the_complete_layout_with_licenses_and_entry_points(candidate):
+    import zipfile
+
+    wheel = next(candidate["dist"].glob("*.whl"))
+    with zipfile.ZipFile(wheel) as archive:
+        names = archive.namelist()
+        metadata = archive.read("openthu-0.2.0.dist-info/METADATA").decode("utf-8")
+        assert "Version: 0.2.0" in metadata
+        assert "Requires-Python: >=3.12" in metadata
+        for dependency in ("cryptography==50.0.2", "Pillow==13.0.0", "requests==2.33.0"):
+            assert "Requires-Dist: " + dependency in metadata
+        for license_name in ("LICENSE", "THIRD_PARTY.md"):
+            assert any(name.endswith("/licenses/" + license_name) for name in names)
+        assert "thu_assistant/_bundled/layout.json" in names
+        for required in (
+            "thu_assistant/web_assets/index.html",
+            "thu_assistant/web_assets/assets/app.css",
+            "thu_assistant/web_assets/assets/app.js",
+            "thu_assistant/web_assets/assets/model.js",
+            "thu_assistant/web_assets/assets/api.js",
+            "thu_assistant/_bundled/runtime/windows/access.js",
+            "thu_assistant/_bundled/runtime/windows/import-session.py",
+            "thu_assistant/_bundled/vendor/madmodel-proxy/package.json",
+            "thu_assistant/_bundled/vendor/madmodel-proxy/madmodel-auth.js",
+            "thu_assistant/_bundled/vendor/madmodel-proxy/vendor/deepseek-tokenizer.json",
+        ):
+            assert required in names
+        entry_points = archive.read("openthu-0.2.0.dist-info/entry_points.txt").decode("utf-8")
+        for entry in ("openthu", "openthu-mcp", "learn-assistant", "tsinghua-assistant-mcp"):
+            assert entry + " =" in entry_points
+        assert not any(name.startswith(("tests/", "plans/", "vendor/")) for name in names)
+        assert not any("node_modules" in name for name in names)
+
+
+def test_source_archives_exclude_synthetic_keys_caches_and_logs(candidate):
+    import tarfile
+    import zipfile
+
+    dist = candidate["dist"]
+    with zipfile.ZipFile(dist / "Openthu-0.2.0-source.zip") as archive:
+        zip_names = set(archive.namelist())
+    with tarfile.open(dist / "Openthu-0.2.0-source.tar.gz") as archive:
+        tar_names = {member.name for member in archive.getmembers()}
+    for name in DECOYS:
+        assert "Openthu-0.2.0/" + name not in zip_names
+        assert "Openthu-0.2.0/" + name not in tar_names
+    assert "Openthu-0.2.0/pyproject.toml" in zip_names
+    assert "Openthu-0.2.0/src/thu_assistant/gateway.js" in zip_names
+
+
+def test_sdist_contains_the_sources_needed_to_rebuild_the_bundles(candidate):
+    import tarfile
+
+    with tarfile.open(candidate["dist"] / "openthu-0.2.0.tar.gz") as archive:
+        names = {member.name for member in archive.getmembers()}
+    for required in (
+        "openthu-0.2.0/setup.py",
+        "openthu-0.2.0/src/thu_assistant/web_assets/index.html",
+        "openthu-0.2.0/src/thu_assistant/web_assets/assets/app.css",
+        "openthu-0.2.0/src/thu_assistant/web_assets/assets/app.js",
+        "openthu-0.2.0/build_support/distribution.json",
+        "openthu-0.2.0/build_support/materialize.py",
+        "openthu-0.2.0/vendor/madmodel-proxy/package.json",
+        "openthu-0.2.0/vendor/madmodel-proxy/vendor/deepseek-tokenizer.json",
+        "openthu-0.2.0/runtime/windows/access.js",
+        "openthu-0.2.0/vendor/madmodel-proxy/LICENSE",
+    ):
+        assert required in names
+
+
+def test_a_wheel_rebuilt_from_the_sdist_keeps_the_bundled_resources(candidate, tmp_path):
+    import tarfile
+    import zipfile
+
+    staging = tmp_path / "sdist"
+    staging.mkdir()
+    with tarfile.open(candidate["dist"] / "openthu-0.2.0.tar.gz") as archive:
+        archive.extractall(staging, filter="data")
+    source = staging / "openthu-0.2.0"
+    result = subprocess.run(
+        [sys.executable, "-m", "build", "--no-isolation", "--wheel", "--outdir", str(tmp_path / "out")],
+        cwd=source,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "SOURCE_DATE_EPOCH": "1", "PYTHONPATH": ""},
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    wheel = next((tmp_path / "out").glob("*.whl"))
+    with zipfile.ZipFile(wheel) as archive:
+        names = archive.namelist()
+    assert "thu_assistant/_bundled/layout.json" in names
+    assert "thu_assistant/_bundled/vendor/madmodel-proxy/vendor/deepseek-tokenizer.json" in names
+    assert "thu_assistant/package-lock.json" in names
+
+
+def test_archive_bytes_come_from_commits_not_from_the_worktree(candidate, tmp_path):
+    module = candidate["module"]
+    target = ROOT / "README.md"
+    original = target.read_bytes()
+    before = module.committed_sources()
+    try:
+        target.write_bytes(original.replace(b"\n", b"\r\n"))
+        os.utime(target, (1, 1))
+        after = module.committed_sources()
+    finally:
+        target.write_bytes(original)
+    assert before == after
+    first = tmp_path / "first.zip"
+    second = tmp_path / "second.zip"
+    module.write_source_zip(first, "prefix", before)
+    module.write_source_zip(second, "prefix", after)
+    assert first.read_bytes() == second.read_bytes()
+    import zipfile
+
+    with zipfile.ZipFile(first) as archive:
+        assert archive.read("prefix/README.md") == original
+
+
+def test_build_refuses_a_dirty_tracked_tree(candidate, tmp_path):
+    module = candidate["module"]
+    target = ROOT / "README.md"
+    original = target.read_bytes()
+    try:
+        target.write_bytes(original + b"\nuncommitted line\n")
+        with pytest.raises(module.ReleaseError) as caught:
+            module.build_candidate(tmp_path / "out")
+        assert caught.value.code == "RELEASE_TREE_DIRTY"
+    finally:
+        target.write_bytes(original)
+
+
+def test_verify_refuses_a_tampered_artifact(candidate, tmp_path):
+    module = candidate["module"]
+    dist = tmp_path / "dist"
+    shutil.copytree(candidate["dist"], dist)
+    wheel = next(dist.glob("*.whl"))
+    data = bytearray(wheel.read_bytes())
+    data[-1] ^= 0xFF
+    wheel.write_bytes(bytes(data))
+    with pytest.raises(module.ReleaseError) as caught:
+        module.verify(dist)
+    assert caught.value.code == "RELEASE_CHECKSUM_MISMATCH"
+
+
+def test_release_manifest_and_package_metadata_agree_after_reinstall(candidate):
+    wheel = next(candidate["dist"].glob("*.whl"))
+    import zipfile
+
+    with zipfile.ZipFile(wheel) as archive:
+        names = archive.namelist()
+        layout = json.loads(archive.read("thu_assistant/_bundled/layout.json"))
+    release = candidate["release"]
+    assert layout["product_version"] == release["version"]
+    assert layout["commit"] == release["commit"]
+    for relative in manifest()["resource_map"].values():
+        assert "thu_assistant/_bundled/" + relative in names
+
+
+@pytest.fixture(scope="module")
+def installed_wheel(candidate):
+    wheel = next(candidate["dist"].glob("*.whl"))
+    return candidate["module"].install_check(wheel)
+
+
+def test_release_manifest_lists_each_runtime_resource_with_its_hash(candidate):
+    release = candidate["release"]
+    ids = {row["id"] for row in release["resources"]}
+    assert set(manifest()["resource_map"]) <= ids
+    assert len(release["resources"]) == release["bundled_files"] - 1
+    assert any(row["id"].startswith("bundled:") for row in release["resources"])
+    import zipfile
+
+    wheel = next(candidate["dist"].glob("*.whl"))
+    with zipfile.ZipFile(wheel) as archive:
+        for row in release["resources"]:
+            import hashlib
+
+            assert hashlib.sha256(archive.read(row["install"])).hexdigest() == row["sha256"]
+            assert row["bytes"] > 0
+
+
+def test_wheel_installs_outside_the_repository_without_source_fallback(installed_wheel):
+    report = installed_wheel
+    assert report["version"] == declared_version()
+    assert report["source_root"] is None
+    assert report["missing"] == []
+    assert report["locations"]["source.windows_auth"] == "bundled"
+    assert report["locations"]["source.madmodel_proxy"] == "bundled"
+    assert report["locations"]["package.gateway"] == "package"
+    assert report["mcp_tools"] == 29
+    assert report["isolated_venv"] is True
+    assert report["outside_prefix"] == []
+    assert report["doctor_ok"] is True
+    assert report["user_state_unchanged"] is True
+    assert set(manifest()["dependencies"]["runtime"]) <= set(report["installed_dependencies"])
+    assert "site-packages" in report["file"] or "dist-packages" in report["file"]
+
+
+def test_install_check_accepts_a_verified_explicit_wheelhouse(candidate, tmp_path, monkeypatch):
+    module = candidate["module"]
+    wheel = next(candidate["dist"].glob("*.whl"))
+    wheelhouse = tmp_path / "wheelhouse"
+    wheelhouse.mkdir()
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    staged = module._stage_local_wheelhouse(
+        wheel,
+        wheelhouse,
+        python=sys.executable,
+        env=module._install_environment(),
+        cwd=workdir,
+    )
+    assert {"cryptography", "pillow", "requests"} <= set(staged)
+    monkeypatch.setenv("PIP_CONSTRAINT", str(tmp_path / "missing-constraint.txt"))
+    report = module.install_check(wheel, wheelhouse=wheelhouse)
+    assert report["dependency_source"] == "wheelhouse"
+    assert report["isolated_venv"] is True
+    assert report["outside_prefix"] == []
+    assert report["mcp_tools"] == 29
+    assert report["doctor_ok"] is True
+    assert report["user_state_unchanged"] is True
+
+
+def test_install_check_fails_closed_when_wheelhouse_misses_declared_dependency(
+    candidate, tmp_path, monkeypatch,
+):
+    module = candidate["module"]
+    wheel = next(candidate["dist"].glob("*.whl"))
+    wheelhouse = tmp_path / "incomplete-wheelhouse"
+    wheelhouse.mkdir()
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    module._stage_local_wheelhouse(
+        wheel,
+        wheelhouse,
+        python=sys.executable,
+        env=module._install_environment(),
+        cwd=workdir,
+    )
+    removed = list(wheelhouse.glob("requests-*.whl"))
+    assert removed
+    other_wheelhouse = tmp_path / "ambient-wheelhouse"
+    other_wheelhouse.mkdir()
+    for item in removed:
+        item.rename(other_wheelhouse / item.name)
+    monkeypatch.setenv("PIP_FIND_LINKS", str(other_wheelhouse))
+    with pytest.raises(module.ReleaseError) as caught:
+        module.install_check(wheel, wheelhouse=wheelhouse)
+    assert caught.value.code == "INSTALL_PIP_FAILED"
+
+
+def test_install_check_rejects_empty_or_invalid_wheelhouse(candidate, tmp_path):
+    module = candidate["module"]
+    wheel = next(candidate["dist"].glob("*.whl"))
+    empty = tmp_path / "empty-wheelhouse"
+    empty.mkdir()
+    with pytest.raises(module.ReleaseError) as empty_err:
+        module.install_check(wheel, wheelhouse=empty)
+    assert empty_err.value.code == "INSTALL_WHEELHOUSE_INVALID"
+
+    corrupt = tmp_path / "corrupt-wheelhouse"
+    corrupt.mkdir()
+    (corrupt / "bad-1.0-py3-none-any.whl").write_bytes(b"not-a-zip")
+    with pytest.raises(module.ReleaseError) as corrupt_err:
+        module.install_check(wheel, wheelhouse=corrupt)
+    assert corrupt_err.value.code == "INSTALL_WHEELHOUSE_INVALID"
+
+
+def test_install_check_rejects_direct_dependency_references(tmp_path):
+    module = load_script("package_release")
+    wheel = tmp_path / "example-1.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr(
+            "example-1.0.dist-info/METADATA",
+            "Metadata-Version: 2.4\nName: example\nVersion: 1.0\n"
+            "Requires-Dist: demo @ file:///unused/demo.whl\n",
+        )
+    with pytest.raises(module.ReleaseError, match="direct dependency reference"):
+        module.install_check(wheel)
+
+
+# --- diagnostics name the missing capability -------------------------------
+
+
+def diagnostics_module():
+    return load_script("dev_diagnostics")
+
+
+def diagnostics_case(tmp_path, **overrides):
+    import test_dev_diagnostics as helpers
+
+    module = diagnostics_module()
+    root = helpers.complete_checkout(tmp_path)
+    kwargs = helpers.healthy_kwargs(root)
+    kwargs.update(overrides)
+    return module, root, kwargs
+
+
+def test_missing_node_names_the_capabilities_it_blocks(tmp_path):
+    module, root, kwargs = diagnostics_case(tmp_path, platform_name="nt")
+    kwargs["which"] = lambda name: None if name in ("node", "npm", "npm.cmd") else "/synthetic/" + name
+    report = module.collect(**kwargs)
+    rows = {row["id"]: row for row in report["checks"]}
+    assert rows["node"]["status"] == "fail"
+    assert "校园网关" in rows["node"]["reason"]
+    assert rows["windows-auth"]["status"] == "fail"
+    assert "Node.js 不可用" in rows["windows-auth"]["reason"]
+    assert report["capabilities"]["development"] == "unavailable"
+    assert report["capabilities"]["production-auth"] == "unavailable"
+    assert report["capabilities"]["readonly"] == "available"
+    text = module.format_report(report)
+    assert "能力状态" in text
+
+
+def test_missing_chromium_is_reported_as_a_browser_gap_only(tmp_path):
+    module, root, kwargs = diagnostics_case(
+        tmp_path, browser_available=lambda: {"available": False, "reason": "binary-missing"}
+    )
+    report = module.collect(**kwargs)
+    rows = {row["id"]: row for row in report["checks"]}
+    assert rows["playwright-browser"]["status"] == "warning"
+    assert "Chromium 可执行文件" in rows["playwright-browser"]["reason"]
+    assert report["ok"] is True
+    assert report["capabilities"]["browser"] == "degraded"
+    assert report["capabilities"]["readonly"] == "available"
+
+
+def test_missing_playwright_client_is_distinguished_from_missing_browser(tmp_path):
+    module, root, kwargs = diagnostics_case(
+        tmp_path, browser_available=lambda: {"available": False, "reason": "client-missing"}
+    )
+    report = module.collect(**kwargs)
+    rows = {row["id"]: row for row in report["checks"]}
+    assert "Playwright 客户端" in rows["playwright-browser"]["reason"]
+
+
+def test_release_layout_mismatch_blocks_start(tmp_path):
+    module, root, kwargs = diagnostics_case(tmp_path)
+    package = root / "src" / "thu_assistant"
+    (package / "_bundled").mkdir()
+    (package / "_bundled" / "layout.json").write_text(
+        json.dumps({"product_version": "0.1.9", "resources": {}}), encoding="utf-8"
+    )
+    report = module.collect(**kwargs)
+    rows = {row["id"]: row for row in report["checks"]}
+    assert rows["release-layout"]["status"] == "fail"
+    assert rows["release-layout"]["blocking"] is True
+    assert "0.1.9" in rows["release-layout"]["reason"]
+    assert report["ok"] is False
+
+
+def test_a_consistent_installed_layout_is_reported_as_complete(tmp_path):
+    import test_dev_diagnostics as helpers
+
+    module = diagnostics_module()
+    package = tmp_path / "site-packages" / "thu_assistant"
+    package.mkdir(parents=True)
+    for name in ("gateway.js", "services.json", "security.js", "cookies.js"):
+        (package / name).write_text("", encoding="utf-8")
+    (package / "package-lock.json").write_text(
+        json.dumps({"packages": {"node_modules/tough-cookie": {"version": "6.0.0"}}}),
+        encoding="utf-8",
+    )
+    installed = package / "node_modules" / "tough-cookie"
+    installed.mkdir(parents=True)
+    (installed / "package.json").write_text('{"version": "6.0.0"}', encoding="utf-8")
+    bundled = package / "_bundled"
+    (bundled / "runtime" / "windows").mkdir(parents=True)
+    (bundled / "runtime" / "windows" / "access.js").write_text("", encoding="utf-8")
+    (bundled / "vendor" / "madmodel-proxy").mkdir(parents=True)
+    (bundled / "vendor" / "madmodel-proxy" / "package.json").write_text("{}\n", encoding="utf-8")
+    (bundled / "layout.json").write_text(
+        json.dumps(
+            {
+                "product_version": declared_version(),
+                "resources": {
+                    "source.windows_auth": "runtime/windows/access.js",
+                    "source.madmodel_proxy": "vendor/madmodel-proxy/package.json",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    kwargs = helpers.healthy_kwargs(package)
+    kwargs["root"] = package
+    kwargs["config"] = helpers.synthetic_config(package)
+    report = module.collect(**kwargs)
+    rows = {row["id"]: row for row in report["checks"]}
+    assert rows["release-layout"]["status"] == "pass"
+    assert rows["source-package"]["status"] == "pass"
+    assert "不依赖源码目录" in rows["source-package"]["reason"]
+    assert rows["windows-auth"]["status"] == "not_applicable"
+
+
+# --- audit remediation regressions -----------------------------------------
+
+
+def test_materialize_refuses_a_path_outside_the_documented_roots(tmp_path):
+    """P2-1: manifest paths are untrusted input."""
+    module = load_materialize()
+    source = tmp_path / "repo"
+    (source / "runtime").mkdir(parents=True)
+    (source / "runtime" / "access.js").write_text("", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("outside", encoding="utf-8")
+    base = {
+        "schema_version": "openthu-distribution-manifest-v1",
+        "resource_map": {},
+        "forbidden": {},
+        "licenses": {},
+    }
+    package = tmp_path / "pkg"
+    package.mkdir()
+    escaping_install = dict(
+        base,
+        bundles=[
+            {
+                "id": "runtime",
+                "source": "runtime",
+                "install": "../../escaped-install",
+                "include": ["*.js"],
+                "must_include": ["access.js"],
+            }
+        ],
+    )
+    with pytest.raises(module.DistributionError) as caught:
+        module.materialize(source, package, escaping_install, version="0")
+    assert caught.value.code == "DISTRIBUTION_PATH_INVALID"
+    assert not (tmp_path / "escaped-install").exists()
+
+    escaping_source = dict(
+        base,
+        bundles=[
+            {
+                "id": "runtime",
+                "source": "../outside",
+                "install": "runtime",
+                "include": ["*.txt"],
+                "must_include": ["secret.txt"],
+            }
+        ],
+    )
+    with pytest.raises(module.DistributionError) as caught:
+        module.materialize(source, package, escaping_source, version="0")
+    assert caught.value.code == "DISTRIBUTION_PATH_INVALID"
+
+    link = source / "link"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symbolic links unavailable on this platform")
+    linked_source = dict(
+        base,
+        bundles=[
+            {
+                "id": "runtime",
+                "source": "link",
+                "install": "runtime",
+                "include": ["*.txt"],
+                "must_include": ["secret.txt"],
+            }
+        ],
+    )
+    with pytest.raises(module.DistributionError) as caught:
+        module.materialize(source, package, linked_source, version="0")
+    assert caught.value.code == "DISTRIBUTION_PATH_OUTSIDE"
+
+
+def test_materialize_rebuilds_the_bundle_and_drops_stale_files(tmp_path):
+    """P2-2: a deleted source file must not survive in an incremental build."""
+    module = load_materialize()
+    source = tmp_path / "repo"
+    (source / "runtime").mkdir(parents=True)
+    (source / "runtime" / "a.js").write_text("a", encoding="utf-8")
+    (source / "runtime" / "old.js").write_text("old", encoding="utf-8")
+    data = {
+        "schema_version": "openthu-distribution-manifest-v1",
+        "bundles": [
+            {
+                "id": "runtime",
+                "source": "runtime",
+                "install": "runtime",
+                "include": ["*.js"],
+                "must_include": ["a.js"],
+            }
+        ],
+        "resource_map": {},
+        "forbidden": {},
+        "licenses": {},
+    }
+    package = tmp_path / "pkg"
+    package.mkdir()
+    module.materialize(source, package, data, version="0")
+    assert (package / "_bundled/runtime/old.js").is_file()
+    (source / "runtime" / "old.js").unlink()
+    module.materialize(source, package, data, version="0")
+    assert (package / "_bundled/runtime/a.js").is_file()
+    assert not (package / "_bundled/runtime/old.js").exists()
+
+
+def test_verify_binds_the_artifact_to_the_expected_commit(candidate):
+    """P1-2: a candidate built from an older commit must not verify."""
+    module = candidate["module"]
+    with pytest.raises(module.ReleaseError) as caught:
+        module.verify(candidate["dist"], expected_commit="0" * 40)
+    assert caught.value.code == "RELEASE_COMMIT_MISMATCH"
+    rejected = json.loads(json.dumps(candidate["release"]))
+    assert rejected["commit"] == candidate["module"].git_commit()
+
+
+def test_verify_rejects_a_wheel_with_wrong_metadata_or_entry_points(candidate, tmp_path):
+    """P1-3: Requires-Python, Requires-Dist and entry points are verified."""
+    import zipfile
+
+    module = candidate["module"]
+    wheel = next(candidate["dist"].glob("*.whl"))
+    tampered = tmp_path / "tampered.whl"
+    with zipfile.ZipFile(wheel) as source, zipfile.ZipFile(tampered, "w") as target:
+        for info in source.infolist():
+            data = source.read(info)
+            if info.filename.endswith(".dist-info/METADATA"):
+                text = data.decode("utf-8")
+                text = text.replace("Requires-Python: >=3.12", "Requires-Python: >=3.8")
+                text = text.replace("Requires-Dist: requests==2.33.0\n", "")
+                data = text.encode("utf-8")
+            elif info.filename.endswith(".dist-info/entry_points.txt"):
+                data = b"[console_scripts]\nopenthu = thu_assistant.__main__:main\n"
+            target.writestr(info, data)
+    with zipfile.ZipFile(tampered) as archive:
+        with pytest.raises(module.ReleaseError) as caught:
+            module.verify_wheel(tampered, candidate["release"], manifest())
+        assert caught.value.code == "RELEASE_WHEEL_PYTHON_REQUIREMENT"
+        assert archive.namelist()
+
+
+def test_verify_rejects_a_missing_bundled_licence(candidate, tmp_path):
+    """P2-8: licences are matched by their exact installed path."""
+    import zipfile
+
+    module = candidate["module"]
+    wheel = next(candidate["dist"].glob("*.whl"))
+    stripped = tmp_path / "stripped.whl"
+    with zipfile.ZipFile(wheel) as source, zipfile.ZipFile(stripped, "w") as target:
+        for info in source.infolist():
+            if info.filename.endswith("madmodel-proxy/LICENSE"):
+                continue
+            target.writestr(info, source.read(info))
+    with zipfile.ZipFile(stripped):
+        with pytest.raises(module.ReleaseError) as caught:
+            module.verify_wheel(stripped, candidate["release"], manifest())
+    assert caught.value.code == "RELEASE_WHEEL_LICENSE_MISSING"
+
+
+def test_bundled_wheel_members_are_read_only(candidate):
+    """P2-2: the installed resources keep the read-only mode in the zip entry."""
+    import zipfile
+
+    if os.name == "nt":
+        pytest.skip("zip modes are not enforced for the Windows build tooling")
+    wheel = next(candidate["dist"].glob("*.whl"))
+    with zipfile.ZipFile(wheel) as archive:
+        for name in archive.namelist():
+            if name.startswith("thu_assistant/_bundled/"):
+                mode = (archive.getinfo(name).external_attr >> 16) & 0o777
+                assert mode & 0o200 == 0, name
+
+
+def test_a_failed_build_keeps_the_previous_candidate(candidate, tmp_path, monkeypatch):
+    """P2-13: a failed build must not destroy the last good candidate."""
+    module = candidate["module"]
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "previous.txt").write_text("previous", encoding="utf-8")
+    before = sorted(path.name for path in dist.iterdir())
+
+    def explode(*args, **kwargs):
+        raise module.ReleaseError("RELEASE_BUILD_FAILED", "synthetic")
+
+    monkeypatch.setattr(module, "run_build", explode)
+    with pytest.raises(module.ReleaseError):
+        module.build_candidate(dist)
+    assert sorted(path.name for path in dist.iterdir()) == before
+    assert (dist / "previous.txt").read_text(encoding="utf-8") == "previous"
+    assert not any(path.name.startswith(".openthu-dist-") for path in dist.parent.iterdir())
+
+
+def test_source_summary_counts_every_archived_member(candidate):
+    release = candidate["release"]
+    import zipfile
+
+    with zipfile.ZipFile(candidate["dist"] / "Openthu-0.2.0-source.zip") as archive:
+        members = [name for name in archive.namelist()]
+    assert release["source"]["files"] == release["source"]["archive_members"]
+    assert len(members) == release["source"]["files"]
+
+
+def test_both_mcp_servers_report_the_single_product_version(tmp_path):
+    """P1-6: learn-assistant-mcp is shipped too and must not say 0.1.0."""
+    from learn_assistant.core import LearnAssistant
+    from learn_assistant.mcp_stdio import McpServer as LearnServer
+    from thu_assistant.mcp_stdio import McpServer as CampusServer
+
+    version = declared_version()
+    learn = LearnServer(
+        LearnAssistant(provider=object(), system_data_root=tmp_path / "learn")
+    )
+    initialized = learn.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
+    assert initialized["result"]["serverInfo"]["version"] == version
+    main = CampusServer().handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+    )
+    assert main["result"]["serverInfo"]["version"] == version
+
+
+def test_installed_layout_without_a_bundle_blocks_doctor(tmp_path):
+    """P2-3: a wheel missing _bundled is an incomplete install, not a checkout."""
+    import test_dev_diagnostics as helpers
+
+    module = diagnostics_module()
+    package = tmp_path / "site-packages" / "thu_assistant"
+    package.mkdir(parents=True)
+    for name in ("gateway.js", "services.json", "security.js", "cookies.js"):
+        (package / name).write_text("", encoding="utf-8")
+    (package / "package-lock.json").write_text(
+        json.dumps({"packages": {"node_modules/tough-cookie": {"version": "6.0.0"}}}),
+        encoding="utf-8",
+    )
+    installed = package / "node_modules" / "tough-cookie"
+    installed.mkdir(parents=True)
+    (installed / "package.json").write_text('{"version": "6.0.0"}', encoding="utf-8")
+    kwargs = helpers.healthy_kwargs(package)
+    kwargs["root"] = package
+    kwargs["config"] = helpers.synthetic_config(package)
+    report = module.collect(**kwargs)
+    rows = {row["id"]: row for row in report["checks"]}
+    assert rows["release-layout"]["status"] == "fail"
+    assert rows["release-layout"]["blocking"] is True
+    assert rows["source-package"]["status"] == "fail"
+    assert rows["source-package"]["blocking"] is True
+    assert report["ok"] is False
+
+
+def test_installed_doctor_reports_the_layout_and_never_writes_state(tmp_path):
+    """P2-4: the installed diagnostic runs from the package, not scripts/."""
+    from thu_assistant import doctor, paths
+
+    package = _package_with_bundle(
+        tmp_path,
+        resources={
+            "source.windows_auth": "runtime/windows/access.js",
+            "source.madmodel_proxy": "vendor/madmodel-proxy/package.json",
+        },
+    )
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "keep.bin").write_bytes(b"keep")
+    before = {
+        path.name: (path.stat().st_mtime_ns, path.read_bytes())
+        for path in state.rglob("*")
+        if path.is_file()
+    }
+    report = doctor.collect(
+        package_dir=package,
+        source_root=None,
+        env={"HOME": str(tmp_path), "OPENTHU_STATE_DIR": str(state)},
+        distribution_version=declared_version(),
+    )
+    assert report["mode"] == "installed"
+    assert report["ok"] is True
+    rows = {row["id"]: row for row in report["checks"]}
+    assert rows["release-layout"]["status"] == "pass"
+    assert rows["runtime-resources"]["status"] == "pass"
+    after = {
+        path.name: (path.stat().st_mtime_ns, path.read_bytes())
+        for path in state.rglob("*")
+        if path.is_file()
+    }
+    assert before == after
+    assert paths.bundled_layout(package_root_value=package) is not None
+
+
+def test_doctor_survives_a_non_utf8_console(tmp_path):
+    """A cp1252 console must not abort the self-check with UnicodeEncodeError."""
+    env = dict(os.environ)
+    env.update(
+        PYTHONIOENCODING="cp1252",
+        PYTHONPATH=str(ROOT / "src"),
+        HOME=str(tmp_path),
+        OPENTHU_STATE_DIR=str(tmp_path / "state"),
+        OPENTHU_DOWNLOAD_DIR=str(tmp_path / "downloads"),
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "thu_assistant.doctor", "--json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Traceback" not in result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["mode"] in {"source", "installed"}
+    assert payload["checks"]
+
+
+def test_installed_doctor_flags_a_missing_bundle(tmp_path):
+    from thu_assistant import doctor
+
+    package = tmp_path / "site-packages" / "thu_assistant"
+    package.mkdir(parents=True)
+    for name in ("gateway.js", "services.json", "security.js", "cookies.js"):
+        (package / name).write_text("", encoding="utf-8")
+    report = doctor.collect(
+        package_dir=package,
+        source_root=None,
+        env={"HOME": str(tmp_path), "OPENTHU_STATE_DIR": str(tmp_path / "state")},
+        distribution_version=declared_version(),
+    )
+    rows = {row["id"]: row for row in report["checks"]}
+    assert rows["release-layout"]["status"] == "fail"
+    assert report["ok"] is False
+    assert report["mode"] == "installed"
+
+
+
+
+
+def test_scanner_covers_email_and_student_id_but_skips_synthetic_placeholders():
+    scanner=load('privacy_scan')
+    # Assembled at runtime: the canary itself must not appear in this source
+    # file, or the worktree scan would (correctly) flag the test.
+    address='student'+'@'+'mails'+'.tsinghua.edu.cn'
+    student_id='2023'+'012345'
+    rows=scanner.findings('notes.txt',
+                          ('学生 %s 学号 %s' % (address,student_id)).encode('utf-8'))
+    assert {'email','tsinghua-email','student-id'} <= {row['rule'] for row in rows}
+    synthetic='maintainers@openthu.invalid tests@example.invalid https://user:pass@example.invalid/ 2023000001 2023000002'
+    assert scanner.findings('synthetic.txt',synthetic.encode('utf-8'))==[]
+
+
+def test_scanner_checks_binary_members_for_high_signal_values():
+    scanner=load('privacy_scan')
+    token='ghp_'+'b'*36
+    address='student'+'@'+'mails'+'.tsinghua.edu.cn'
+    rows=scanner.findings('blob.bin',b'\x00\x01'+token.encode()
+                          +b' '+address.encode())
+    assert {'github-token','email','tsinghua-email'} <= {row['rule'] for row in rows}
+    assert token not in json.dumps(rows)
+
+
+def test_source_files_include_untracked_non_ignored_files(monkeypatch):
+    scanner=load('privacy_scan')
+    captured={}
+    class Result:
+        stdout=b'tracked.py\0untracked.py\0'
+    def fake_run(argv,**kwargs):
+        captured['argv']=argv
+        return Result()
+    monkeypatch.setattr(scanner.subprocess,'run',fake_run)
+    files=scanner.source_files()
+    assert '--others' in captured['argv']
+    assert '--exclude-standard' in captured['argv']
+    assert [path.name for path in files]==['tracked.py','untracked.py']

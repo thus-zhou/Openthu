@@ -1,0 +1,671 @@
+{
+  "schema": "version-coverage-matrix-v1",
+  "version": "0.2.0",
+  "description": "Feature-to-case map for the v0.2.0 release checks. Counts are records, not quality targets; every referenced case is validated against the collected test tree.",
+  "modules": [
+    {
+      "id": "1.1",
+      "title": "版本基线、架构契约与调度冻结",
+      "batch": 1,
+      "state": "covered",
+      "test_files": [
+        "tests/test_v020_contracts.py",
+        "tests/test_source_contracts.py"
+      ],
+      "features": [
+        {
+          "feature": "contract samples validate and reject",
+          "case": "tests/test_v020_contracts.py::test_v020_contracts_validate_and_reject_samples"
+        },
+        {
+          "feature": "batch gate accepts only a monotonic prefix",
+          "case": "tests/test_v020_contracts.py::test_gate_accepts_monotonic_batch_prefix"
+        },
+        {
+          "feature": "source contracts keep required counts",
+          "case": "tests/test_source_contracts.py::test_source_contracts_validate_with_required_counts"
+        }
+      ]
+    },
+    {
+      "id": "2.1",
+      "title": "收编安装诊断与统一配置路径",
+      "batch": 2,
+      "state": "covered",
+      "test_files": [
+        "tests/test_configuration.py",
+        "tests/test_dev_diagnostics.py",
+        "tests/test_distribution.py"
+      ],
+      "features": [
+        {
+          "feature": "layered config precedence and derived directories",
+          "case": "tests/test_configuration.py::test_precedence_cli_env_file_default_and_derived_directories"
+        },
+        {
+          "feature": "missing dependencies produce actionable fixes",
+          "case": "tests/test_dev_diagnostics.py::test_missing_dependencies_block_with_actionable_fixes"
+        },
+        {
+          "feature": "generated config carries no credentials",
+          "case": "tests/test_distribution.py::test_configuration_generated_for_current_checkout_without_credentials"
+        }
+      ]
+    },
+    {
+      "id": "2.2",
+      "title": "跨平台加密存储与密钥生命周期",
+      "batch": 2,
+      "state": "covered",
+      "test_files": [
+        "tests/test_secure_store.py",
+        "tests/test_upgrade.py"
+      ],
+      "features": [
+        {
+          "feature": "authenticated encryption uses a fresh nonce",
+          "case": "tests/test_secure_store.py::test_same_record_gets_fresh_nonce_and_ciphertext"
+        },
+        {
+          "feature": "tampered ciphertext fails closed",
+          "case": "tests/test_secure_store.py::test_tampered_ciphertext_and_nonce_fail_closed"
+        },
+        {
+          "feature": "rotation switches atomically and rolls back",
+          "case": "tests/test_secure_store.py::test_rotation_switches_atomically_and_rollback_recovers"
+        },
+        {
+          "feature": "disk failure keeps the previous record",
+          "case": "tests/test_secure_store.py::test_atomic_write_failure_keeps_previous_record"
+        }
+      ]
+    },
+    {
+      "id": "2.3",
+      "title": "校园来源证据与业务数据契约",
+      "batch": 2,
+      "state": "covered",
+      "test_files": [
+        "tests/test_source_contracts.py"
+      ],
+      "features": [
+        {
+          "feature": "source contracts validate with required counts",
+          "case": "tests/test_source_contracts.py::test_source_contracts_validate_with_required_counts"
+        },
+        {
+          "feature": "blocked source conclusions are recorded",
+          "case": "tests/test_source_contracts.py::test_blocked_source_conclusions_are_recorded"
+        },
+        {
+          "feature": "synthetic fixtures exist and are clean",
+          "case": "tests/test_source_contracts.py::test_required_synthetic_fixtures_exist_and_are_clean"
+        }
+      ]
+    },
+    {
+      "id": "3.1",
+      "title": "跨平台认证会话与网关迁移",
+      "batch": 3,
+      "state": "covered",
+      "test_files": [
+        "tests/test_session_gateway.py",
+        "tests/test_gateway_bridge.py",
+        "tests/test_campus.py"
+      ],
+      "features": [
+        {
+          "feature": "session migration keeps the old ciphertext",
+          "case": "tests/test_session_gateway.py::test_secure_session_migrates_legacy_and_retains_old_ciphertext"
+        },
+        {
+          "feature": "missing Linux key blocks protected session only",
+          "case": "tests/test_session_gateway.py::test_linux_missing_key_blocks_protected_session_but_not_catalog_or_public_read"
+        },
+        {
+          "feature": "gateway crash never replays",
+          "case": "tests/test_gateway_bridge.py::test_crash_no_replay_next_call_restarts"
+        }
+      ]
+    },
+    {
+      "id": "3.2",
+      "title": "统一查询、数据模型与完整性规则",
+      "batch": 3,
+      "state": "covered",
+      "test_files": [
+        "tests/test_queries.py",
+        "tests/test_query_contracts.py"
+      ],
+      "features": [
+        {
+          "feature": "nested items paginate through a snapshot",
+          "case": "tests/test_queries.py::test_more_than_500_nested_items_snapshot_pages_and_last_page"
+        },
+        {
+          "feature": "cursors expire across restart",
+          "case": "tests/test_queries.py::test_cursors_expire_across_process_restart_and_under_memory_pressure"
+        },
+        {
+          "feature": "public errors never copy private context",
+          "case": "tests/test_query_contracts.py::test_public_error_never_copies_exception_or_private_context"
+        }
+      ]
+    },
+    {
+      "id": "3.3",
+      "title": "附件与图片的本地隐私处理",
+      "batch": 3,
+      "state": "covered",
+      "test_files": [
+        "tests/test_media_assets.py"
+      ],
+      "features": [
+        {
+          "feature": "another account cannot resolve a reference",
+          "case": "tests/test_media_assets.py::test_other_account_cannot_resolve"
+        },
+        {
+          "feature": "metadata is stripped from derived images",
+          "case": "tests/test_media_assets.py::test_device_metadata_and_comment_are_removed_from_derived_jpeg"
+        },
+        {
+          "feature": "derived files stay private and bounded",
+          "case": "tests/test_media_assets.py::test_derived_file_is_private_and_inside_the_temp_root"
+        }
+      ]
+    },
+    {
+      "id": "4.1",
+      "title": "个人课表、考试与成绩只读适配",
+      "batch": 4,
+      "state": "covered",
+      "test_files": [
+        "tests/test_academics.py"
+      ],
+      "features": [
+        {
+          "feature": "course identity is not merged on equal titles",
+          "case": "tests/test_academics.py::test_equal_titles_with_different_ids_are_not_merged"
+        },
+        {
+          "feature": "date-only exams never receive midnight",
+          "case": "tests/test_academics.py::test_date_only_exam_has_no_clock_time_and_no_midnight"
+        },
+        {
+          "feature": "grade values stay out of dashboard summaries",
+          "case": "tests/test_academics.py::test_dashboard_summary_excludes_grade_values"
+        }
+      ]
+    },
+    {
+      "id": "4.2",
+      "title": "课程资料中心与跨课程检索",
+      "batch": 4,
+      "state": "covered",
+      "test_files": [
+        "tests/test_resources.py"
+      ],
+      "features": [
+        {
+          "feature": "index build never downloads or uploads",
+          "case": "tests/test_resources.py::test_index_build_never_downloads_or_uploads"
+        },
+        {
+          "feature": "same title different courses keep identity",
+          "case": "tests/test_resources.py::test_same_title_different_course_keeps_identity_and_paths"
+        },
+        {
+          "feature": "lost index can be rebuilt without overwrite",
+          "case": "tests/test_resources.py::test_verify_can_rebuild_a_lost_index_without_overwriting"
+        }
+      ]
+    },
+    {
+      "id": "4.3",
+      "title": "图书馆体育查询一致性与规则读取",
+      "batch": 4,
+      "state": "covered",
+      "test_files": [
+        "tests/test_library.py",
+        "tests/test_spaces_contracts.py",
+        "tests/test_sports.py"
+      ],
+      "features": [
+        {
+          "feature": "missing search page is partial not empty",
+          "case": "tests/test_library.py::test_missing_or_repeated_search_page_is_partial"
+        },
+        {
+          "feature": "seat capacity is never mixed with slots",
+          "case": "tests/test_spaces_contracts.py::test_seat_area_capacity_and_slot_free_count_are_never_mixed"
+        },
+        {
+          "feature": "unknown sports mode never reports sold out",
+          "case": "tests/test_sports.py::test_wrong_room_or_unknown_mode_never_reports_sold_out"
+        }
+      ]
+    },
+    {
+      "id": "4.4",
+      "title": "统一办理框架与跨平台授权凭据",
+      "batch": 4,
+      "state": "covered",
+      "test_files": [
+        "tests/test_actions.py",
+        "tests/test_action_framework.py"
+      ],
+      "features": [
+        {
+          "feature": "signed grant is bound and single use",
+          "case": "tests/test_action_framework.py::test_signed_grant_is_bound_single_use_and_never_public"
+        },
+        {
+          "feature": "uncertainty never replays",
+          "case": "tests/test_actions.py::test_uncertainty_never_replays"
+        },
+        {
+          "feature": "concurrent execution dispatches once",
+          "case": "tests/test_action_framework.py::test_concurrent_execute_dispatches_once"
+        }
+      ]
+    },
+    {
+      "id": "4.5",
+      "title": "模型图片输入与资料引用增强",
+      "batch": 4,
+      "state": "covered",
+      "test_files": [
+        "tests/test_model_media.py",
+        "tests/test_models.py"
+      ],
+      "features": [
+        {
+          "feature": "text chat keeps its legacy shape",
+          "case": "tests/test_model_media.py::test_text_chat_keeps_its_parameter_shape_and_result_type"
+        },
+        {
+          "feature": "another account reference never reaches transport",
+          "case": "tests/test_model_media.py::test_other_account_reference_never_reaches_the_transport"
+        },
+        {
+          "feature": "source URLs reject credentials",
+          "case": "tests/test_models.py::test_source_urls_reject_credentials_and_unsupported_forms"
+        }
+      ]
+    },
+    {
+      "id": "5.1",
+      "title": "图书馆预约、取消与续借适配",
+      "batch": 5,
+      "state": "covered",
+      "test_files": [
+        "tests/test_library_actions.py",
+        "tests/test_library_renewal.py"
+      ],
+      "features": [
+        {
+          "feature": "members stay only in encrypted state",
+          "case": "tests/test_library_actions.py::test_members_only_in_encrypted_state"
+        },
+        {
+          "feature": "lost seat response reconciles without resend",
+          "case": "tests/test_library_actions.py::test_seat_response_lost_unique_detail_reconciles_after_restart"
+        },
+        {
+          "feature": "lost renewal response only reconciles",
+          "case": "tests/test_library_renewal.py::test_lost_renewal_response_only_reconciles_and_never_resends"
+        }
+      ]
+    },
+    {
+      "id": "5.2",
+      "title": "体育预约取消与付款状态闭环",
+      "batch": 5,
+      "state": "covered",
+      "test_files": [
+        "tests/test_sports_actions.py"
+      ],
+      "features": [
+        {
+          "feature": "free plan dispatches once and verifies",
+          "case": "tests/test_sports_actions.py::test_free_plan_dispatches_once_and_verifies_the_remote_record"
+        },
+        {
+          "feature": "definite not-sent failure is never retried",
+          "case": "tests/test_sports_actions.py::test_definite_not_sent_is_failed_and_never_retried"
+        },
+        {
+          "feature": "total change invalidates the old plan",
+          "case": "tests/test_sports_actions.py::test_total_change_invalidates_the_old_plan"
+        }
+      ]
+    },
+    {
+      "id": "5.3",
+      "title": "网络学堂作业上传与正式提交",
+      "batch": 5,
+      "state": "covered",
+      "test_files": [
+        "tests/test_submissions.py"
+      ],
+      "features": [
+        {
+          "feature": "prepare uploads nothing",
+          "case": "tests/test_submissions.py::test_prepare_freezes_the_file_set_and_uploads_nothing"
+        },
+        {
+          "feature": "lost upload response is never replayed",
+          "case": "tests/test_submissions.py::test_a_lost_upload_response_is_never_replayed"
+        },
+        {
+          "feature": "saved draft is not a submission",
+          "case": "tests/test_submissions.py::test_a_saved_draft_is_not_a_submission"
+        }
+      ]
+    },
+    {
+      "id": "5.4",
+      "title": "统一日程、增量事件与日历导出",
+      "batch": 5,
+      "state": "covered",
+      "test_files": [
+        "tests/test_events.py",
+        "tests/test_calendar_export.py",
+        "tests/test_todos.py"
+      ],
+      "features": [
+        {
+          "feature": "failed source never deletes every event",
+          "case": "tests/test_events.py::test_failed_source_never_deletes_every_event"
+        },
+        {
+          "feature": "partial page never deletes unseen events",
+          "case": "tests/test_events.py::test_partial_page_never_deletes_unseen_events"
+        },
+        {
+          "feature": "cross-midnight interval stays in its window",
+          "case": "tests/test_events.py::test_cross_midnight_interval_on_the_last_window_day_is_upcoming"
+        },
+        {
+          "feature": "date-only deadline is not midnight",
+          "case": "tests/test_calendar_export.py::test_date_only_deadline_stays_date_level_and_is_not_midnight"
+        }
+      ]
+    },
+    {
+      "id": "6.1",
+      "title": "公共业务门面与 MCP CLI 集成",
+      "batch": 6,
+      "state": "covered",
+      "test_files": [
+        "tests/test_facade.py",
+        "tests/test_facade_audit.py",
+        "tests/test_cli.py"
+      ],
+      "features": [
+        {
+          "feature": "only frozen campus methods are exposed",
+          "case": "tests/test_facade.py::test_the_frozen_six_methods_are_the_only_campus_methods"
+        },
+        {
+          "feature": "write operations and proxy fields are rejected",
+          "case": "tests/test_facade.py::test_query_rejects_write_operations_and_proxy_fields"
+        },
+        {
+          "feature": "legacy CLI commands remain",
+          "case": "tests/test_cli.py::test_help_keeps_the_legacy_commands_and_lists_the_new_ones"
+        }
+      ]
+    },
+    {
+      "id": "6.2",
+      "title": "本地看板读取 API 与进程边界",
+      "batch": 6,
+      "state": "covered",
+      "test_files": [
+        "tests/test_local_api.py"
+      ],
+      "features": [
+        {
+          "feature": "route table equals the frozen contract",
+          "case": "tests/test_local_api.py::test_route_table_matches_the_frozen_local_read_api_contract"
+        },
+        {
+          "feature": "no write or model route exists",
+          "case": "tests/test_local_api.py::test_no_write_prepare_payment_upload_or_model_route_exists"
+        },
+        {
+          "feature": "unknown Host is refused before the facade",
+          "case": "tests/test_local_api.py::test_unknown_host_header_is_refused_without_reaching_the_facade"
+        },
+        {
+          "feature": "non-cooperative reads cannot starve health",
+          "case": "tests/test_local_api.py::test_non_cooperative_adapter_cannot_starve_health_or_stop"
+        }
+      ]
+    },
+    {
+      "id": "6.3",
+      "title": "完整发行布局与安装升级迁移",
+      "batch": 6,
+      "state": "covered",
+      "test_files": [
+        "tests/test_distribution.py",
+        "tests/test_upgrade.py"
+      ],
+      "features": [
+        {
+          "feature": "candidate build produces the declared set",
+          "case": "tests/test_distribution.py::test_candidate_build_produces_the_declared_artifact_set"
+        },
+        {
+          "feature": "archives exclude keys, caches and logs",
+          "case": "tests/test_distribution.py::test_source_archives_exclude_synthetic_keys_caches_and_logs"
+        },
+        {
+          "feature": "upgrade preview does not modify the legacy tree",
+          "case": "tests/test_upgrade.py::test_preview_does_not_modify_the_legacy_tree"
+        }
+      ]
+    },
+    {
+      "id": "7.1",
+      "title": "轻量本地看板与统一使用体验",
+      "batch": 7,
+      "state": "covered",
+      "test_files": [
+        "tests/test_web_assets.py",
+        "tests/test_batch7_integration.py"
+      ],
+      "features": [
+        {
+          "feature": "the packaged shell is served with CSP and no browser storage",
+          "case": "tests/test_web_assets.py::test_static_shell_is_served_with_csp_cookie_and_no_store"
+        },
+        {
+          "feature": "empty, unauthenticated and failed cards stay visibly distinct",
+          "case": "tests/test_web_assets.py::test_empty_unauthenticated_and_failed_cards_are_visibly_distinct"
+        },
+        {
+          "feature": "synthetic titles and links cannot execute script",
+          "case": "tests/test_web_assets.py::test_script_and_html_titles_are_rendered_as_text"
+        },
+        {
+          "feature": "a filter change discards the stale page, cursor and selection",
+          "case": "tests/test_web_assets.py::test_changing_filters_clears_selection_and_cursor"
+        },
+        {
+          "feature": "one failing card does not hide the other cards",
+          "case": "tests/test_web_assets.py::test_one_failed_card_does_not_hide_the_other_cards"
+        },
+        {
+          "feature": "no CDN, analytics or school-origin request is made",
+          "case": "tests/test_web_assets.py::test_no_external_cdn_or_analytics_request_is_made"
+        },
+        {
+          "feature": "a full visit issues only same-origin GET reads",
+          "case": "tests/test_web_assets.py::test_only_local_get_requests_are_made_on_a_full_visit"
+        },
+        {
+          "feature": "session expiry clears the previous account details",
+          "case": "tests/test_web_assets.py::test_session_expiry_clears_previous_details"
+        },
+        {
+          "feature": "keyboard focus and narrow screens keep the status visible",
+          "case": "tests/test_web_assets.py::test_skip_link_is_first_tab_stop_and_focus_is_visible"
+        },
+        {
+          "feature": "the batch wires the shell into the CLI and ships it in the package",
+          "case": "tests/test_batch7_integration.py::test_the_dashboard_shell_is_reachable_from_the_cli_and_packaged"
+        }
+      ]
+    },
+    {
+      "id": "7.2",
+      "title": "跨平台回归、隐私与故障注入",
+      "batch": 7,
+      "state": "covered",
+      "test_files": [
+        "tests/release_regression/test_coverage_matrix.py",
+        "tests/security_regression/test_secret_markers.py"
+      ],
+      "features": [
+        {
+          "feature": "coverage matrix covers every executable module",
+          "case": "tests/release_regression/test_coverage_matrix.py::test_matrix_covers_every_planned_module_once"
+        },
+        {
+          "feature": "secret markers fail the gate",
+          "case": "tests/security_regression/test_secret_markers.py::test_privacy_gate_rejects_markers_in_public_archives"
+        },
+        {
+          "feature": "fault injection records side effects",
+          "case": "tests/release_regression/test_fault_injection.py::test_the_fault_matrix_names_every_required_fault"
+        }
+      ]
+    },
+    {
+      "id": "7.3",
+      "title": "能力文档、用户手册与升级记录",
+      "batch": 7,
+      "state": "documentation_only",
+      "test_files": [],
+      "features": []
+    },
+    {
+      "id": "8.1",
+      "title": "全版本集成、候选构建与交审",
+      "batch": 8,
+      "state": "future_gate",
+      "test_files": [],
+      "features": []
+    },
+    {
+      "id": "9.1",
+      "title": "Codex 整体审查与正式发行管理",
+      "batch": 9,
+      "state": "future_gate",
+      "test_files": [],
+      "features": []
+    }
+  ],
+  "acceptance": {
+    "secret_marker_gate": {
+      "criterion": "秘密标记进入公共输出或归档时，门禁必须稳定失败",
+      "cases": [
+        "tests/security_regression/test_secret_markers.py::test_privacy_gate_rejects_markers_in_public_archives",
+        "tests/security_regression/test_secret_markers.py::test_report_generator_never_echoes_raw_failure_values"
+      ]
+    },
+    "synthetic_codec_refused": {
+      "criterion": "生产入口尝试使用合成编码器时应确认无法启用",
+      "cases": [
+        "tests/security_regression/test_production_boundary.py::test_production_entry_cannot_enable_the_synthetic_codec"
+      ]
+    },
+    "lost_upload_not_replayed": {
+      "criterion": "上传已发出后响应丢失，重复调用不得增加远端写计数",
+      "cases": [
+        "tests/release_regression/test_fault_injection.py::test_lost_upload_response_never_increases_upload_count"
+      ]
+    },
+    "cursor_scope_refused": {
+      "criterion": "账号切换与游标跨范围使用应明确拒绝",
+      "cases": [
+        "tests/release_regression/test_scope_integrity.py::test_cursor_from_another_account_or_scope_is_refused"
+      ]
+    },
+    "last_valid_record_recoverable": {
+      "criterion": "损坏加密状态、轮换中断和磁盘失败后保留最后有效记录",
+      "cases": [
+        "tests/release_regression/test_fault_injection.py::test_rotation_interruption_keeps_the_last_valid_record"
+      ]
+    },
+    "missing_pages_never_mass_delete": {
+      "criterion": "来源缺页不能产生大量删除事件，也不能显示为没有待办",
+      "cases": [
+        "tests/release_regression/test_scope_integrity.py::test_incomplete_source_never_mass_deletes_or_reports_empty"
+      ]
+    },
+    "clean_ci_start": {
+      "criterion": "从干净 CI 环境启动时不依赖开发机器的路径和用户配置",
+      "cases": [
+        "tests/release_regression/test_clean_environment.py::test_mcp_server_starts_from_a_clean_home_without_user_config"
+      ]
+    },
+    "optional_feature_off_keeps_legacy": {
+      "criterion": "关闭可选新功能后旧工具目录和原主要查询仍可使用",
+      "cases": [
+        "tests/security_regression/test_production_boundary.py::test_disabling_optional_features_keeps_the_legacy_catalog_and_query"
+      ]
+    }
+  },
+  "legacy_test_files": [
+    "tests/test_academics.py",
+    "tests/test_action_framework.py",
+    "tests/test_actions.py",
+    "tests/test_auth_navigation.py",
+    "tests/test_batch3_integration.py",
+    "tests/test_batch4_integration.py",
+    "tests/test_batch5_integration.py",
+    "tests/test_batch6_integration.py",
+    "tests/test_calendar_export.py",
+    "tests/test_campus.py",
+    "tests/test_cli.py",
+    "tests/test_configuration.py",
+    "tests/test_dev_diagnostics.py",
+    "tests/test_distribution.py",
+    "tests/test_events.py",
+    "tests/test_facade.py",
+    "tests/test_facade_audit.py",
+    "tests/test_gateway_bridge.py",
+    "tests/test_learn_read.py",
+    "tests/test_library.py",
+    "tests/test_library_actions.py",
+    "tests/test_library_contracts.py",
+    "tests/test_library_renewal.py",
+    "tests/test_local_api.py",
+    "tests/test_media_assets.py",
+    "tests/test_model_media.py",
+    "tests/test_models.py",
+    "tests/test_mvp.py",
+    "tests/test_plugin_contract.py",
+    "tests/test_queries.py",
+    "tests/test_query_contracts.py",
+    "tests/test_resources.py",
+    "tests/test_secure_store.py",
+    "tests/test_session_gateway.py",
+    "tests/test_source_contracts.py",
+    "tests/test_spaces.py",
+    "tests/test_spaces_contracts.py",
+    "tests/test_sports.py",
+    "tests/test_sports_actions.py",
+    "tests/test_sports_contracts.py",
+    "tests/test_submissions.py",
+    "tests/test_todos.py",
+    "tests/test_upgrade.py",
+    "tests/test_v020_contracts.py",
+    "tests/test_web_provider.py"
+  ]
+}

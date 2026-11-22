@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/result-envelope.schema.json",
+  "title": "Openthu v0.2 result envelope",
+  "description": "Frozen read/action result envelope for Openthu v0.2. The legacy fields status, source, checked_at, verification_level, source_complete, complete, next_cursor and warnings remain mandatory. New state fields are optional so old clients stay compatible.",
+  "x-contract-version": "result-envelope-v1",
+  "x-owner": "1.1/Hermes",
+  "x-status": "frozen",
+  "x-semantics": "Internal project semantics only. These statuses and source fields are not assertions about real school field names or permissions.",
+  "x-unknown-values": {
+    "enum": "UNKNOWN",
+    "numeric_or_optional": null,
+    "null_meaning": "unknown or not applicable; null is never success",
+    "empty_array_meaning": "a real empty result only when status=EMPTY, source_complete=true and complete=true"
+  },
+  "x-legacy-error-upgrade": {
+    "legacy_shape": "v0.1 error objects with code and message only",
+    "rule": "The MCP/CLI boundary keeps the legacy code and message and enriches category, retryable, automatic_replay_allowed and user_action from error-classification-v1. New facade code must emit the classified shape. A legacy error is never treated as success and is never replayed."
+  },
+  "type": "object",
+  "required": [
+    "status",
+    "source",
+    "checked_at",
+    "verification_level",
+    "source_complete",
+    "complete",
+    "next_cursor",
+    "warnings"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "OK",
+        "EMPTY",
+        "PARTIAL",
+        "AUTH_REQUIRED",
+        "FORBIDDEN",
+        "RATE_LIMITED",
+        "MAINTENANCE",
+        "HTTP_ERROR",
+        "BROWSER_REQUIRED",
+        "READABLE_AUTH_UNKNOWN",
+        "PUBLIC_READABLE",
+        "AUTHENTICATED",
+        "UNKNOWN",
+        "ERROR",
+        "NETWORK_ERROR",
+        "TIMEOUT",
+        "CANCELLED",
+        "BUSINESS_QUERY_FAILED",
+        "BUSINESS_RESPONSE_INVALID",
+        "REDIRECT_BLOCKED",
+        "QUOTA_EXCEEDED",
+        "CONTENT_REFUSED",
+        "INTERRUPTED",
+        "NOT_FOUND"
+      ]
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp with an explicit offset. Legacy upstream strings must be normalized before crossing this contract."
+    },
+    "verification_level": {
+      "type": "string",
+      "enum": [
+        "NONE",
+        "TRANSPORT_READ",
+        "PAGE_READ",
+        "AUTHENTICATED_PAGE",
+        "PUBLIC_PAGE",
+        "DIRECTORY_READ",
+        "DIRECTORY_CACHE",
+        "BUSINESS_READ",
+        "LIVE_BUSINESS_READ",
+        "LIVE_PARTIAL_DIRECTORY",
+        "REMOTE_RECORD_VERIFIED",
+        "LOCAL_EXECUTION_STATE",
+        "SEE_OPERATION_EVIDENCE"
+      ]
+    },
+    "source_complete": {
+      "type": "boolean",
+      "description": "True only when every source page in the declared scope was read and no source error remains."
+    },
+    "complete": {
+      "type": "boolean",
+      "description": "True only when the requested business scope is complete. A complete source does not automatically prove a complete business result."
+    },
+    "snapshot_complete": {
+      "type": "boolean",
+      "description": "True only when the current paginated snapshot was fully returned. This does not prove source_complete."
+    },
+    "next_cursor": {
+      "type": ["string", "null"],
+      "description": "Opaque process-local cursor; bound to account, operation, parameters and snapshot version."
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 200}
+    },
+    "missing_pages": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "source_errors": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 200}
+    },
+    "data": {},
+    "items": {
+      "type": "array"
+    },
+    "error": {
+      "$ref": "#/$defs/error"
+    },
+    "implementation_state": {
+      "type": "string",
+      "enum": ["IMPLEMENTED", "BLOCKED", "NOT_IMPLEMENTED", "UNKNOWN"],
+      "description": "Optional. Separates code existence from runtime availability and evidence."
+    },
+    "runtime_availability": {
+      "type": "string",
+      "enum": ["AVAILABLE", "UNAVAILABLE", "LIMITED", "UNKNOWN"],
+      "description": "Optional. Reports whether the current environment can execute the path now."
+    },
+    "evidence_level": {
+      "type": "string",
+      "enum": ["NONE", "OFFLINE_CONTRACT", "SYNTHETIC_TRANSPORT", "LIVE_READ", "LIVE_WRITE", "UNKNOWN"],
+      "description": "Optional. Separates synthetic engineering checks from live campus evidence."
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["service_id", "operation", "adapter_version"],
+      "properties": {
+        "service_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "operation": {"type": "string", "minLength": 1, "maxLength": 120},
+        "url": {
+          "type": ["string", "null"],
+          "maxLength": 2000,
+          "description": "Sanitized URL only. Credentials, tickets, cookies and signature query parameters must be removed."
+        },
+        "adapter_version": {"type": "string", "minLength": 1, "maxLength": 80}
+      },
+      "additionalProperties": true
+    },
+    "error": {
+      "anyOf": [
+        {"$ref": "#/$defs/classified_error"},
+        {"$ref": "#/$defs/legacy_error"}
+      ]
+    },
+    "classified_error": {
+      "type": "object",
+      "required": ["code", "category", "retryable", "automatic_replay_allowed", "user_action"],
+      "properties": {
+        "code": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{2,80}$"},
+        "category": {
+          "type": "string",
+          "enum": ["INPUT", "AUTH", "PERMISSION", "RATE_LIMIT", "MAINTENANCE", "NETWORK", "UPSTREAM_CONTRACT", "COMPLETENESS", "CONFLICT", "NOT_IMPLEMENTED", "CANCELLED", "INTERNAL"]
+        },
+        "message": {"type": "string", "maxLength": 500},
+        "retryable": {"type": "boolean"},
+        "automatic_replay_allowed": {"const": false},
+        "user_action": {
+          "type": "string",
+          "enum": ["NONE", "RETRY", "REAUTHENTICATE", "FIX_INPUT", "WAIT", "CHECK_REMOTE_RECORD", "CONTACT_SUPPORT"]
+        },
+        "retry_after_ms": {"type": ["integer", "null"], "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "legacy_error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{2,80}$"},
+        "message": {"type": "string", "maxLength": 500}
+      },
+      "additionalProperties": true,
+      "description": "v0.1 compatibility shape. The facade enriches it before new clients consume the classified fields."
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"complete": {"const": true}}, "required": ["complete"]},
+      "then": {"properties": {"source_complete": {"const": true}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "EMPTY"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "complete": {"const": true},
+          "source_complete": {"const": true}
+        },
+        "not": {"required": ["error"]}
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": ["AUTH_REQUIRED", "FORBIDDEN", "RATE_LIMITED", "MAINTENANCE", "HTTP_ERROR", "NETWORK_ERROR", "TIMEOUT", "BUSINESS_QUERY_FAILED", "BUSINESS_RESPONSE_INVALID", "REDIRECT_BLOCKED", "QUOTA_EXCEEDED", "CONTENT_REFUSED", "INTERRUPTED", "NOT_FOUND", "ERROR", "UNKNOWN"]
+          }
+        },
+        "required": ["status"]
+      },
+      "then": {"required": ["error"]}
+    }
+  ],
+  "x-compatibility-sample": {
+    "status": "OK",
+    "source": {
+      "service_id": "learn",
+      "operation": "courses",
+      "url": "https://learn.tsinghua.edu.cn/",
+      "adapter_version": "query-v1"
+    },
+    "checked_at": "2026-11-16T12:00:00+00:00",
+    "verification_level": "BUSINESS_READ",
+    "source_complete": true,
+    "complete": true,
+    "next_cursor": null,
+    "warnings": [],
+    "items": [
+      {"course_id": "SYNTHETIC-COURSE-1", "course_name": "合成课程"}
+    ],
+    "total_items": 1
+  },
+  "x-rejection-samples": [
+    {
+      "why": "EMPTY must be a proven complete empty result",
+      "value": {
+        "status": "EMPTY",
+        "source": {"service_id": "learn", "operation": "courses", "adapter_version": "query-v1"},
+        "checked_at": "2026-11-16T12:00:00+00:00",
+        "verification_level": "BUSINESS_READ",
+        "source_complete": false,
+        "complete": false,
+        "next_cursor": null,
+        "warnings": [],
+        "items": []
+      }
+    },
+    {
+      "why": "complete cannot be true when source_complete is false",
+      "value": {
+        "status": "OK",
+        "source": {"service_id": "library", "operation": "loans", "adapter_version": "library-read-v1"},
+        "checked_at": "2026-11-16T12:00:00+00:00",
+        "verification_level": "BUSINESS_READ",
+        "source_complete": false,
+        "complete": true,
+        "next_cursor": null,
+        "warnings": []
+      }
+    },
+    {
+      "why": "a source failure must not be reported as an empty successful list",
+      "value": {
+        "status": "EMPTY",
+        "source": {"service_id": "sports", "operation": "orders", "adapter_version": "sports-read-v1"},
+        "checked_at": "2026-11-16T12:00:00+00:00",
+        "verification_level": "NONE",
+        "source_complete": true,
+        "complete": true,
+        "next_cursor": null,
+        "warnings": [],
+        "items": [],
+        "error": {"code": "SPORTS_NETWORK_ERROR", "category": "NETWORK", "retryable": true, "automatic_replay_allowed": false, "user_action": "RETRY"}
+      }
+    },
+    {
+      "why": "an error status must carry a classified error object",
+      "value": {
+        "status": "AUTH_REQUIRED",
+        "source": {"service_id": "learn", "operation": "assignments", "adapter_version": "learn-read-v1"},
+        "checked_at": "2026-11-16T12:00:00+00:00",
+        "verification_level": "NONE",
+        "source_complete": false,
+        "complete": false,
+        "next_cursor": null,
+        "warnings": []
+      }
+    }
+  ]
+}

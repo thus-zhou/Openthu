@@ -1,0 +1,457 @@
+{
+  "module": "8.1",
+  "title": "全版本集成、候选构建与交审",
+  "batch": 8,
+  "owner": "Hermes",
+  "status": "accepted",
+  "baseline_commit": "8d0606daf9bc121f3db1c5a5dba7ca62d343d0d8",
+  "integration_parent_commit": "fb6edb1e4071f574430ef5d0259d918b67f3b0dc",
+  "delivery_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+  "implementation_commits": [
+    "9b1bef5",
+    "e98f42b",
+    "0149c37",
+    "6e45eb0",
+    "16e6b27",
+    "c81a877",
+    "2bd42cc",
+    "43f19ef",
+    "4a03ecd",
+    "50ce675",
+    "71dbe9f"
+  ],
+  "record_commit": "the commit containing this record file",
+  "branch": "hermes/8.1",
+  "worktree": "~/projects/Openthu/.local/worktrees/8.1",
+  "worktree_note": "Recorded relative to the user home because contracts/v0.2/validate.py rejects absolute home-directory paths under plans/; the absolute path stays in the execution session and the pushed branch.",
+  "version_pr": 2,
+  "batch_state": "batch 8 is accepted with 8.1 accepted; batch 9 is ready for Codex. 8.1 opened no new PR, merged nothing to main, tagged nothing and published nothing.",
+  "paths": [
+    "contracts/v0.2/local-read-api.schema.json",
+    "src/thu_assistant/local_api/contract.py",
+    "src/thu_assistant/local_api/samples.py",
+    "src/thu_assistant/actions.py",
+    "docs/contracts/source-matrix.md",
+    "tests/test_local_api.py",
+    "tests/test_batch8_integration.py",
+    "plans/v0.2.0/交付/集成清单.md",
+    "plans/v0.2.0/交付/候选版本记录.md",
+    "plans/v0.2.0/交付/模块结果/8.1.md",
+    "plans/v0.2.0/交付/模块结果/8.1.json",
+    "plans/v0.2.0/交付/批次门禁.json",
+    "plans/v0.2.0/交付/模块负责表.json",
+    "plans/v0.2.0/交付/验收映射.json",
+    "plans/v0.2.0/VERSION_MANIFEST.json",
+    "plans/v0.2.0/进度清单.md",
+    "plans/v0.2.0/版本总清单.md",
+    "handoffs/v020-candidate.md",
+    "handoffs/v020-candidate.json",
+    ".github/workflows/ci.yml",
+    "scripts/regression_report.py",
+    "src/thu_assistant/local_api/server.py"
+  ],
+  "contracts": [
+    "result-envelope-v1",
+    "error-classification-v1",
+    "secure-storage-header-v1",
+    "source-evidence-v1",
+    "media-reference-v1",
+    "calendar-event-v1",
+    "business-facade-v1",
+    "local-read-api-v1",
+    "compatibility-baseline-v1"
+  ],
+  "outputs": [
+    "Batches 1-7 are integrated on one tree; every module delivery commit and every accepted batch integration commit is verified as an ancestor of the candidate tree by tests/test_batch8_integration.py",
+    "local-read-api-v1 revision 8.1 declares the request-side cursor on /todos, /calendar and /resources; the runtime router matches the frozen parameter list exactly and the 6.2 QUERY_EXTENSION record is removed",
+    "src/thu_assistant/actions.py no longer claims that no campus write adapter exists; the docstring names the registered seat, room and sports create/cancel operations and keeps the per-item authorization boundary",
+    "docs/contracts/source-matrix.md replaces the pending-difference table with a resolved/retained register that names the 8.1 confirmation and the retained v0.1 preview boundary",
+    "候选版本记录.md records the artifact set, verify/install-check results, the fresh-directory probes, privacy scans, known limits and rollback",
+    "集成清单.md maps all 24 modules, batches 1-9, the 8.1 seam fixes and the retained external blockers to real commits",
+    "The batch gate is accepted for batches 1-8 and ready for batch 9, 8.1 is accepted, the ownership table and acceptance map agree, and VERSION_MANIFEST/进度清单/版本总清单 describe one candidate",
+    "handoffs/v020-candidate.md gives Codex the reproduction, evidence and continuation point without claiming a release"
+  ],
+  "checks": {
+    "module_tests": {
+      "passed": 8,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_batch8_integration.py",
+      "breakdown": {
+        "tests/test_batch8_integration.py": 8
+      }
+    },
+    "related_tests": {
+      "passed": 239,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_local_api.py tests/test_facade_audit.py tests/test_batch6_integration.py tests/test_batch7_integration.py tests/test_docs_consistency.py"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 1843,
+      "python_skipped": 8,
+      "python_failed": 0,
+      "python_errors": 0,
+      "python_total": 1851,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python -m pytest -o addopts='' -q -p no:cacheprovider --junitxml=.local/junit-a.xml; python scripts/dev.py test",
+      "note": "Python totals come from the JUnit cases; scripts/regression_report.py adds the 66 Node cases into its own totals (1909 passed, 8 skipped, 1917 total, 0 unmapped).",
+      "live_campus_calls": 0,
+      "model_calls": 0,
+      "business_submissions": 0
+    },
+    "dev_check": {
+      "ok": true,
+      "files_checked": 571,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check"
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "error_codes": 370,
+      "legacy_tools": 29,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "candidate_build": {
+      "commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+      "dirty": false,
+      "artifacts": 4,
+      "source_files": 568,
+      "wheel_members": 214,
+      "bundled_files": 54,
+      "sdist_members": 499,
+      "artifact_files": [
+        {
+          "name": "Openthu-0.2.0-source.tar.gz",
+          "size": 3709412,
+          "sha256": "4381e95abc347a0c2228c7f731f8be189503ed42c4d662a27c4cfb2bead46f33"
+        },
+        {
+          "name": "Openthu-0.2.0-source.zip",
+          "size": 4170441,
+          "sha256": "21d0a87a9fb87b09c8b3d58a26d8a924897837239b2dc1eacc44a26b280f727f"
+        },
+        {
+          "name": "openthu-0.2.0-py3-none-any.whl",
+          "size": 2812279,
+          "sha256": "d15c2fc8fde2733f396813e5b9643e09b3eb73246d2db827c20a4e021e4aee31"
+        },
+        {
+          "name": "openthu-0.2.0.tar.gz",
+          "size": 3471570,
+          "sha256": "a242ae64d6ad197246e1af230f78f8dca6e96f14f5928f7865ffaedff481da66"
+        }
+      ],
+      "verify": "ok=true; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
+      "release_status": "candidate-not-released",
+      "published": false,
+      "command": "python scripts/package_release.py build (CI release gate at 71dbe9f)",
+      "note": "Hashes are from the CI release-gate build at 71dbe9f (pre-batch-9 optimization and wrap-up on top of total-audit 43f19ef/4a03ecd). A local Windows rebuild at 71dbe9f verified the exact same source.zip SHA256 and passed verify + out-of-repo install-check; Codex rebuilds at the final merged head before tagging."
+    },
+    "install_check": {
+      "source_root": null,
+      "missing": [],
+      "mcp_tools": 29,
+      "doctor_ok": true,
+      "user_state_unchanged": true,
+      "venv": "temporary",
+      "command": "python scripts/package_release.py install-check --dist dist",
+      "note": "Run on a clean rebuild at 71dbe9f outside the repository; member list, metadata, doctor and 29 MCP tools all pass."
+    },
+    "fresh_install": {
+      "location": "a new venv outside the repository",
+      "import_root": "site-packages/thu_assistant",
+      "doctor": "available with all five checks; missing _bundled/runtime/windows/access.js fails runtime-resources with exit 1 and recovers after restore",
+      "dashboard": "GET / returns 200 with the packaged Openthu dashboard shell; /assets/app.js and /assets/app.css are served from the package",
+      "health_without_session": "HTTP 401 AUTH_REQUIRED",
+      "missing_key": "SECURE_KEY_NOT_CONFIGURED, no test codec or plaintext fallback",
+      "missing_gateway_runtime": "GATEWAY_EXITED classified error with automatic_replay_allowed=false, no empty success",
+      "live_campus_calls": 0
+    },
+    "privacy_scan": {
+      "source": {
+        "ok": true,
+        "files_checked": 571,
+        "findings": 0
+      },
+      "archives": {
+        "ok": true,
+        "files_checked": 1849,
+        "findings": 0,
+        "note": "Current candidate at 71dbe9f: 568 source members x2 + 214 wheel + 499 sdist = 1,849 (earlier 2bd42cc scanned 1,840; 9b1bef5 rehearsal scanned 1,825)."
+      },
+      "git_diff": "added absolute paths are synthetic test markers (alice/synthetic/example); no real host path, credential or private key block",
+      "author_identity": "Openthu Maintainers <maintainers@openthu.invalid>"
+    },
+    "github_actions": {
+      "commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+      "run": 44468735503,
+      "event": "push",
+      "pull_request_run": 44468740959,
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": {
+        "test (ubuntu-24.04)": "success",
+        "test (ubuntu-24.04, 3.13)": "success",
+        "test (windows-2025)": "success",
+        "release gate (ubuntu-24.04)": "success"
+      },
+      "reports": {
+        "linux": {
+          "status": "PASS",
+          "passed": 1909,
+          "skipped": 8,
+          "failed": 0,
+          "total": 1917,
+          "unmapped": 0,
+          "python": {
+            "passed": 1843,
+            "skipped": 8
+          },
+          "node": {
+            "passed": 66,
+            "failed": 0
+          }
+        },
+        "windows": {
+          "status": "PASS",
+          "passed": 1896,
+          "skipped": 21,
+          "failed": 0,
+          "total": 1917,
+          "unmapped": 0,
+          "python": {
+            "passed": 1830,
+            "skipped": 21
+          },
+          "node": {
+            "passed": 66,
+            "failed": 0
+          }
+        }
+      },
+      "release_gate": {
+        "status": "PASS",
+        "gaps": 0,
+        "checks": {
+          "reports": true,
+          "marker_set": true,
+          "privacy_source": true,
+          "privacy_archives": true,
+          "marker_archives": true,
+          "marker_reports": true,
+          "dependencies": true,
+          "defaults": true,
+          "candidate": true
+        }
+      },
+      "candidate": {
+        "commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+        "artifacts": 4,
+        "source_files": 568,
+        "wheel_members": 214,
+        "bundled_files": 54,
+        "sdist_members": 499,
+        "artifact_files": [
+          {
+            "name": "Openthu-0.2.0-source.tar.gz",
+            "size": 3709412,
+            "sha256": "4381e95abc347a0c2228c7f731f8be189503ed42c4d662a27c4cfb2bead46f33"
+          },
+          {
+            "name": "Openthu-0.2.0-source.zip",
+            "size": 4170441,
+            "sha256": "21d0a87a9fb87b09c8b3d58a26d8a924897837239b2dc1eacc44a26b280f727f"
+          },
+          {
+            "name": "openthu-0.2.0-py3-none-any.whl",
+            "size": 2812279,
+            "sha256": "d15c2fc8fde2733f396813e5b9643e09b3eb73246d2db827c20a4e021e4aee31"
+          },
+          {
+            "name": "openthu-0.2.0.tar.gz",
+            "size": 3471570,
+            "sha256": "a242ae64d6ad197246e1af230f78f8dca6e96f14f5928f7865ffaedff481da66"
+          }
+        ]
+      },
+      "notes": [
+        "Current code/CI/artifact run is push 44468735503 and pull_request 44468740959 at 71dbe9f; all four jobs succeeded with 0 unmapped test files and 0 release-gate gaps.",
+        "Previous total-audit green runs: push 44236818999 and pull_request 44236825532 at 4a03ecd (Linux 1905/8, Windows 1892/21).",
+        "Earlier pre-total-audit candidate runs: push 44204917343 and pull_request 44204927343 at 2bd42cc (Linux 1879/8, Windows 1866/21)."
+      ],
+      "record_head_run": 44202750006,
+      "record_head_commit": "9631d30da6a6719fd829d9ec24ff47b0a6bfe4b4",
+      "head_run": {
+        "commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+        "run": 44468735503,
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "reports": {
+          "linux": {
+            "status": "PASS",
+            "passed": 1909,
+            "skipped": 8,
+            "failed": 0,
+            "total": 1917,
+            "unmapped": 0,
+            "python": {
+              "passed": 1843,
+              "skipped": 8
+            },
+            "node": {
+              "passed": 66,
+              "failed": 0
+            }
+          },
+          "windows": {
+            "status": "PASS",
+            "passed": 1896,
+            "skipped": 21,
+            "failed": 0,
+            "total": 1917,
+            "unmapped": 0,
+            "python": {
+              "passed": 1830,
+              "skipped": 21
+            },
+            "node": {
+              "passed": 66,
+              "failed": 0
+            }
+          }
+        },
+        "release_gate": "PASS, nine checks true, 0 gaps",
+        "note": "Artifact run at the pre-batch-9 optimization and wrap-up commit 71dbe9f."
+      }
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "browser_calls": 0,
+    "business_submissions": 0,
+    "message_sends": 0
+  },
+  "verified_cases": [
+    "git merge-base --is-ancestor accepts all 21 module delivery commits and the batch 2-7 integration commits against the candidate tree",
+    "the batch gate is accepted for batches 1-8 and ready for batch 9, and 8.1 is accepted rather than implemented",
+    "contracts/v0.2 contains seven JSON schemas plus error-classification and the compatibility baseline; the set of contract versions is exactly the frozen eight",
+    "every local-read API route accepts exactly the parameters declared by local-read-api-v1, and /todos, /calendar and /resources accept the request-side cursor",
+    "the 8.1 revision is present in x-revisions and no QUERY_EXTENSION attribute remains on the runtime contract",
+    "thu_assistant.version, VERSION_MANIFEST, the 0.2.0 changelog head and README all describe one candidate and none claims a published release",
+    "the wheel package data still carries web_assets HTML/CSS/JS and services.json, and MANIFEST.in matches",
+    "both distribution bundles list existing must-include files, all six licence files exist, and forbidden directories include .local, dist and node_modules",
+    "the six legacy entry points plus openthu-doctor resolve in pyproject, and the compatibility baseline keeps 29 MCP tools and 6 entry points",
+    "the source-matrix difference register no longer assigns work to 4.4/7.3 or 5.3 and records the 8.1 confirmation",
+    "the integration checklist names all 24 modules; the candidate record carries the SHA256 set and the module record reports accepted status",
+    "the candidate build at 9b1bef5 produced four artifacts with a clean tree; verify bound the commit and install-check ran outside the repository",
+    "a fresh venv install served the dashboard shell from the package, refused /api/v1/health with 401, failed doctor on a missing bundled resource and reported SECURE_KEY_NOT_CONFIGURED without a key",
+    "privacy_scan found nothing in 568 source files or 1,840 final-candidate archive members (the 9b1bef5 rehearsal scanned 1,825)",
+    "the test job checks out the full history, so the ancestry case runs in CI instead of skipping on a depth-1 clone",
+    "every new integration test file is registered for failure attribution, so a failure is attributed to its batch instead of unmapped"
+  ],
+  "limits": [
+    "The candidate record documents the final artifact set rebuilt by the release gate at 2bd42cc and the earlier local rehearsal at 9b1bef5; rebuilding at the record head changes only record text, but the tag must be built at the final merged head and its hashes re-verified.",
+    "Windows results come from GitHub Actions, not a local Windows host; Linux was executed locally.",
+    "Firefox and Safari static-subresource behaviour (Sec-Fetch-Mode) remains unverified; only Chromium was exercised.",
+    "The local read API HEAD performs one read without consuming the 10-second refresh budget, and a bootstrap token is single-use; sessions expire without a restart command.",
+    "The legacy learn_assistant.core.prepare_submission still writes an unencrypted local preview JSON; after total-audit P1-4 it contains only file name/bytes/sha256 plus a relative preview name, with directory 0700 and file 0600, never a local absolute path. It never uploads or submits and is retained as a v0.1 compatibility boundary.",
+    "The wheel does not ship node_modules; gateway-backed capabilities report GATEWAY_EXITED until the documented npm ci step runs.",
+    "Real campus login, writes, payments, submissions and model image transfers remain unverified; engineering checks do not raise their evidence level.",
+    "The candidate record now registers the total-audit remediation artifacts rebuilt at 43f19ef (2bd42cc is the earlier candidate); later record-only commits change plans/docs text, and the tag build must rebuild at the final merged head and re-verify the hashes."
+  ],
+  "rollback": "Restore the five code paths (local-read-api.schema.json, local_api/contract.py, local_api/samples.py, tests/test_local_api.py and the actions.py docstring) to 8d0606d; /todos, /calendar and /resources then depend on the 6.2 QUERY_EXTENSION and its PENDING_CONTRACT_OWNER_REVISION status returns. Delete the 8.1 records and handoff, and restore the ledgers (batch gate, ownership, acceptance map, VERSION_MANIFEST, progress and version lists) to the batch-7 state. The rollback does not touch user state, keys, sessions, downloads or pending transactions, and the candidate dist directory can be deleted because it is not committed.",
+  "next": "Codex reviews the candidate on version PR #2, requests fixes on the same branch if needed, then merges main, tags v0.2.0, publishes the Release and verifies the downloads. Hermes does not merge, tag or publish in this phase.",
+  "cross_module_requests": [
+    "1.1 (contract owner): local-read-api-v1 was revised in place with a compatible 8.1 record instead of waiting for a separate contract batch; the revision adds only the request-side cursor that paired with the already declared next_cursor.",
+    "4.4: the actions.py module docstring was corrected by the integrator because the stale sentence contradicted the registered operations; no behaviour changed.",
+    "2.3: the source-matrix difference register was updated by the integrator to the observed state; the retained v0.1 preview boundary is recorded instead of silently rewritten.",
+    "6.2: the QUERY_EXTENSION note and describe_api field were removed once the contract declared the parameter; no route, limit or session behaviour changed.",
+    "9.1: rebuild and re-verify the candidate at the final merged head before tagging; do not reuse the local artifact hashes blindly.",
+    "7.2 (.github/workflows/ci.yml): the test job now checks out the full history so the batch-8 ancestry test can resolve module commits in CI; job names, matrix and the release gate are unchanged.",
+    "7.2 (scripts/regression_report.py): the batch-7 and batch-8 integration test files are registered in MODULE_BY_FILE so their cases are attributed to batch-7/batch-8 instead of unmapped; report semantics are unchanged."
+  ],
+  "accepted_at": "2026-11-18",
+  "integration_parent_note": "fb6edb1 is the batch-7 integration commit; 8d0606d is the branch point / record correction that 8.1 actually starts from.",
+  "verification_commit": "the commit containing this record file",
+  "branch_head": "the record-only head containing this record (artifact_commit 71dbe9f; product code ends at 71dbe9f)",
+  "integration_branch": "hermes/1-install-diagnostics",
+  "integration_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+  "total_audit_remediation": {
+    "snapshot_commit": "de1d2fc409c64fca57854100a2ee9870405756d2",
+    "product_commit": "43f19ef65e4802092386c0dfab0f50da44590a3d",
+    "ci_green_commit": "4a03ecd1fc4cc1059f544381a16c3d3f348712ef",
+    "P0": 0,
+    "P1": 4,
+    "P2": 11,
+    "P3": 2,
+    "closed": 17,
+    "open": 0,
+    "error_codes": 370,
+    "runs": {
+      "push": 44236818999,
+      "pull_request": 44236825532
+    }
+  },
+  "pre_batch9_wrapup": {
+    "commits": [
+      "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+      "71dbe9ffd79227a3f794b326a1498cbbc4045224"
+    ],
+    "commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+    "fixes": [
+      "Mapped tests/test_error_registry.py, test_plan_validation.py and test_remediation_state_scope.py in scripts/regression_report.py with a repository-wide mapping guard (0 unmapped files)",
+      "Unified LearnAssistant default state/download roots and non-Windows session dir with configuration/catalog state_root and atomic 0600 preview creation",
+      "Fixed BusinessFacade registration cache to track live os.environ and full service_ids, and threaded injected env through queries.describe, actions.describe_actions and library_contracts",
+      "Added bounded Windows WinError 5/32 sharing-violation retry on os.replace/read_bytes in action_store.py, submissions/store.py and consent/store.py, and deduplicated identical cacheable in-flight GETs in web_assets/assets/app.js"
+    ],
+    "runs": {
+      "push": 44468735503,
+      "pull_request": 44468740959
+    }
+  },
+  "audit": {
+    "report": "8.1-audit",
+    "P0": 0,
+    "P1": 3,
+    "P2": 9,
+    "closed": 12,
+    "open": 0,
+    "items": [
+      "P1-1: hermes/8.1 merged into hermes/1-install-diagnostics at 5ec73d9; the green integration/artifact commit is 2bd42cc and version PR #2 head now contains the candidate",
+      "P1-2: delivery_commit c81a877 contains the module tests, the CI fetch-depth fix and the report attribution; implementation_commits lists the chain and verification_commit is separate",
+      "P1-3: /todos and /calendar refuse a cursor they never issued (400 CURSOR_EXPIRED, including non-lac1 values) and a lac1 cursor from another route (400 CURSOR_QUERY_MISMATCH)",
+      "P2-1: privacy counts are recorded for both the local rehearsal and the final candidate",
+      "P2-2: fb6edb1 and 8d0606d are named as integration commit and branch point",
+      "P2-3: 7.1/7.3 ownership handoffs are marked resolved",
+      "P2-4: the integration checklist names the real 8.1 commits",
+      "P2-5: the gate test requires accepted for batch 8 and ready for batch 9",
+      "P2-6: pagination cases cover todos/calendar/resources; the ancestry check includes 1.1",
+      "P2-7: candidate code_commit, artifact_commit and candidate_head are separate fields",
+      "P2-8: the handoff JSON is regenerated at the final head",
+      "P2-9: the contract names the local-session binding and records the account-switch boundary"
+    ]
+  },
+  "artifact_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+  "candidate_head": "the commit containing this record file (record-only after 71dbe9f)",
+  "integration_fixes": [
+    "S12: a concurrent take() could make peek() report STATE_READ_FAILED for a grant it had just consumed; peek now shares the consent lock and reports a vanished grant as absent, with a deterministic regression test.",
+    "S13: the merge commit 5ec73d9 never became a checked head, so the machine gate could not find green test (ubuntu-24.04)/test (windows-2025) runs; batch 8 now records integration_commit 2bd42cc (CI green) and merge_commit 5ec73d9."
+  ],
+  "merge_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed"
+}

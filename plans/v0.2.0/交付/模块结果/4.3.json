@@ -1,0 +1,208 @@
+{
+  "module": "4.3",
+  "title": "图书馆体育查询一致性与规则读取",
+  "batch": 4,
+  "owner": "Hermes",
+  "status": "accepted",
+  "baseline_commit": "323a98b",
+  "integration_parent_commit": "323a98b",
+  "audit_baseline_commit": "15b66d2",
+  "delivery_commit": "e14c11c",
+  "audit_fix_commits": [
+    "dc66a64",
+    "e14c11c"
+  ],
+  "record_commit": "the commit containing this record file",
+  "branch": "hermes/4.3",
+  "version_pr": null,
+  "batch_state": "accepted at the batch-4 integration commit recorded in 交付/批次门禁.json",
+  "evidence_tree": "clean checkout of e14c11c after `python scripts/dev.py setup-node` (or an equivalent src/thu_assistant/node_modules link); otherwise dev.py check stops on the missing tough-cookie runtime dependency",
+  "audit_report": ".local/audits/4.3-audit.md",
+  "paths": [
+    "src/thu_assistant/precheck.py",
+    "src/thu_assistant/library.py",
+    "src/thu_assistant/spaces.py",
+    "src/thu_assistant/sports.py",
+    "src/thu_assistant/queries.py",
+    "src/thu_assistant/source_state.py",
+    "tests/test_library_contracts.py",
+    "tests/test_spaces_contracts.py",
+    "tests/test_sports_contracts.py",
+    "docs/contracts/library-sports-read.md",
+    "docs/contracts/README.md",
+    "contracts/v0.2/error-classification.json",
+    "contracts/v0.2/sources/source-registry.json",
+    "plans/v0.2.0/交付/验收映射.json",
+    "plans/v0.2.0/交付/模块负责表.json",
+    "plans/v0.2.0/交付/模块负责表.md"
+  ],
+  "contracts": [
+    "source-evidence-v1",
+    "result-envelope-v1",
+    "calendar-event-v1",
+    "error-classification-v1"
+  ],
+  "additive_runtime_objects": [
+    "library-sports-precheck-v1",
+    "ROOM_RULE_UNVERIFIED error code (UPSTREAM_CONTRACT)"
+  ],
+  "outputs": [
+    "precheck object separating resource selection, window, availability, eligibility, fees and rules with source/checked_at/unknowns/preparation_state",
+    "query-engine precheck keeps the sanitized source URL so every fee/rule item is traceable",
+    "selection confirms ID-bound single records as UNIQUE, reports candidate totals/truncation and does not label search terms as NAME selection",
+    "seat area capacity (AREA_TOTAL_SEATS) separated from slot free_count; empty/unmapped seat rows stay UNKNOWN/PARTIAL instead of FULL",
+    "room availability and party/account eligibility represented separately; missing duration rule no longer falls back to 0/1440",
+    "sports session capacity (SESSION_ALLOW_USER_NUM) separated from venue totals; non-integer capacity fails closed with SPORTS_RESPONSE_INVALID",
+    "sports reservation/approval/payment/refund axes mapped separately; missing or unknown axes keep the overall state UNKNOWN and the summary PARTIAL",
+    "own-record pagination keeps partial rows and a continuation/retry page for repeated, short or changed pages; seat 20/page, room default needStatus=6, sports orders page/limit documented",
+    "retrieval marks fresh reads as LIVE_AT_CHECKED_AT and cursor continuations as SNAPSHOT_ONLY_NOT_LIVE at both the top level and retrieval; static database entries set current_source_read=false",
+    "read_scope uses the adapter pagination window for loans, own reservations, orders and order detail",
+    "item windows are inherited from the summary; date-only values use precision DATE and empty windows UNKNOWN",
+    "service-level UIDs stay stable across catalog search/detail; loan records use a RENEWAL UID",
+    "public occupancy preview keeps only start_time/end_time/platform_status and removes identity/subject",
+    "library maintenance 503, rate limit 429 with Retry-After, login and parser failures stay distinct; empty results are never produced from failures",
+    "ROOM_RULE_UNVERIFIED is registered as UPSTREAM_CONTRACT instead of collapsing to UNKNOWN/INTERNAL",
+    "read operations remain available when library/sports write switches are disabled"
+  ],
+  "checks": {
+    "module_tests": {
+      "passed": 52,
+      "failed": 0,
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_library_contracts.py tests/test_spaces_contracts.py tests/test_sports_contracts.py"
+    },
+    "related_read_regression": {
+      "passed": 277,
+      "skipped": 1,
+      "failed": 0,
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_library.py tests/test_library_actions.py tests/test_spaces.py tests/test_sports.py tests/test_queries.py tests/test_query_contracts.py tests/test_todos.py"
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "compatibility_baselines": 1,
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "fixtures": 7,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "privacy_check": {
+      "ok": true,
+      "files_checked": 410,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 700,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test",
+      "evidence_tree": "clean checkout of e14c11c after setup-node"
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0
+  },
+  "audit_fixes": {
+    "P0": [],
+    "P1": [
+      {
+        "id": "P1-1",
+        "fix": "queries.py passes the sanitized source URL into precheck.build; fee/rule items retain it",
+        "verification": "test_query_engine_precheck_keeps_the_actual_source_url"
+      },
+      {
+        "id": "P1-2",
+        "fix": "ID-bound single records report selection UNIQUE; database_id/parent_id count as ID selectors; query terms are not NAME selection",
+        "verification": "test_selection_marks_id_bound_single_records_unique"
+      },
+      {
+        "id": "P1-3",
+        "fix": "unknown seat status keeps free=null; empty list is UNKNOWN, unknown statuses are PARTIAL, preparation stays UNKNOWN",
+        "verification": "test_empty_or_unmapped_seat_rows_are_unknown_not_full"
+      },
+      {
+        "id": "P1-4",
+        "fix": "module record now reports the actual 52/277/700/66/410 evidence from e14c11c and the setup-node prerequisite",
+        "verification": "the commands in checks"
+      }
+    ],
+    "P2": [
+      "P2-1 candidate totals/truncation, ROOMS_NOT_VERIFIED selection, search-term by=NONE",
+      "P2-2 summary/item preparation-state parity and ambiguous room NEEDS_USER_ACTION",
+      "P2-3 MISSING/UNKNOWN order axes, cancellation priority, string-enum consistency",
+      "P2-4 loan renewal enum/renew FLAG rule and PARTIAL ambiguous rules",
+      "P2-5 sports capacity type validation",
+      "P2-6 top-level and retrieval freshness on cursor pages",
+      "P2-7 LIVE_READ_ONLY / STATIC_ENTRY_LIST / LIVE_ONLY retrieval policies",
+      "P2-8 read_scope follows adapter pagination",
+      "P2-9 sports availability partial-page branch is reachable",
+      "P2-10 seat parsererror maps to SPACE_RESPONSE_INVALID",
+      "P2-11 item windows and DATE precision",
+      "P2-12 service-level stable UIDs",
+      "P2-13 ROOM_RULE_UNVERIFIED registered in the contract and runtime mirror",
+      "P2-14 source-registry code_refs, acceptance mapping, ownership table and docs index synchronized",
+      "P2-15 record path/count evidence corrected",
+      "P2-16 unused constants and the DAY branch, duplicate occupancy redaction, checked_at fallback, snapshot version and fees/rules-state documentation cleaned up"
+    ]
+  },
+  "verified_cases": [
+    "a seat area with capacity 300 and zero free seats in a fully mapped slot reports capacity=300, free_count=0, state=FULL and capacity_is_slot_availability=false",
+    "an empty seat list reports UNKNOWN/NO_SEAT_ROWS; an unmapped status reports UNKNOWN and makes the summary PARTIAL, never FULL/NOT_PREPARABLE",
+    "a study room can be FREE and NOT_PREPARABLE at the same time when the requested party size is outside minUser/maxUser",
+    "same-name areas, same-name scenes and same-name rooms return candidates with distinct stable ids; no page or seat is chosen by array order",
+    "candidate truncation reports candidate_total and candidates_truncated; ROOMS_NOT_VERIFIED keeps NEEDS_USER_ACTION with room_id=null",
+    "repeated, short or missing own-order pages keep the rows already verified, set complete=false and expose the page to continue or retry; order_detail keeps a found record and reports the partial search",
+    "fees are integer fen; display values are produced by exact integer division (123456 -> 1234.56) and never multiplied by 100",
+    "missing or unknown refund/approval axes keep the overall state UNKNOWN, the summary PARTIAL and never claim success, payment receipt or refund settlement",
+    "string numeric status enums produce the same payment_status/refund_status as their status_axes",
+    "other people's occupancy is reduced to start_time, end_time and platform_status; synthetic names, logins, subjects and phone numbers do not enter public output",
+    "all library and sports read operations remain registered and executable with library/sports write switches disabled",
+    "missing room duration rules are MISSING, not 0/1440; wrong types are TYPE_MISMATCH; ambiguous sports cancelTime units stay UNIT_AMBIGUOUS with a null value",
+    "library 503/maintenance, 429 with retry_after_ms, login expiry and parser failures remain distinct from a real empty result",
+    "holdings copy visibility, account borrow eligibility and third-party electronic authorization remain separate; off-campus access stays UNVERIFIED",
+    "renewal eligibility is a hint only, exposes a renew FLAG rule and never changes due_at or claims an execution result",
+    "own reservation results record the actual page size, status bitmask and date range; seat history records the fixed 20-row page size",
+    "a newly queried result is marked LIVE_AT_CHECKED_AT; a cursor continuation is marked SNAPSHOT_ONLY_NOT_LIVE at both the top level and retrieval with the original checked_at",
+    "read_scope reports the adapter page offset/limit/pages for loans, own reservations, orders and order detail",
+    "the same catalog record has the same UID in search and detail; loans use library.loans:RENEWAL:<loan_id>",
+    "ROOM_RULE_UNVERIFIED maps to UPSTREAM_CONTRACT in source_state.public_error"
+  ],
+  "limits": [
+    "Offline synthetic verification only: no real campus login, catalog/loan read, seat/room read, sports availability or order read was performed.",
+    "sports.orders still reads the single page requested by the caller; cross-page duplicate detection is used by collect_pages and order_detail, not by a one-page query.",
+    "Room rules are per room; the top-level precheck only marks PER_ROOM and never applies one room's rule to another.",
+    "Seat and room fee state is UNKNOWN when the source reports no fee; the module does not infer that the service is free.",
+    "Sports cancelTime/deadlineTime units remain ambiguous; real cancellation deadlines still require the official page or batch-5 verification.",
+    "library_actions.py, library_wire.py and sports_actions.py were not modified; write paths keep the strict legacy pagination checks and receive partial results only through explicit read objects.",
+    "Batch 4 is not yet reconnected to the integration branch; this module acceptance does not make the whole batch accepted."
+  ],
+  "rollback": "Restore precheck.py, library.py, spaces.py, sports.py, queries.py and source_state.py to 15b66d2; delete tests/test_library_contracts.py, tests/test_spaces_contracts.py, tests/test_sports_contracts.py and docs/contracts/library-sports-read.md; revert the acceptance/ownership and source-registry metadata. The additive ROOM_RULE_UNVERIFIED registration may stay for compatibility. New fields are optional and old clients ignore them; existing cursors become invalid explicitly and are never replayed or spliced into a new snapshot.",
+  "next": "Batch 5 may start once the gate records batch 4 accepted; this module opens no PR, does not merge main and does not publish a release.",
+  "cross_module_requests": [
+    "5.1/5.2: consume precheck selection/availability/eligibility/fees/rules/retrieval; preparation_state is not authorization and money must not be derived from display text.",
+    "5.1/5.2: keep write paths on strict pagination checks; if partial results are used, record uncertainty explicitly and never replay.",
+    "5.1: find_room must treat ROOM_RULE_UNVERIFIED as a rule-read gap requiring recheck, not as unlimited or ROOM_NOT_OPEN.",
+    "6.1: precheck is additive; preserve the 29 legacy tools, pass through or summarize it, and keep the ROOM_RULE_UNVERIFIED classification.",
+    "3.2/6.1: 4.3 touched src/thu_assistant/queries.py only in result assembly (precheck/retrieval, cursor freshness, read_scope); query cache keys, cursor format and result-envelope semantics are unchanged. Register it as a shared 3.2/4.3 change and recheck the exclusive-path claim during integration.",
+    "7.3: update the capability table's read-precheck evidence wording; docs/contracts/README.md is already indexed by this module.",
+    "2.3/integration: source-registry code_refs were refreshed for library.py, spaces.py and sports.py; recheck if later edits move the ranges again."
+  ]
+}

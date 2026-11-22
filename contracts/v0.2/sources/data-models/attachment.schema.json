@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/sources/data-models/attachment.schema.json",
+  "title": "Openthu v0.2 canonical attachment",
+  "description": "A source attachment descriptor. It links a campus resource to an optional locally validated media reference. It never contains raw bytes, a local absolute path, a cookie, a ticket or an authenticated download URL.",
+  "x-contract-version": "attachment-v1",
+  "x-owner": "2.3/Hermes",
+  "x-status": "frozen",
+  "x-semantics": "Internal attachment metadata. The optional media_id points at media-reference-v1; this record is not itself a stored file.",
+  "x-identity-rule": "attachment_uid = <source_id>:ATTACHMENT:<source_record_id>. Title and display_name are display-only.",
+  "x-unknown-values": {
+    "source_record_id": null,
+    "attachment_uid": null,
+    "course_uid": null,
+    "mime_type": null,
+    "byte_size": null,
+    "sha256": null,
+    "media_id": null,
+    "null_meaning": "not provided or not locally downloaded; never fabricated"
+  },
+  "type": "object",
+  "required": [
+    "source_id",
+    "source_record_id",
+    "attachment_uid",
+    "course_uid",
+    "display_name",
+    "mime_type",
+    "byte_size",
+    "sha256",
+    "media_id",
+    "download_state",
+    "identity_state",
+    "external_transfer_allowed",
+    "source_evidence_id",
+    "synthetic"
+  ],
+  "properties": {
+    "source_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{2,120}$"
+    },
+    "source_record_id": {
+      "type": ["string", "null"],
+      "maxLength": 240
+    },
+    "attachment_uid": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z][a-z0-9_.-]{1,80}:ATTACHMENT:[A-Za-z0-9_.:-]{1,180}$",
+      "maxLength": 280
+    },
+    "course_uid": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z][a-z0-9_.-]{1,80}:COURSE:[A-Za-z0-9_.:-]{1,180}$",
+      "maxLength": 280
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "mime_type": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z0-9][a-z0-9.+-]+/[a-z0-9][a-z0-9.+-]+$",
+      "maxLength": 120
+    },
+    "byte_size": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "media_id": {
+      "type": ["string", "null"],
+      "pattern": "^media_[A-Za-z0-9_-]{8,64}$"
+    },
+    "download_state": {
+      "type": "string",
+      "enum": ["NOT_DOWNLOADED", "LIST_READ", "DOWNLOADED", "UNRESOLVED", "FAILED", "UNKNOWN"]
+    },
+    "identity_state": {
+      "type": "string",
+      "enum": ["STABLE", "MISSING_STABLE_ID", "CONFLICT"]
+    },
+    "external_transfer_allowed": {
+      "const": false
+    },
+    "source_evidence_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 200}
+    },
+    "synthetic": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {"identity_state": {"const": "STABLE"}},
+        "required": ["identity_state"]
+      },
+      "then": {
+        "properties": {
+          "source_record_id": {"type": "string", "minLength": 1},
+          "attachment_uid": {"type": "string"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"identity_state": {"const": "MISSING_STABLE_ID"}},
+        "required": ["identity_state"]
+      },
+      "then": {
+        "properties": {"attachment_uid": {"type": "null"}}
+      }
+    }
+  ],
+  "x-compatibility-sample": {
+    "source_id": "learn.course_files",
+    "source_record_id": "SYNTHETIC-FILE-1",
+    "attachment_uid": "learn.course_files:ATTACHMENT:SYNTHETIC-FILE-1",
+    "course_uid": "learn.courses:COURSE:2026-2027-1:SYNTHETIC-COURSE-1",
+    "display_name": "合成课件.pdf",
+    "mime_type": "application/pdf",
+    "byte_size": 102400,
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "media_id": null,
+    "download_state": "NOT_DOWNLOADED",
+    "identity_state": "STABLE",
+    "external_transfer_allowed": false,
+    "source_evidence_id": "learn.course_files",
+    "warnings": [],
+    "synthetic": true
+  },
+  "x-rejection-samples": [
+    {
+      "why": "an attachment descriptor must never allow external transfer by default",
+      "value": {
+        "source_id": "learn.course_files",
+        "source_record_id": "SYNTHETIC-FILE-1",
+        "attachment_uid": "learn.course_files:ATTACHMENT:SYNTHETIC-FILE-1",
+        "course_uid": null,
+        "display_name": "合成课件.pdf",
+        "mime_type": "application/pdf",
+        "byte_size": 102400,
+        "sha256": null,
+        "media_id": null,
+        "download_state": "NOT_DOWNLOADED",
+        "identity_state": "STABLE",
+        "external_transfer_allowed": true,
+        "source_evidence_id": "learn.course_files",
+        "synthetic": true
+      }
+    },
+    {
+      "why": "a display name is not a stable attachment identifier",
+      "value": {
+        "source_id": "learn.course_files",
+        "source_record_id": "SYNTHETIC-FILE-1",
+        "attachment_uid": "合成课件.pdf",
+        "course_uid": null,
+        "display_name": "合成课件.pdf",
+        "mime_type": "application/pdf",
+        "byte_size": 102400,
+        "sha256": null,
+        "media_id": null,
+        "download_state": "NOT_DOWNLOADED",
+        "identity_state": "STABLE",
+        "external_transfer_allowed": false,
+        "source_evidence_id": "learn.course_files",
+        "synthetic": true
+      }
+    }
+  ]
+}

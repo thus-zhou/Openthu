@@ -1,0 +1,552 @@
+{
+  "x-schema-version": 1,
+  "x-contract-version": "batch-gates-v1",
+  "target_version": "0.2.0",
+  "baseline_commit": "e92fd4712801f41923c74e26a0256653ec73bebf",
+  "rules": {
+    "serial_gate_batches": [
+      1,
+      8,
+      9
+    ],
+    "parallel_eligible_batches": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "batch_unlock": "A batch may start only after every module in the previous batch is accepted and reconnected to the same integration commit.",
+    "module_acceptance": "implementation or explicit blocker; commit; contract; tests; security summary; rollback note; next step.",
+    "no_fake_success": "Mocks, fixtures and missing sources are recorded as synthetic or blocked, never as live campus success.",
+    "release_boundary": "Hermes completes through batch 8 and prepares a candidate. Codex owns batch 9 review, merge, tag and Release.",
+    "batch_state": "Zero or more accepted batches, exactly one ready at the first unfinished batch, then locked. All accepted is legal only when the version is complete. Serial gates 1, 8 and 9 remain single-module serial batches."
+  },
+  "batches": [
+    {
+      "batch": 1,
+      "mode": "serial_gate",
+      "modules": [
+        "1.1"
+      ],
+      "module_status": {
+        "1.1": "accepted"
+      },
+      "status": "accepted",
+      "integration_commit": "2fcc0a6252653f484aa21a2b5a96967375c48e6d",
+      "accepted_at": "2026-11-16",
+      "entry_condition": "baseline and contracts frozen",
+      "exit_condition": "all modules accepted; contracts connected; check and full offline suite pass",
+      "delivery_commit": "2fcc0a6252653f484aa21a2b5a96967375c48e6d",
+      "checks": [
+        "plan validator",
+        "contract validator with JSON Schema samples",
+        "pytest wrapper tests/test_v020_contracts.py",
+        "scripts/dev.py check",
+        "scripts/dev.py test",
+        "ubuntu-24.04 and windows-2025 CI"
+      ],
+      "audit_fix": {
+        "report": "1.1-audit-20261116",
+        "fixed": [
+          "P0-1",
+          "P1-1",
+          "P1-2",
+          "P1-3"
+        ],
+        "fixtures_added": [
+          "P2-2 source states",
+          "P2-2 blocked source",
+          "P2-2 stable identity"
+        ],
+        "owner_fields": "P2-3"
+      }
+    },
+    {
+      "batch": 2,
+      "mode": "parallel_eligible",
+      "modules": [
+        "2.1",
+        "2.2",
+        "2.3"
+      ],
+      "module_status": {
+        "2.1": "accepted",
+        "2.2": "accepted",
+        "2.3": "accepted"
+      },
+      "status": "accepted",
+      "integration_commit": "4519117e6508f47adcd1664af50f86ec432d1764",
+      "acceptance_record": "the commit containing this accepted record",
+      "reverified_heads": [
+        "34c463d97fe15ff25a2054506b5aa5e47c70aa5e"
+      ],
+      "accepted_at": "2026-11-16",
+      "module_acceptance": {
+        "2.2": {
+          "accepted_at": "2026-11-16",
+          "delivery_commit": "a6b54bb6502947e401999d4c14fa70c92ee4b268",
+          "evidence": "AES-256-GCM + DPAPI/file keys; record_id AAD binding; rotation key separation; restarted rollback with retired keys; health auth/path-safe; 33 Linux module tests at a6b54bb, 39 after the re-audit; check 371/0; Python 505/5 Linux and 505/5 Windows; Node 54; CI green"
+        },
+        "2.3": {
+          "accepted_at": "2026-11-16",
+          "delivery_commit": "f7fe6408ad3e9e16bdee2ca041cb648a2fc2b2ab",
+          "evidence": "29 sources; 10 models; 8 tasks; 14 readiness rows; 7 fixtures; 9 schema samples; 24 rejection samples; 6 tests; validator ok=true; no live campus calls"
+        },
+        "2.1": {
+          "accepted_at": "2026-11-16",
+          "delivery_commit": "690cbab",
+          "evidence": "31 module tests; check 367/0 at delivery, 371/0 in the re-audit tree; Python 479/5 at delivery, 505/5 in the re-audit tree; Node 54; plan/contract ok; Windows tests green at 4519117 and 34c463d"
+        }
+      },
+      "checks": [
+        "plan validator ok",
+        "contract validator ok (9 schema samples, 35 rejection samples, 8 extra samples)",
+        "source validator ok (29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures)",
+        "scripts/dev.py check: 371 files, 0 findings, 29 MCP tools",
+        "Python: 505 passed/5 skipped Linux; 505 passed/5 skipped Windows",
+        "Node: 54 passed/0 failed",
+        "GitHub Actions: ubuntu-24.04 and windows-2025 successful at 4519117, at the re-verified head 34c463d, at the code head cb39abf and at the final tree dcece7b"
+      ],
+      "gate_note": "2.1, 2.2 and 2.3 accepted and reconnected at 4519117; later 2.2 audit fixes on top of that commit are included in the accepted tree. Batch 3 is ready, not started.",
+      "entry_condition": "all batch 1 modules accepted and integrated",
+      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
+    },
+    {
+      "batch": 3,
+      "mode": "parallel_eligible",
+      "modules": [
+        "3.1",
+        "3.2",
+        "3.3"
+      ],
+      "module_status": {
+        "3.1": "accepted",
+        "3.2": "accepted",
+        "3.3": "accepted"
+      },
+      "status": "accepted",
+      "integration_commit": "400adbe468a469256e598f8852194eee07e2a3f2",
+      "accepted_at": "2026-11-17",
+      "entry_condition": "all batch 2 modules accepted and integrated",
+      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
+      "gate_note": "3.1 accepted at b0ecc64 (code 24ecdb7 + audit fixes 6930dde through b0ecc64); 3.2 accepted at ec2f617 (audit fixes through 456e7a5); 3.3 accepted at 036a00d. The single batch integration commit 400adbe records the joint check and full offline suite; push and PR CI at that SHA are green on both platforms. Batch 4 is ready.",
+      "acceptance_record": "the commit containing this accepted record",
+      "module_acceptance": {
+        "3.1": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "b0ecc64c803b144a6050816764cc6eb5232224ee",
+          "evidence": "14 Python module tests (2 Linux platform skips; 16 pass on Windows) + 7 Node v3 + 5 Node crypto; audit fixes 6930dde..b0ecc64; CI 43956001264 green at b0ecc64; joint batch tree Linux 648/7, Windows 644/11, Node 66."
+        },
+        "3.2": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "ec2f61723a332777cf21c7d2d73e335ca566ee5c",
+          "evidence": "40 module tests; audit fixes 734d41a..456e7a5; CI 43945010355 green at 456e7a5; joint batch tree Linux 648/7, Windows 644/11."
+        },
+        "3.3": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "036a00dc0f49d0efdd0633b72b47e8a51818a304",
+          "evidence": "84 module tests at 036a00d; audit fixes 036a00d; encrypted state through the 2.2 store; joint batch tree Linux 648/7, Windows 644/11."
+        }
+      },
+      "checks": [
+        "plan validator ok: 24 modules, 9 batches",
+        "contract validator ok: 8 contracts + 1 compatibility baseline; 9/35/8 samples; 154 registered error codes",
+        "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures",
+        "scripts/dev.py check: 403 files, 0 findings, 29 MCP tools",
+        "Linux: Python 648 passed/7 skipped/0 failed; Node 66 passed/0 failed",
+        "Windows: Python 644 passed/11 skipped/0 failed; Node 66 passed/0 failed",
+        "GitHub Actions at 400adbe: push run 43979256228 and pull_request run 43979263187; ubuntu-24.04 and windows-2025 both success",
+        "live campus/model/business calls: 0/0/0"
+      ]
+    },
+    {
+      "batch": 4,
+      "mode": "parallel_eligible",
+      "modules": [
+        "4.1",
+        "4.2",
+        "4.3",
+        "4.4",
+        "4.5"
+      ],
+      "module_status": {
+        "4.1": "accepted",
+        "4.2": "accepted",
+        "4.3": "accepted",
+        "4.4": "accepted",
+        "4.5": "accepted"
+      },
+      "status": "accepted",
+      "integration_commit": "4e073578d964407c10b7c94ed8b3fa64c8332036",
+      "accepted_at": "2026-11-17",
+      "entry_condition": "all batch 3 modules accepted and integrated",
+      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
+      "acceptance_record": "the commit containing this accepted record",
+      "gate_note": "4.1 accepted at bbe620a; 4.2 at c66ee2e; 4.3 at e14c11c; 4.4 at cf255de plus the follow-up ec21045 (consent authorize re-export); 4.5 at 2df5772. The seam commit 2cc1c05 carries X1-X4; Windows then hit the old 600-second pytest budget on the healthy joint suite, so X5 raised it to 1200 seconds. The designated integration commit 4e07357 is the first fully green integrated tree: push 44013830566 and PR 44013836023 are green on ubuntu-24.04 and windows-2025. Batch 5 is ready.",
+      "module_acceptance": {
+        "4.1": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "bbe620a",
+          "evidence": "98 module tests; audit 4.1-audit 4 P1 + 9 P2 fixed; three adapters BLOCKED_SOURCE_EVIDENCE; codes registered in X1; joint tree Linux 1005/7, Node 66."
+        },
+        "4.2": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "c66ee2e",
+          "evidence": "98 module tests; audit 4.2-audit P0-1 + 11 P1 + 18 P2 closed; encrypted index; codes registered in X1; joint tree Linux 1005/7, Node 66."
+        },
+        "4.3": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "e14c11c",
+          "evidence": "52 module tests + 277 related read regressions; audit 4.3-audit 4 P1 + 16 P2 fixed; precheck additive; joint tree Linux 1005/7, Node 66."
+        },
+        "4.4": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "cf255de",
+          "followup_commit": "ec21045",
+          "evidence": "47 module + 199 compatibility tests; audit 4.4-audit 3 P1 + 14 P2 fixed; signed host authorization and single dispatch; Windows CI 44009070509 green."
+        },
+        "4.5": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "2df5772",
+          "evidence": "58 module tests; audit 4.5-audit 3 P1 + 11 P2 fixed in scope; P2-3 closed by X1 and P2-13 by X3; shipped registry empty."
+        }
+      },
+      "checks": [
+        "plan validator ok: 24 modules, 9 batches",
+        "contract validator ok: 8 contracts + 1 compatibility baseline; 9/35/8 samples; 238 registered error codes",
+        "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures",
+        "scripts/dev.py check: 460 files, 0 findings, 29 MCP tools",
+        "Linux: Python 1005 passed/7 skipped/0 failed; Node 66 passed/0 failed",
+        "Windows: Python 1000 passed/12 skipped/0 failed; Node 66 passed/0 failed (run 44013830566)",
+        "tests/test_batch4_integration.py: 4 seam tests (registry, classification, ledger, media purpose)",
+        "live campus/model/business calls: 0/0/0",
+        "GitHub Actions at 4e07357: push 44013830566 and pull_request 44013836023; ubuntu-24.04 and windows-2025 both success"
+      ],
+      "ci_heads": [
+        "4e073578d964407c10b7c94ed8b3fa64c8332036"
+      ],
+      "seam_commit": "2cc1c05443d8846a92fb0dafbbc3da40cbe2b00c"
+    },
+    {
+      "batch": 5,
+      "mode": "parallel_eligible",
+      "modules": [
+        "5.1",
+        "5.2",
+        "5.3",
+        "5.4"
+      ],
+      "module_status": {
+        "5.1": "accepted",
+        "5.2": "accepted",
+        "5.3": "accepted",
+        "5.4": "accepted"
+      },
+      "status": "accepted",
+      "integration_commit": "0779fff849d37fdc96fa877f2b846129369bd70e",
+      "accepted_at": "2026-11-17",
+      "entry_condition": "all batch 4 modules accepted and integrated",
+      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
+      "seam_commit": "ac99326d56b74bfbbd016738356261b5ee5dfc12",
+      "acceptance_record": "the commit containing this accepted record",
+      "ci_heads": [
+        "0779fff849d37fdc96fa877f2b846129369bd70e"
+      ],
+      "module_acceptance": {
+        "5.1": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "6788e1a",
+          "implementation_commit": "12146a8",
+          "evidence": "127 module tests and 341 related regression tests at 6788e1a; audit 5.1-audit P0=0/P1=7/P2=16 closed; renewal binds contract, Primo account and due instant and stays disabled until a verified contract exists; joint tree Linux 1267/7, Windows 1261/13, Node 66."
+        },
+        "5.2": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "53d5957",
+          "audit_fix_commit": "f0b2444",
+          "evidence": "55 module tests at f0b2444; audit 5.2-audit P1-1/P1-2 and P2-1..P2-6, P2-8..P2-18 fixed in scope; P2-7 (NOT_CREATED), authorization consumption and the browser service-worker hardening are recorded 4.4 handoffs; nine SPORTS_* codes registered."
+        },
+        "5.3": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "b49f86d",
+          "implementation_commit": "6eca3de",
+          "evidence": "98 module tests and 159 related regression tests at b49f86d; audit 5.3-audit P0=0/P1=4/P2=16 closed; production transport stays blocked with zero writes; 23 SUBMISSION_* codes registered and the write switch is off by default."
+        },
+        "5.4": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "6145ed2",
+          "implementation_commit": "4172bce",
+          "evidence": "58 module tests and 203 related regression tests at 6145ed2; audit 5.4-audit P0=0/P1=4/P2=12 closed; pure export, academic window filtering, full snapshot paging and monotonic SEQUENCE; the follow-up keeps malformed academic events in the excluded report (6145ed2) and adds the MCP description regression (16083d9); 29 codes registered.",
+          "followup_commits": [
+            "16083d9",
+            "6145ed2"
+          ]
+        }
+      },
+      "checks": [
+        "plan validator ok: 24 modules, 9 batches",
+        "contract validator ok: 8 contracts + 1 compatibility baseline; 9/35/8 samples; 314 registered error codes",
+        "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures, 9/24 samples",
+        "scripts/dev.py check: 493 files, 0 findings, 29 MCP tools",
+        "Linux: Python 1268 passed/7 skipped/0 failed; Node 66 passed/0 failed",
+        "Windows: Python 1262 passed/13 skipped/0 failed; Node 66 passed/0 failed",
+        "tests/test_batch5_integration.py: 5 seam tests (code registry/classification, records/ownership/gate, learn switch isolation, renewal prechecks)",
+        "live campus/model/business calls: 0/0/0",
+        "GitHub Actions at 0779fff: push run 44037899338 and pull_request run 44037908260; ubuntu-24.04 and windows-2025 both success"
+      ],
+      "gate_note": "5.1 accepted at 6788e1a; 5.2 at 53d5957 with audit fix f0b2444; 5.3 at b49f86d; 5.4 at 6145ed2 (90dcdb5 audit fix plus the 16083d9/6145ed2 follow-up merged by e9f5e67). The final batch-5 integration commit 0779fff carries X1-X4 and a consistent ledger; its code tree equals e9f5e67, whose CI failed on the stale ownership row. Push 44037899338 and PR 44037908260 are green on ubuntu-24.04 and windows-2025 with 493 files/0 findings, Linux 1268/7, Windows 1262/13, Node 66. Batch 6 is ready.",
+      "followup_merge": "e9f5e675711e7bcfe4d12a6075888156ef58d582"
+    },
+    {
+      "batch": 6,
+      "mode": "parallel_eligible",
+      "modules": [
+        "6.1",
+        "6.2",
+        "6.3"
+      ],
+      "module_status": {
+        "6.1": "accepted",
+        "6.2": "accepted",
+        "6.3": "accepted"
+      },
+      "status": "accepted",
+      "integration_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
+      "accepted_at": "2026-11-17",
+      "entry_condition": "all batch 5 modules accepted and integrated",
+      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
+      "module_acceptance": {
+        "6.1": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "aee255924fe58743221ad9830f7f2d70efb3622a",
+          "evidence": "audit 6.1-audit P0=0/P1=8/P2=15 closed or downgraded; 68 module tests, 370 related regression; check 504 files/0 findings; Linux Python 1336/7, Node 66; probes re-run; 0 live calls."
+        },
+        "6.2": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "198aeb19c4d0105a0726d51490a5ac9ee936e8c0",
+          "evidence": "audit 6.2-audit P0=0/P1=3/P2=16 closed or explicitly scoped; 162 module tests, 57 related regression; 18 audit probes re-run; check 505 files/0 findings; Linux Python 1430/7, Node 66; 0 live calls."
+        },
+        "6.3": {
+          "accepted_at": "2026-11-17",
+          "delivery_commit": "6f5df604aa21c56229663576353737a72945efec",
+          "evidence": "audit 6.3-audit P0=0/P1=7/P2=14 closed; 49 module tests; deterministic candidate build; verify binds HEAD and checks wheel metadata/entry points/licences/bundled hashes; install-check outside the repository with 29 tools and unchanged user state; 0 live calls."
+        }
+      },
+      "gate_note": "6.1 accepted at aee2559, 6.2 at 198aeb1 and 6.3 at 6f5df60 after their module audits; the three branches are merged in order into the integration branch and the batch-6 seams X1-X7 are fixed. The designated integration commit is the first fully green joint tree: check 529 files/0 findings/29 tools, Linux Python 1571/7, Node 66/0, Windows green in CI, candidate build/verify/install-check pass, 0 live calls. Batch 7 is ready.",
+      "checks": [
+        "plan validator ok: 24 modules, 9 batches",
+        "contract validator ok: 8 contracts + 1 compatibility baseline; 9/35/8 samples; 359 registered error codes (314 at batch 5 + 13 facade + 32 local API)",
+        "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures, 9/24 samples",
+        "scripts/dev.py check: 529 files, 0 findings, 29 MCP tools",
+        "Linux: Python 1571 passed/7 skipped/0 failed; Node 66 passed/0 failed",
+        "Windows: Python 1560 passed/18 skipped/0 failed; Node 66 passed/0 failed",
+        "tests/test_batch6_integration.py: 6 seam tests (consumer protocol, route ownership, semester, registries, ledger, dashboard entry)",
+        "candidate build at the integration commit: 4 artifacts, wheel 208 members (54 bundled), sdist 463 members, verify ok, install-check 29 tools with unchanged user state",
+        "live campus/model/business calls: 0/0/0",
+        "GitHub Actions at 4f5c62ee: push 44102600690 and pull_request 44102615127; ubuntu-24.04 (3.12/3.13) and windows-2025 (3.12) both success"
+      ],
+      "ci_heads": [
+        "4f5c62ee4526839dc69d32c6ba6f90a5833937be"
+      ]
+    },
+    {
+      "batch": 7,
+      "mode": "parallel_eligible",
+      "modules": [
+        "7.1",
+        "7.2",
+        "7.3"
+      ],
+      "module_status": {
+        "7.1": "accepted",
+        "7.2": "accepted",
+        "7.3": "accepted"
+      },
+      "status": "accepted",
+      "integration_commit": "fb6edb1e4071f574430ef5d0259d918b67f3b0dc",
+      "accepted_at": "2026-11-18",
+      "entry_condition": "all batch 6 modules accepted and integrated",
+      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass",
+      "seam_commit": "d81c81c0f51325bdd99c64b733ec29b45ef4f9e6",
+      "acceptance_record": "the commit containing this accepted record",
+      "ci_heads": [
+        "fb6edb1e4071f574430ef5d0259d918b67f3b0dc"
+      ],
+      "module_acceptance": {
+        "7.1": {
+          "accepted_at": "2026-11-18",
+          "delivery_commit": "e2b45facd3b9ff311ab4071b973277f63ed748ef",
+          "evidence": "audit 7.1-audit P0=0/P1=3/P2=14 closed; 77 module tests; dashboard shell wired into both CLI paths and shipped in wheel/sdist; Chromium over the real LocalApiServer with a synthetic facade; joint tree Linux 1789/8, Windows 1776/21, Node 66."
+        },
+        "7.2": {
+          "accepted_at": "2026-11-18",
+          "delivery_commit": "3eeb2d335059f5c41ff4dc08a79242e0c890cb30",
+          "evidence": "audit 7.2-audit P0=0/P1=6/P2=10 closed; 100 module cases (99 pass, 1 platform skip); evidence floor, commit/platform binding and fail-closed markers; coverage matrix 24 modules/63 features; first two-platform CI release gate PASS (9/9 checks) at the integration commit."
+        },
+        "7.3": {
+          "accepted_at": "2026-11-18",
+          "delivery_commit": "97265350445c2ae0c04f7aafafa828c9ad5c1dc6",
+          "evidence": "audit 7.3-audit P0=0/P1=4/P2=12 closed; 36 module tests; 81 registrations and 29 tools unchanged; capability matrix, user manual, upgrade record and candidate notes verified by docs tests."
+        }
+      },
+      "checks": [
+        "plan validator ok: 24 modules, 9 batches",
+        "contract validator ok: 8 contracts + 1 compatibility baseline; 9/35/8 samples; 359 registered error codes",
+        "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures, 9/24 samples",
+        "scripts/dev.py check: 561 files, 0 findings, 29 MCP tools",
+        "Linux: Python 1789 passed/8 skipped/0 failed; Node 66 passed/0 failed",
+        "Windows: Python 1776 passed/21 skipped/0 failed; Node 66 passed/0 failed",
+        "tests/test_batch7_integration.py: 5 seam tests (shell wiring and packaging, route parity, matrix resolution, ledger agreement, user documents)",
+        "GitHub Actions at fb6edb1: push run 44155647129 and pull_request run 44155656735; ubuntu-24.04 (3.12/3.13) and windows-2025 (3.12) success",
+        "release gate in CI at fb6edb1: PASS, nine checks (reports, markers, source/archive privacy, marker archives/reports, dependencies, defaults, candidate), 0 gaps",
+        "live campus/model/business calls: 0/0/0"
+      ],
+      "gate_note": "7.1 accepted at e2b45fa, 7.2 at 3eeb2d3 and 7.3 at 9726535. The first batch-7 CI run (44151265967) proved a Linux-only assumption in 7.2's report test: P1-1 records the observed host system, so the Windows job saw 'Windows'. fb6edb1 fixes the assertion only; the designated integration commit is the first fully green joint tree: check 561 files/0 findings, Linux Python 1789/8, Windows 1776/21, Node 66/0, the dashboard shell wired and packaged, the coverage matrix resolved, and the two-platform release gate PASS with all nine checks. Batch 8 is ready."
+    },
+    {
+      "batch": 8,
+      "mode": "serial_gate",
+      "modules": [
+        "8.1"
+      ],
+      "module_status": {
+        "8.1": "accepted"
+      },
+      "status": "accepted",
+      "integration_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+      "accepted_at": "2026-11-18",
+      "entry_condition": "all batch 7 modules accepted and integrated",
+      "exit_condition": "all modules accepted; candidate built, restored and reviewed",
+      "implementation": {
+        "implemented_at": "2026-11-18",
+        "code_commit": "9b1bef59685bab1be1922219f6fc53f67f1601ad",
+        "summary": "All 24 modules integrated on one tree; the deferred local-read-api cursor revision, the stale actions.py docstring and the source-matrix difference register are folded in; one candidate is built and restored outside the repository.",
+        "checks": [
+          "plan validator ok: 24 modules, 9 batches",
+          "contract validator ok: 8 contracts + 1 compatibility baseline; local-read-api revision 8.1",
+          "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures",
+          "scripts/dev.py check: 568 files, 0 findings, 29 MCP tools",
+          "candidate build/verify at 9b1bef5: 4 artifacts, wheel 214 members (54 bundled), sdist 493 members",
+          "install-check outside the repository: 29 tools, doctor_ok=true, user state unchanged",
+          "fresh wheel install outside the repository: dashboard shell served, /api/v1/health 401, missing resource fails doctor, no key gives SECURE_KEY_NOT_CONFIGURED",
+          "Linux: Python 1797 passed/8 platform skips/0 failed (1805 cases) and Node 66 passed; the JUnit report returns PASS with 0 gaps",
+          "Windows (CI): Python 1784 passed/21 platform skips/0 failed and Node 66 passed; the platform report returns PASS with 0 gaps",
+          "GitHub Actions push 44177697601 at f8a026f: ubuntu-24.04, ubuntu-24.04 (3.13), windows-2025 and the release gate all successful; the gate returns PASS with all nine checks true and 0 gaps",
+          "final candidate rebuilt by the release gate at f8a026f: 4 artifacts, 565 source files, wheel 214 members (54 bundled), sdist 496 members"
+        ],
+        "note": "Historical pre-audit checkpoint kept for traceability; the accepted state is the audit_fix block and the module_acceptance / checks fields.",
+        "final_candidate": {
+          "commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+          "run": 44468735503,
+          "artifacts": 4,
+          "source_files": 568,
+          "wheel_members": 214,
+          "bundled_files": 54,
+          "sdist_members": 499,
+          "release_gate": "PASS, 0 gaps, nine checks true"
+        }
+      },
+      "gate_note": "8.1 accepted after the 8.1-audit remediation and merged into hermes/1-install-diagnostics at 5ec73d9; total-audit 17/17 remediation (43f19ef/4a03ecd) and pre-batch-9 optimization (71dbe9f) are integrated with both platforms and the release gate green. Batch 9 is ready for Codex review; no PR was created, main was not merged, nothing was tagged or released.",
+      "acceptance_record": "the commit containing this accepted record",
+      "module_acceptance": {
+        "8.1": {
+          "accepted_at": "2026-11-18",
+          "delivery_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+          "integration_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+          "previous_candidates": [
+            "4a03ecd1fc4cc1059f544381a16c3d3f348712ef",
+            "2bd42cc6ea414a246b71abe530b99eb759b78930"
+          ],
+          "evidence": "audit 8.1-audit P0=0/P1=3/P2=9 closed; total-audit 17/17 (P1x4, P2x11, P3x2) closed at 43f19ef/4a03ecd; pre-batch-9 optimization 71dbe9f maps all repository test files (0 unmapped), unifies learn_assistant state/download roots with atomic 0600 previews, and fixes BusinessFacade live env and injected switch tracking; CI push 44468735503 / PR 44468740959 green on both platforms (Linux 1909/8, Windows 1896/21, Node 66, release gate PASS 9/9 checks, 0 gaps).",
+          "merge_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed"
+        }
+      },
+      "total_audit_remediation": {
+        "snapshot_commit": "de1d2fc409c64fca57854100a2ee9870405756d2",
+        "product_commit": "43f19ef65e4802092386c0dfab0f50da44590a3d",
+        "ci_green_commit": "4a03ecd1fc4cc1059f544381a16c3d3f348712ef",
+        "P0": 0,
+        "P1": 4,
+        "P2": 11,
+        "P3": 2,
+        "closed": 17,
+        "open": 0,
+        "runs": {
+          "push": 44236818999,
+          "pull_request": 44236825532
+        }
+      },
+      "pre_batch9_wrapup": {
+        "commits": [
+          "50ce675a5f7147ccdd97d6e72cf9887e1fe7dd9b",
+          "71dbe9ffd79227a3f794b326a1498cbbc4045224"
+        ],
+        "commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+        "fixes": [
+          "Mapped tests/test_error_registry.py, test_plan_validation.py and test_remediation_state_scope.py in scripts/regression_report.py with a repository-wide mapping guard (0 unmapped files)",
+          "Unified LearnAssistant default state/download roots and non-Windows session dir with configuration/catalog state_root and atomic 0600 preview creation",
+          "Fixed BusinessFacade registration cache to track live os.environ and full service_ids, and threaded injected env through queries.describe, actions.describe_actions and library_contracts",
+          "Added bounded Windows WinError 5/32 sharing-violation retry on os.replace/read_bytes in action_store.py, submissions/store.py and consent/store.py, and deduplicated identical cacheable in-flight GETs in web_assets/assets/app.js"
+        ],
+        "runs": {
+          "push": 44468735503,
+          "pull_request": 44468740959
+        }
+      },
+      "audit_fix": {
+        "report": "8.1-audit",
+        "P0": 0,
+        "P1": 3,
+        "P2": 9,
+        "closed": 12,
+        "open": 0,
+        "fixed": [
+          "P1-1 integration branch and PR #2 now contain 8.1 (merge 5ec73d9)",
+          "P1-2 delivery commit points at the commit that contains the module tests, the CI fix and the report attribution",
+          "P1-3 foreign cursors are refused on /todos and /calendar instead of restarting page one",
+          "P2-1 privacy counts are recorded per build",
+          "P2-2 baseline wording separates the batch-7 integration commit from the branch point",
+          "P2-3 ownership handoffs for 7.1/7.3 are marked resolved",
+          "P2-4 integration checklist names the real 8.1 commits",
+          "P2-5 gate test requires accepted at the review phase and excludes a ready batch after it",
+          "P2-6 pagination matrix covers todos/calendar/resources and the ancestry check includes 1.1",
+          "P2-7 candidate code_commit/artifact_commit/candidate_head are separated",
+          "P2-8 handoff JSON is regenerated at the final head",
+          "P2-9 cursor wording names the local session binding and records the account-switch boundary"
+        ],
+        "integration_fixes": [
+          "S12 consent peek returns absent instead of STATE_READ_FAILED when another thread consumes the grant (2bd42cc)"
+        ]
+      },
+      "checks": [
+        "plan validator ok: 24 modules, 9 batches",
+        "contract validator ok: 8 contracts + 1 compatibility baseline; 370 error codes; local-read-api revision 8.1",
+        "source validator ok: 29 sources, 10 models, 8 tasks, 14 readiness rows, 7 fixtures",
+        "scripts/dev.py check: 571 files, 0 findings, 29 MCP tools",
+        "Linux (CI 3.12 and 3.13): Python 1843 passed/8 platform skips/0 failed + Node 66 passed (1909/8, 0 unmapped, 0 gaps)",
+        "Windows (CI 3.12): Python 1830 passed/21 platform skips/0 failed + Node 66 passed (1896/21, 0 unmapped, 0 gaps)",
+        "GitHub Actions push 44468735503 and pull_request 44468740959 at 71dbe9f: ubuntu-24.04, ubuntu-24.04 (3.13), windows-2025 and the release gate all successful; the gate returns PASS with all nine checks true and 0 gaps",
+        "final candidate rebuilt by the release gate at 71dbe9f: 4 artifacts, 568 source files, wheel 214 members (54 bundled), sdist 499 members, privacy archives 1849 members/0 findings",
+        "local Windows verify and out-of-repository install-check at 71dbe9f: ok=true, 29 MCP tools, doctor_ok=true, user_state_unchanged=true"
+      ],
+      "merge_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed"
+    },
+    {
+      "batch": 9,
+      "mode": "serial_gate",
+      "modules": [
+        "9.1"
+      ],
+      "module_status": {
+        "9.1": "pending"
+      },
+      "status": "ready",
+      "integration_commit": null,
+      "accepted_at": null,
+      "entry_condition": "all batch 8 modules accepted and integrated",
+      "exit_condition": "all modules accepted; integration commit recorded; check and full offline suite pass"
+    }
+  ],
+  "gate_note": "Batches 1-8 accepted and integrated on hermes/1-install-diagnostics (version PR #2). Batch 8 (8.1) accepted with total-audit 17/17 remediation and pre-batch-9 optimization green at 71dbe9f (check 571/0, Linux 1909/8, Windows 1896/21, Node 66, release gate PASS 9/9 checks, 0 gaps, 0 unmapped files). Batch 9 (9.1 Codex review and release) is ready; main is not merged, no tag or Release exists."
+}

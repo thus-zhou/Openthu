@@ -6,6 +6,7 @@ import re
 from urllib.parse import urlencode, urlsplit
 from .bridge import CampusError
 from .library import plain
+from . import domain_models, precheck
 
 VERSION = 'space-read-v1'
 SEAT = 'https://seat.lib.tsinghua.edu.cn'
@@ -66,6 +67,16 @@ def check(payload,system):
     message=str(payload.get('msg' if system=='seat' else 'message',''))
     if status in (401,403) or re.search('未登录|没有登录|登录.*(?:超时|过期|失效)|未登陆|未认证',message):
         raise CampusError('FORBIDDEN' if status==403 else 'AUTH_REQUIRED')
+    if system=='seat' and status==200 and message in ('parsererror','success'):
+        # jQuery reports a parse failure as HTTP 200 plus statusText. Treat it
+        # as a changed response so read_seat can fall back to the official page.
+        raise CampusError('SPACE_RESPONSE_INVALID')
+    if status==429:
+        raise CampusError('RATE_LIMITED')
+    if system=='seat' and status==0:
+        raise CampusError('SPACE_READ_FAILED')
+    if status==503 or re.search('系统维护|维护中|系统升级|暂停服务|服务不可用',message):
+        raise CampusError('MAINTENANCE')
     if type(status) is not int or status!=(1 if system=='seat' else 0):
         raise CampusError('SPACE_QUERY_REJECTED')
     data=payload.get('data')
@@ -84,7 +95,7 @@ SEAT_FETCH = """async path => {
    throw new Error('WRONG_CONTEXT');
  return await new Promise((resolve,reject) => jQuery.ajax({
    url:path,type:'GET',dataType:'json',timeout:20000,
-   success:resolve,error:()=>reject(new Error('SPACE_READ_FAILED'))}));
+   success:resolve,error:(xhr,status)=>resolve({status:xhr.status||0,msg:status||''})}));
 }"""
 ROOM_FETCH = """async path => {
  if (location.origin!=='https://cab.lib.tsinghua.edu.cn') return {code:401};
@@ -229,9 +240,13 @@ def seat_states(payload,area):
     for r in rows:
         require(str(r.get('area'))==area,'SPACE_RESOURCE_MISMATCH')
         require(plain(r.get('name')) and type(r.get('status')) is int)
+        mapped=domain_models.mapped_status(r['status'],SEAT_STATUS)
         result_rows.append({'seat_id':ident(r['id']),'name':plain(r['name']),'area_id':area,
-                            'state':SEAT_STATUS.get(r['status'],'UNKNOWN'),'platform_status':r['status'],
-                            'platform_label':plain(r.get('status_name')),'free':r['status']==1})
+                            'state':mapped['status'],'state_mapping':mapped['mapping_state'],
+                            'source_status_digest':mapped['source_status_digest'],
+                            'platform_status':r['status'],
+                            'platform_label':plain(r.get('status_name')),
+                            'free':(r['status']==1) if mapped['mapping_state']=='MAPPED' else None})
     return result_rows
 
 def read_seat(reader,op,params):
@@ -282,8 +297,15 @@ def read_seat(reader,op,params):
                       start_time=a,end_time=b,warnings=['SEAT_MAP_CONTRACT_UNAVAILABLE'],
                       official_page_url=SEAT+'/web/area?'+urlencode(request))
     return result(seats,SEAT+'/web/area',**info,start_time=a,end_time=b,segment_id=slot['segment_id'],
-                  free_count=sum(x['free'] for x in seats),eligibility='UNVERIFIED',
-                  official_page_url=SEAT+'/web/area?'+urlencode(request))
+                  free_count=sum(1 for x in seats if x['free'] is True),
+                  slot_free_count=sum(1 for x in seats if x['free'] is True),
+                  unknown_seat_count=sum(1 for x in seats if x['free'] is None),
+                  area_capacity=chosen.get('capacity'),capacity_scope='AREA_TOTAL_SEATS_NOT_SLOT',
+                  capacity_is_slot_availability=False,eligibility='UNVERIFIED',
+                  official_page_url=SEAT+'/web/area?'+urlencode(request),
+                  pagination={'kind':'SEAT_SLOT_SEATS','date':selected_date,'segment_id':slot['segment_id'],
+                              'start_time':a,'end_time':b,'capacity_scope':'AREA_TOTAL_SEATS_NOT_SLOT',
+                              'free_count_scope':'SEATS_FREE_IN_THIS_SLOT','complete':True})
 
 def room_types(payload):
     rows=unique(check(payload,'room'),'kindId')
@@ -291,13 +313,19 @@ def room_types(payload):
              'campus_id':x.get('campusId'),'description':plain(x.get('kindInfo')),
              'reservation_notice':plain(x.get('resvMemo')),'memo':plain(x.get('memo'))} for x in rows]
 
-def page_window(payload,number,size):
+def page_window(payload,number,size,strict=True):
     data=check(payload,'room')
     count=payload.get('count')
     require(isinstance(data,list) and type(count) is int and count>=0)
-    require(len(data)==max(0,min(size,count-(number-1)*size)),'SPACE_PAGINATION_CHANGED')
+    expected=max(0,min(size,count-(number-1)*size))
+    complete=len(data)==expected
+    warnings=[] if complete else ['UPSTREAM_PAGE_COUNT_MISMATCH']
+    if not complete and strict:
+        raise CampusError('SPACE_PAGINATION_CHANGED')
     return data,dict(upstream_total=count,upstream_page=number,upstream_page_size=size,
-                     next_page=number+1 if number*size<count else None,scope='REQUESTED_UPSTREAM_PAGE')
+                     next_page=(number+1 if number*size<count else None) if complete else number,
+                     complete=complete,warnings=warnings,expected_rows=expected,returned_rows=len(data),
+                     scope='REQUESTED_UPSTREAM_PAGE')
 
 def minutes(t):
     h,m=map(int,clock(t).split(':'));return 60*h+m
@@ -321,6 +349,9 @@ def room_row(row,requested,party,wanted):
     require(type(low) is int and type(high) is int and 0<=low<=high)
     party_state='UNSPECIFIED' if party is None else 'PARTY_TOO_SMALL' if party<low else 'PARTY_TOO_LARGE' if party>high else 'IN_RANGE'
     interval_state='NOT_SELECTED'
+    min_minutes=rule.get('minResvTime') if rule else None
+    max_minutes=rule.get('maxResvTime') if rule else None
+    duration_declared=type(min_minutes) is int and type(max_minutes) is int and 0<=min_minutes<=max_minutes
     if wanted:
         a,b=wanted
         begin,end=requested+'T'+a,requested+'T'+b
@@ -329,13 +360,19 @@ def room_row(row,requested,party,wanted):
             interval_state='NOT_OPEN'
         elif any(begin<r['end_time'][:16] and end>r['start_time'][:16] for r in occupied):
             interval_state='BUSY'
-        elif rule and (minutes(b)-minutes(a)<rule.get('minResvTime',0) or minutes(b)-minutes(a)>rule.get('maxResvTime',1440)):
+        elif not duration_declared:
+            # A missing duration rule is not "no limit".  Do not fall back to
+            # a fixed 0/1440 window from an earlier adapter version.
+            interval_state='RULE_UNVERIFIED'
+        elif minutes(b)-minutes(a)<min_minutes or minutes(b)-minutes(a)>max_minutes:
             interval_state='DURATION_OUT_OF_RANGE'
     return {'room_id':rid,'name':plain(row['devName']),'kind_id':ident(row.get('kindId')),
             'room_name':plain(row.get('roomName')),'location':plain(row.get('labName')),
             'min_people':low,'max_people':high,'party_state':party_state,
             'platform_open_state':row.get('openState'),'platform_device_status':row.get('devStatus'),
             'opening_intervals':opening_rows,'occupied_intervals':occupied,'interval_state':interval_state,
+            'duration_rule_state':'DECLARED' if duration_declared else 'MISSING',
+            'occupancy_public':precheck.public_occupancy(occupied),
             'eligibility':'UNVERIFIED','only_view':row.get('onlyView'),
             'rules':{k:plain(rule[k]) if isinstance(rule[k],str) else rule[k] for k in RULE_KEYS if rule and k in rule},
             'reservation_notice':plain(row.get('resvMemo'))}
@@ -355,12 +392,17 @@ def read_rooms(reader,op,params):
     unique(rows,'devId')
     require(all(str(x.get('kindId'))==chosen['kind_id'] for x in rows),'SPACE_RESOURCE_MISMATCH')
     items=[room_row(x,selected_date,params.get('people'),times(params)) for x in rows]
+    for item in items:
+        item['rule_source']=ROOM+'/ic-web/reserve'
     restrictions=check(reader.call('/ic-web/reserve/punishInfo'),'room')
     require(isinstance(restrictions,list))
     return result(items,ROOM+'/ic-web/reserve',**scope,resource=chosen,date=selected_date,
                   start_time=params.get('start_time'),end_time=params.get('end_time'),
                   account_restrictions={'active_records':len(restrictions),'state':'RESTRICTIONS_PRESENT' if restrictions else 'NO_REPORTED_PUNISHMENT',
-                                        'eligibility':'UNVERIFIED'},rule_source=ROOM+'/ic-web/reserve')
+                                        'eligibility':'UNVERIFIED'},rule_source=ROOM+'/ic-web/reserve',
+                  pagination={'kind':'ROOM_AVAILABILITY','page':number,'page_size':size,
+                              'upstream_total':scope['upstream_total'],'next_page':scope['next_page'],
+                              'complete':scope['complete'],'scope':'ONE_KIND_DATE_AND_UPSTREAM_PAGE'})
 
 SEAT_TABLE = """() => {
  const table=document.querySelector('table');
@@ -372,7 +414,7 @@ SEAT_TABLE = """() => {
  current:Array.from(document.querySelectorAll('.pagination .current,.page .current')).map(x=>x.textContent.trim())};
 }"""
 
-def parse_seat_reservations(data,page):
+def parse_seat_reservations(data,page,strict=True):
     require(isinstance(data,dict) and data.get('headers')==['预约号','预约空间','开始时间','结束时间','当前状态','预约目的','操作'],
             'SEAT_RESERVATION_TABLE_MISSING')
     require(isinstance(data.get('rows'),list) and isinstance(data.get('pagination'),str))
@@ -382,7 +424,12 @@ def parse_seat_reservations(data,page):
     total=int(total_match[1]);size=20
     expected=max(0,min(size,total-(page-1)*size))
     rows=[r for r in data['rows'] if len(r.get('cells',[]))==7]
-    require(len(rows)==expected,'SPACE_PAGINATION_CHANGED')
+    complete=len(rows)==expected
+    warnings=[]
+    if not complete:
+        if strict:
+            raise CampusError('SPACE_PAGINATION_CHANGED')
+        warnings.append('SEAT_HISTORY_PAGE_INCOMPLETE')
     if total>size:
         require(str(page) in data.get('current',[]),'SPACE_PAGE_MISMATCH')
     result_rows=[]
@@ -394,7 +441,11 @@ def parse_seat_reservations(data,page):
                             'cancellation_conditions':'仅记录页面是否显示取消入口；具体限制须重新核对当前官方规则。'})
     require(len({r['reservation_id'] for r in result_rows})==len(result_rows),'DUPLICATE_RESERVATION_ID')
     return result_rows,dict(upstream_total=total,upstream_page=page,upstream_page_size=size,
-                           next_page=page+1 if page*size<total else None,scope='REQUESTED_UPSTREAM_PAGE_ALL_DATES_AND_STATUSES')
+                            fixed_page_size=True,
+                            next_page=(page+1 if page*size<total else None) if complete else page,
+                            complete=complete,warnings=warnings,expected_rows=expected,
+                            returned_rows=len(result_rows),
+                            scope='REQUESTED_UPSTREAM_PAGE_ALL_DATES_AND_STATUSES')
 
 def own_room_row(row):
     rid=ident(row.get('resvId'))
@@ -409,18 +460,28 @@ def read_reservations(reader,params):
     if reader.system=='seat':
         require(not(set(params)&{'start_date','end_date','status_mask','limit'}),'SEAT_HISTORY_USES_FIXED_PAGE_SIZE')
         reader.goto('/user/index/book'+('/p/'+str(number) if number>1 else ''))
-        rows,scope=parse_seat_reservations(reader.page.evaluate(SEAT_TABLE),number)
-        return result(rows,SEAT+'/user/index/book',**scope,system='seat',official_page_matches=True)
+        rows,scope=parse_seat_reservations(reader.page.evaluate(SEAT_TABLE),number,strict=False)
+        return result(rows,SEAT+'/user/index/book',**scope,system='seat',official_page_matches=True,
+                      pagination={'kind':'OWN_SEAT_RESERVATIONS','page':number,'page_size':scope['upstream_page_size'],
+                                  'fixed_page_size':True,'upstream_total':scope['upstream_total'],
+                                  'next_page':scope['next_page'],'complete':scope['complete'],
+                                  'date_range':None,'status_scope':'ALL_STATUSES_OFFICIAL_TABLE'})
     start=day(params.get('start_date'));end=day(params.get('end_date',start.isoformat()))
     require(start<=end and (end-start).days<=366,'INVALID_DATE_RANGE')
     size=params.get('limit',10);mask=params.get('status_mask',6)
     payload=reader.call('/ic-web/reserve/resvInfo',beginDate=start.isoformat(),endDate=end.isoformat(),
                         needStatus=mask,page=number,pageNum=size,orderKey='gmt_create',orderModel='desc')
-    rows,scope=page_window(payload,number,size)
+    rows,scope=page_window(payload,number,size,strict=False)
     unique(rows,'resvId')
     return result([own_room_row(x) for x in rows],ROOM+'/ic-web/reserve/resvInfo',**scope,system='room',
                   start_date=start.isoformat(),end_date=end.isoformat(),status_mask=mask,
-                  status_scope='PLATFORM_STATUS_BITMASK; default 6 = pending/effective')
+                  status_scope='PLATFORM_STATUS_BITMASK; default 6 = pending/effective',
+                  pagination={'kind':'OWN_ROOM_RESERVATIONS','page':number,'page_size':size,
+                              'fixed_page_size':False,'upstream_total':scope['upstream_total'],
+                              'next_page':scope['next_page'],'complete':scope['complete'],
+                              'date_range':{'start':start.isoformat(),'end':end.isoformat()},
+                              'status_mask':mask,
+                              'status_scope':'PLATFORM_STATUS_BITMASK; default 6 = pending/effective'})
 
 def query(browsers,operation,parameters):
     system=parameters['system'] if operation=='reservations' else 'seat' if operation.startswith('seat_') else 'room'

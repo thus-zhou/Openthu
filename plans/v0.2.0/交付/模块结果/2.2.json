@@ -1,0 +1,171 @@
+{
+  "module": "2.2",
+  "title": "跨平台加密存储与密钥生命周期",
+  "batch": 2,
+  "owner": "Hermes",
+  "status": "accepted",
+  "baseline_commit": "970cb0d",
+  "integration_parent_commit": "8b2ecb9",
+  "delivery_commit": "a6b54bb6502947e401999d4c14fa70c92ee4b268",
+  "code_commits": [
+    "b910498",
+    "713e527",
+    "281bce7",
+    "1153500",
+    "a5706a7",
+    "aa7709b",
+    "e71ed94",
+    "4519117",
+    "6e99d3d",
+    "a6b54bb"
+  ],
+  "branch": "hermes/1-install-diagnostics",
+  "version_pr": 2,
+  "paths": [
+    "src/thu_assistant/secure_store/",
+    "tests/test_secure_store.py",
+    "requirements-dev.txt"
+  ],
+  "contracts": [
+    "secure-storage-header-v1",
+    "result-envelope-v1"
+  ],
+  "security_summary": {
+    "cipher": "AES-256-GCM via cryptography 50.0.2",
+    "key_backends": [
+      "Windows current-user DPAPI wrapping a random 32-byte key",
+      "POSIX owner-only random key file outside the data directory"
+    ],
+    "key_checks": [
+      "absolute path",
+      "regular file, no symlink/reparse point",
+      "current-user ownership",
+      "owner-only permissions/ACL",
+      "parent directory not writable by others on POSIX; Windows parent ACL hardened",
+      "random namespace key protected by the active provider",
+      "rotation provider key location revalidated against the data directory"
+    ],
+    "aad": "canonical JSON binds format, purpose, account/service domains, opaque account reference, revision and optional record_id",
+    "nonce": "12 random bytes per seal; unique per operation",
+    "account_reference": "HKDF-separated HMAC-SHA256 pseudonym, stable across data-key rotation",
+    "legacy": "LA-DPAPI-1, THU-ACTION-1 and THU-TODOS-1 are recognized read-only and never rewritten automatically",
+    "node_boundary": "fixed actions, 2 MiB request and 1 MiB plaintext limits, minimal subprocess environment",
+    "plaintext_fallback": "none; missing key refuses production storage",
+    "record_identity": "new records bind record_id into AAD; copying a record to another record path fails with SECURE_RECORD_MISMATCH; legacy unbound records only in a legacy pointer",
+    "rollback": "explicit retired key files via THU_SECURE_RETIRED_KEY_FILES; previous records and namespace authenticated before pointer switch"
+  },
+  "checks": {
+    "module_tests_linux": {
+      "passed": 33,
+      "skipped": 3,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_secure_store.py"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 497,
+      "python_skipped": 5,
+      "python_failed": 0,
+      "node_passed": 54,
+      "node_failed": 0,
+      "check_files": 369,
+      "check_findings": 0,
+      "commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "worktree": "clean checkout of audit-fix commit a6b54bb"
+    },
+    "full_offline_suite_windows": {
+      "python_passed": 497,
+      "python_skipped": 5,
+      "python_failed": 0,
+      "node_passed": 54,
+      "node_failed": 0,
+      "secure_store_failures": 0
+    },
+    "github_actions": {
+      "ubuntu-24.04": "success",
+      "windows-2025": "success",
+      "head_sha": "a6b54bb6502947e401999d4c14fa70c92ee4b268",
+      "runs": [
+        43908837616,
+        43908850975
+      ]
+    },
+    "contracts": {
+      "plan_validator": "ok",
+      "contract_validator": "ok",
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8,
+      "record_id_schema": "optional record_id added to secure-storage-header-v1 with backward-compatible AAD omission"
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0
+  },
+  "accepted_cases": [
+    "different ciphertext and nonce on repeated sealing; same provider recovers plaintext",
+    "nonce, ciphertext, service domain and account domain tampering fail closed without partial plaintext",
+    "missing key, broad permissions, symlinks and reparse points are rejected",
+    "write, fsync and pointer-switch failures preserve the previous valid record or pointer",
+    "half-failed rotation leaves the old pointer/key readable; retry completes",
+    "rotation preserves the account reference and is readable after restart and rollback",
+    "record identity is bound to AAD; copying one record onto another fails with SECURE_RECORD_MISMATCH",
+    "rotation rejects a new key located inside the data directory",
+    "a restarted store can roll back with THU_SECURE_RETIRED_KEY_FILES; corrupt previous records are refused",
+    "health authenticates ciphertext, counts unreadable records and does not expose paths",
+    "first pointer failure reclaims empty orphan record directories on restart",
+    "cross-account, cross-purpose and cross-service reads are denied",
+    "concurrent writers cannot both advance the same revision",
+    "stored data and temporary files contain no synthetic plaintext",
+    "production entry refuses a missing key and does not import a test codec",
+    "header validates against JSON Schema Draft 2020-12",
+    "Windows DPAPI key creation/load, ACL rejection and legacy read pass on Windows CI",
+    "Windows key and record files are opened in binary mode; no newline translation corrupts ciphertext",
+    "private bridge subprocess returns one JSON response and keeps key paths out of payloads",
+    "legacy DPAPI format is recognized; cross-platform read returns a re-authentication error"
+  ],
+  "blocked": [],
+  "limits": [
+    "The cloud Linux host cannot run Windows DPAPI/ACL locally; those tests passed on the GitHub windows-2025 runner.",
+    "No anti-rollback claim: revision and record identity detect ordinary record replacement, not an attacker replacing both data and pointer.",
+    "No automatic cross-machine key migration or secure deletion.",
+    "The module is not yet wired to the existing session/action paths; 3.1/4.x must consume it before claiming end-to-end protection.",
+    "The release/packaging module 6.3 still owns the final runtime dependency manifest and lock; cryptography is now declared for the package dependency while 6.3 can adjust the lock."
+  ],
+  "rollback": "Stop new writes, keep the previous records directory and key, set THU_SECURE_RETIRED_KEY_FILES to the previous key path(s), verify old records, then rollback() switches store.json back. No old ciphertext or key is deleted automatically.",
+  "next": "P1 fixes and the 2026-11-17 re-audit are complete. Batch 2 stays accepted at 4519117 and is re-verified at 34c463d; batch 3 is ready. Do not start 3.1 in this 2.2 task; the next batch executor begins when assigned.",
+  "cross_module_requests": [
+    "contracts/v0.2/storage-header.schema.json: additive optional record_id under secure-storage-header-v1; 1.1 owner review required before release.",
+    "pyproject.toml: cryptography==50.0.2 runtime dependency; 6.3 remains owner of the final lock and packaging layout."
+  ],
+  "reaudit": {
+    "date": "2026-11-17",
+    "scope": "batch-2 integration re-audit",
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0,
+    "fixes": [
+      "SDDL owner/ACE parsing now accepts concrete SIDs as well as alias tokens, and normalises well-known principals before comparison; four synthetic-SDDL tests run on Linux and Windows.",
+      "A failed rotation discards the unpublished target directory it created; the active records directory is untouched.",
+      "Record reads use a single O_NOFOLLOW open plus fstat and a bounded loop instead of a stat/read sequence; symlinks and non-files are still rejected.",
+      "validate_key_separation and record identity checks unchanged."
+    ],
+    "module_tests": {
+      "passed": 39,
+      "skipped": 3,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_secure_store.py"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 505,
+      "python_skipped": 5,
+      "python_failed": 0,
+      "node_passed": 54,
+      "check_files": 371,
+      "check_findings": 0
+    },
+    "windows_note": "The new SDDL tests are platform-independent; the existing real Windows DPAPI/ACL tests still exercise the runner path."
+  }
+}

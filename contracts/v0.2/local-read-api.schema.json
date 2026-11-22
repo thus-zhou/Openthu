@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/local-read-api.schema.json",
+  "title": "Openthu v0.2 local read-only API",
+  "description": "Frozen local dashboard read API. It exposes business reads only, binds loopback by default, has no write/execute/payment/model/config endpoint, and uses the same result envelope and pagination as the business facade.",
+  "x-contract-version": "local-read-api-v1",
+  "x-owner": "1.1/Hermes",
+  "x-status": "frozen",
+  "x-semantics": "Internal HTTP paths and engineering limits, not school endpoints or school rules.",
+  "x-read-only": true,
+  "x-write-endpoints": [],
+  "base_path": "/api/v1",
+  "bind": {
+    "default": "127.0.0.1",
+    "allowed": ["127.0.0.1", "::1"],
+    "public_bind": false,
+    "host_header_allowlist": ["127.0.0.1", "localhost", "[::1]"]
+  },
+  "limits": {
+    "request_body_bytes": 65536,
+    "page_size_default": 50,
+    "page_size_max": 200,
+    "ui_wait_seconds": 30,
+    "refresh_min_seconds": 10,
+    "cursor_ttl_seconds": 600
+  },
+  "pagination": {
+    "request_fields": ["cursor", "page_size"],
+    "response_fields": ["next_cursor", "snapshot_complete", "complete", "source_complete"],
+    "rule": "next_cursor is opaque and bound to account, service, operation, parameters and snapshot version. Reusing it with different parameters is rejected."
+  },
+  "security": {
+    "loopback_only": true,
+    "cors": "same-origin-only",
+    "allow_origin_wildcard": false,
+    "cache_control": "no-store",
+    "secrets_in_url": false,
+    "authentication_headers_forwarded": false,
+    "method_allowlist": ["GET", "HEAD"],
+    "model_generation_endpoint": false,
+    "key_or_credential_configuration_endpoint": false
+  },
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "query": {},
+      "response": "health envelope"
+    },
+    {
+      "method": "GET",
+      "path": "/services",
+      "query": {"query": "string", "category": "string"},
+      "response": "local service catalog"
+    },
+    {
+      "method": "GET",
+      "path": "/services/{service_id}",
+      "query": {},
+      "response": "business facade health/describe for one service"
+    },
+    {
+      "method": "GET",
+      "path": "/query/{service_id}/{operation}",
+      "query": {
+        "parameters": "percent-encoded JSON object, max 4096 characters",
+        "cursor": "opaque string",
+        "page_size": "integer 1..200"
+      },
+      "response": "result-envelope-v1"
+    },
+    {
+      "method": "GET",
+      "path": "/todos",
+      "query": {
+        "start_date": "YYYY-MM-DD",
+        "end_date": "YYYY-MM-DD",
+        "page_size": "integer 1..200",
+        "cursor": "opaque string returned as next_cursor; bound to the local dashboard session, route, path, parameters, page size and snapshot; a foreign or expired value is refused instead of restarting page one (8.1 revision)"
+      },
+      "response": "result-envelope-v1"
+    },
+    {
+      "method": "GET",
+      "path": "/calendar",
+      "query": {
+        "start_date": "YYYY-MM-DD",
+        "end_date": "YYYY-MM-DD",
+        "page_size": "integer 1..200",
+        "cursor": "opaque string returned as next_cursor; same local-session binding as /todos; a foreign or expired value is refused (8.1 revision)"
+      },
+      "response": "result-envelope-v1 with calendar-event-v1 items"
+    },
+    {
+      "method": "GET",
+      "path": "/resources",
+      "query": {
+        "semester": "string, 4.2 index semester; the dashboard supplies the user selection or configured current semester (6.1 revision)",
+        "query": "string, max 200 characters",
+        "course_id": "string, max 128 characters",
+        "page_size": "integer 1..200",
+        "cursor": "opaque string returned as next_cursor; same local-session binding as /todos; a foreign or expired value is refused (8.1 revision)"
+      },
+      "response": "result-envelope-v1 with media/resource references"
+    }
+  ],
+  "x-revisions": [
+    {
+      "module": "6.1",
+      "change": "/resources accepts the provider semester; the 4.2 index is per semester and cannot resolve a default.",
+      "compatible": true
+    },
+    {
+      "module": "8.1",
+      "change": "/todos, /calendar and /resources declare the request-side cursor that pairs with next_cursor; the 6.2 server extension is folded into the frozen list, no route accepts an undeclared parameter, and a cursor issued by another route or an expired snapshot is refused with CURSOR_EXPIRED/CURSOR_QUERY_MISMATCH.",
+      "compatible": true
+    }
+  ],
+  "x-unknown-values": {
+    "next_cursor": null,
+    "service_health": "UNKNOWN",
+    "parameters": "{} means no parameters, not unknown",
+    "null_meaning": "no more pages or unavailable; never success"
+  },
+  "x-compatibility-sample": {
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/query/learn/courses",
+      "query": {"parameters": "{}", "page_size": 50}
+    },
+    "response": {
+      "status": "OK",
+      "source": {"service_id": "learn", "operation": "courses", "adapter_version": "query-v1"},
+      "checked_at": "2026-11-16T12:00:00+00:00",
+      "verification_level": "BUSINESS_READ",
+      "source_complete": true,
+      "complete": true,
+      "next_cursor": null,
+      "warnings": [],
+      "items": [{"course_id": "SYNTHETIC-COURSE-1", "course_name": "合成课程"}]
+    }
+  },
+  "x-rejection-samples": [
+    {
+      "why": "the dashboard must not bind a public interface",
+      "value": {"bind": "0.0.0.0", "port": 8765}
+    },
+    {
+      "why": "write and execute endpoints are outside the read API",
+      "value": {"method": "POST", "path": "/api/v1/actions/execute", "body": {}}
+    },
+    {
+      "why": "page_size above the frozen maximum is rejected",
+      "value": {"method": "GET", "path": "/api/v1/query/learn/courses", "query": {"page_size": 201}}
+    },
+    {
+      "why": "wildcard CORS is not allowed",
+      "value": {"headers": {"Access-Control-Allow-Origin": "*"}}
+    },
+    {
+      "why": "credentials must not travel in URL parameters",
+      "value": {"method": "GET", "path": "/api/v1/query/learn/courses", "query": {"parameters": "{}", "token": "synthetic"}}
+    }
+  ]
+}

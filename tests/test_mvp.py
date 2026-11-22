@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 
 import pytest
 
@@ -130,10 +132,19 @@ def test_prepare_submission_only_creates_local_confirmation_summary(tmp_path):
     assert result["ready_for_manual_confirmation"] is True
     assert result["confirmation_required"] is True
     assert result["submit_supported"] is False
+    assert result["files"][0]["name"] == "边坡分析.pdf"
+    assert "path" not in result["files"][0]
+    assert result["preview"] == f"submission-previews/{result['operation_id']}.json"
+    assert str(report) not in json.dumps(result, ensure_ascii=False)
     preview = tmp_path / "system" / "submission-previews" / f"{result['operation_id']}.json"
     assert preview.exists()
     saved = json.loads(preview.read_text(encoding="utf-8"))
     assert saved["assignment"]["id"] == "assignment-geology-1"
+    assert "path" not in saved["files"][0]
+    assert str(report) not in preview.read_text(encoding="utf-8")
+    if os.name != "nt":
+        assert stat.S_IMODE(os.stat(preview).st_mode) == 0o600
+        assert stat.S_IMODE(os.stat(preview.parent).st_mode) == 0o700
 
 
 def test_prepare_submission_blocks_bad_extension(tmp_path):
@@ -174,3 +185,26 @@ def test_mcp_lists_only_safe_mvp_tools_and_calls_mock():
     assert response["result"]["isError"] is False
     structured = response["result"]["structuredContent"]
     assert structured["count"] == 3
+
+
+def test_mcp_prepare_submission_returns_no_absolute_path(tmp_path):
+    from thu_assistant.mcp_stdio import CampusAssistant
+
+    report = tmp_path / "private-name.pdf"
+    report.write_bytes(b"%PDF-1.4 mcp report")
+    assistant = CampusAssistant(
+        learning_factory=lambda: LearnAssistant(MockProvider(),
+                                                system_data_root=tmp_path / "system"))
+    result = assistant.call("prepare_submission",
+                            {"assignment_id": "assignment-geology-1",
+                             "file_paths": [str(report)]})
+    serialized = json.dumps(result, ensure_ascii=False)
+    assert str(report) not in serialized
+    assert str(tmp_path) not in serialized
+    assert result["files"][0]["name"] == "private-name.pdf"
+    assert "path" not in result["files"][0]
+    assert result["preview"].startswith("submission-previews/")
+    preview = tmp_path / "system" / result["preview"]
+    if os.name != "nt":
+        assert stat.S_IMODE(os.stat(preview).st_mode) == 0o600
+        assert stat.S_IMODE(os.stat(preview.parent).st_mode) == 0o700

@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/sources/source-registry.schema.json",
+  "title": "Openthu v0.2 campus source registry",
+  "description": "A registry of campus source entries, their access boundary, implementation and evidence state, field mappings and pagination rules. It is an evidence inventory, not a claim that every source has live acceptance.",
+  "x-contract-version": "source-registry-v1",
+  "x-owner": "2.3/Hermes",
+  "x-status": "frozen",
+  "x-semantics": "Each row records what the repository already depends on or what a later module must still verify. Offline contract evidence is not live campus evidence.",
+  "x-unknown-values": {
+    "adapter_version": "NONE",
+    "entry_ref": null,
+    "canonical_field": null,
+    "null_meaning": "not available or not mapped; never a successful source"
+  },
+  "type": "object",
+  "required": [
+    "x-schema-version",
+    "x-contract-version",
+    "x-owner",
+    "x-status",
+    "x-semantics",
+    "x-unknown-values",
+    "sources"
+  ],
+  "properties": {
+    "x-schema-version": {"const": 1},
+    "x-contract-version": {"const": "source-registry-v1"},
+    "x-owner": {"const": "2.3/Hermes"},
+    "x-status": {"const": "frozen"},
+    "x-semantics": {"type": "string", "minLength": 1},
+    "x-unknown-values": {"type": "object"},
+    "x-baseline-commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "x-generated": {"type": "string", "format": "date"},
+    "x-evidence-policy": {"type": "string", "minLength": 1},
+    "sources": {
+      "type": "array",
+      "minItems": 20,
+      "items": {"$ref": "#/$defs/source"}
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": [
+        "source_id",
+        "owner",
+        "service",
+        "operation",
+        "service_domain",
+        "access",
+        "source_kind",
+        "adapter_version",
+        "implementation_state",
+        "runtime_availability",
+        "evidence_level",
+        "checked_at",
+        "entry_ref",
+        "code_refs",
+        "pagination",
+        "field_mappings",
+        "errors",
+        "unresolved",
+        "write_side_effects",
+        "raw_payload_included",
+        "synthetic"
+      ],
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]{2,120}$"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "service": {
+          "type": "string",
+          "enum": ["info", "learn", "library", "sports", "madmodel", "visitors", "academics"]
+        },
+        "operation": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]{1,120}$"
+        },
+        "service_domain": {
+          "type": "string",
+          "enum": ["INFO", "LEARN", "LIBRARY", "SPORTS", "MADMODEL", "LOCAL", "UNKNOWN"]
+        },
+        "access": {
+          "type": "string",
+          "enum": [
+            "PUBLIC_ENTRY",
+            "AUTHENTICATED_ENTRY",
+            "BROWSER_AUTHENTICATED_ENTRY",
+            "REUSED_PROTOCOL_CODE",
+            "PLANNED_UNVERIFIED"
+          ]
+        },
+        "source_kind": {
+          "type": "string",
+          "enum": [
+            "OFFICIAL_FRONTEND_JSON",
+            "OFFICIAL_FRONTEND_API",
+            "OFFICIAL_FRONTEND_HTML",
+            "OFFICIAL_SSO_JSONP",
+            "OFFICIAL_FRONTEND_FORM",
+            "VENDORED_READ_PROTOCOL",
+            "PLANNED_UNVERIFIED"
+          ]
+        },
+        "adapter_version": {
+          "type": "string",
+          "pattern": "^(?:[a-z][a-z0-9_.-]{1,80}|NONE)$"
+        },
+        "implementation_state": {
+          "type": "string",
+          "enum": ["IMPLEMENTED", "PARTIAL", "PLANNED", "BLOCKED"]
+        },
+        "runtime_availability": {
+          "type": "string",
+          "enum": ["AVAILABLE", "LIMITED", "UNAVAILABLE", "UNKNOWN"]
+        },
+        "evidence_level": {
+          "type": "string",
+          "enum": ["NONE", "OFFLINE_CONTRACT", "SYNTHETIC_TRANSPORT", "LIVE_READ", "UNKNOWN"]
+        },
+        "checked_at": {
+          "type": "string",
+          "format": "date"
+        },
+        "version_note": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "entry_ref": {
+          "type": ["string", "null"],
+          "maxLength": 2000
+        },
+        "code_refs": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {"type": "string", "minLength": 1, "maxLength": 300}
+        },
+        "pagination": {
+          "type": "object",
+          "required": [
+            "kind",
+            "page_parameter",
+            "offset_parameter",
+            "page_size_parameter",
+            "total_field",
+            "next_field",
+            "max_pages",
+            "notes"
+          ],
+          "properties": {
+            "kind": {"type": "string", "enum": ["NONE", "PAGE", "WINDOW", "FULL_LIST", "UNKNOWN"]},
+            "page_parameter": {"type": ["string", "null"], "maxLength": 80},
+            "offset_parameter": {"type": ["string", "null"], "maxLength": 80},
+            "page_size_parameter": {"type": ["string", "null"], "maxLength": 80},
+            "total_field": {"type": ["string", "null"], "maxLength": 160},
+            "next_field": {"type": ["string", "null"], "maxLength": 160},
+            "max_pages": {"type": ["integer", "null"], "minimum": 1},
+            "notes": {"type": "string", "minLength": 1, "maxLength": 600}
+          },
+          "additionalProperties": false
+        },
+        "field_mappings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["raw_field", "canonical_field", "transform", "required", "disposition", "note"],
+            "properties": {
+              "raw_field": {"type": "string", "minLength": 1, "maxLength": 160},
+              "canonical_field": {
+                "type": ["string", "null"],
+                "pattern": "^[A-Za-z][A-Za-z0-9_.\\[\\]-]{1,160}$"
+              },
+              "transform": {"type": "string", "minLength": 1, "maxLength": 500},
+              "required": {"type": "boolean"},
+              "disposition": {
+                "type": "string",
+                "enum": ["MAPPED", "DERIVED", "RETAINED_SOURCE_ONLY", "DROPPED"]
+              },
+              "note": {"type": "string", "minLength": 1, "maxLength": 500}
+            },
+            "additionalProperties": false
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "maxLength": 120}
+        },
+        "unresolved": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "maxLength": 500}
+        },
+        "write_side_effects": {
+          "type": "string",
+          "enum": ["NONE", "LOCAL_PLAN", "CAMPUS_WRITE"]
+        },
+        "raw_payload_included": {
+          "const": false
+        },
+        "synthetic": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

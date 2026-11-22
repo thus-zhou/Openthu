@@ -112,6 +112,7 @@ def real_gateway_env(tmp_path):
     state.mkdir()
     env = {**os.environ, 'THU_ACCESS_HELPER': str(fixture / 'helper.js'), 'THU_MADMODEL_DIR': str(fixture),
            'THU_ASSISTANT_STATE_DIR': str(state / 'campus'), 'MADMODEL_STATE_DIR': str(state),
+           'THU_SESSION_ALLOW_LEGACY': '1',
            'THU_TEST_LOCK_MODULE': str(ROOT.parent / 'vendor/madmodel-proxy/platform/process-lock.js')}
     return env, state
 

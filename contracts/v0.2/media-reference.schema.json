@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/media-reference.schema.json",
+  "title": "Openthu v0.2 media reference",
+  "description": "A reference to locally validated image or attachment bytes. The reference never contains a local absolute path, data URL or unvalidated bytes. Image limits are checked before storage, encoding or model transfer.",
+  "x-contract-version": "media-reference-v1",
+  "x-owner": "1.1/Hermes",
+  "x-status": "frozen",
+  "x-semantics": "Internal media metadata. MIME types are standard IANA types; image limits are Openthu engineering limits, not school rules.",
+  "x-image-limits": {
+    "mime_types": ["image/jpeg", "image/png", "image/webp"],
+    "max_bytes_per_image": 8388608,
+    "max_images_per_request": 4,
+    "max_total_bytes_per_request": 16777216,
+    "max_pixels_per_image": 16000000,
+    "stricter_platform_contract_wins": true
+  },
+  "x-unknown-values": {
+    "width_height_for_attachment": null,
+    "pixel_count_for_attachment": null,
+    "external_transfer_allowed": false,
+    "null_meaning": "not applicable; never a guessed dimension"
+  },
+  "type": "object",
+  "required": [
+    "media_id",
+    "kind",
+    "mime_type",
+    "byte_size",
+    "sha256",
+    "width",
+    "height",
+    "pixel_count",
+    "source_evidence_id",
+    "storage_purpose",
+    "account_domain",
+    "service_domain",
+    "created_at",
+    "external_transfer_allowed",
+    "retention"
+  ],
+  "properties": {
+    "media_id": {
+      "type": "string",
+      "pattern": "^media_[A-Za-z0-9_-]{8,64}$"
+    },
+    "kind": {"type": "string", "enum": ["IMAGE", "ATTACHMENT"]},
+    "mime_type": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.+-]+/[a-z0-9][a-z0-9.+-]+$",
+      "maxLength": 120
+    },
+    "byte_size": {"type": "integer", "minimum": 1, "maximum": 134217728},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "width": {"type": ["integer", "null"], "minimum": 1},
+    "height": {"type": ["integer", "null"], "minimum": 1},
+    "pixel_count": {"type": ["integer", "null"], "minimum": 1},
+    "source_evidence_id": {"type": "string", "minLength": 1, "maxLength": 120},
+    "storage_purpose": {"const": "MEDIA"},
+    "account_domain": {"type": "string", "enum": ["CAMPUS", "MODEL", "LOCAL", "SYSTEM", "UNKNOWN"]},
+    "service_domain": {"type": "string", "enum": ["INFO", "LEARN", "LIBRARY", "SPORTS", "MADMODEL", "LOCAL", "UNKNOWN"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": ["string", "null"], "format": "date-time"},
+    "external_transfer_allowed": {"type": "boolean", "default": false},
+    "retention": {"type": "string", "enum": ["SESSION", "EXPLICIT_DELETE", "PROJECT_CACHE"]},
+    "display_name": {
+      "type": ["string", "null"],
+      "maxLength": 200,
+      "description": "Sanitized display label only. It is not a path and must not be used for identity."
+    },
+    "synthetic": {"type": "boolean", "default": true}
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {"properties": {"kind": {"const": "IMAGE"}}, "required": ["kind"]},
+      "then": {
+        "properties": {
+          "mime_type": {"enum": ["image/jpeg", "image/png", "image/webp"]},
+          "byte_size": {"maximum": 8388608},
+          "pixel_count": {"type": "integer", "minimum": 1, "maximum": 16000000},
+          "width": {"type": "integer", "minimum": 1},
+          "height": {"type": "integer", "minimum": 1}
+        }
+      }
+    }
+  ],
+  "x-compatibility-sample": {
+    "media_id": "media_7f3a9c21",
+    "kind": "IMAGE",
+    "mime_type": "image/png",
+    "byte_size": 1048576,
+    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "width": 1200,
+    "height": 800,
+    "pixel_count": 960000,
+    "source_evidence_id": "learn.course_files",
+    "storage_purpose": "MEDIA",
+    "account_domain": "CAMPUS",
+    "service_domain": "LEARN",
+    "created_at": "2026-11-16T12:00:00+00:00",
+    "expires_at": null,
+    "external_transfer_allowed": false,
+    "retention": "EXPLICIT_DELETE",
+    "display_name": "synthetic-course-image.png",
+    "synthetic": true
+  },
+  "x-rejection-samples": [
+    {
+      "why": "SVG is not accepted by the first image contract",
+      "value": {
+        "media_id": "media_7f3a9c21",
+        "kind": "IMAGE",
+        "mime_type": "image/svg+xml",
+        "byte_size": 1024,
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "width": 1200,
+        "height": 800,
+        "pixel_count": 960000,
+        "source_evidence_id": "learn.course_files",
+        "storage_purpose": "MEDIA",
+        "account_domain": "CAMPUS",
+        "service_domain": "LEARN",
+        "created_at": "2026-11-16T12:00:00+00:00",
+        "external_transfer_allowed": false,
+        "retention": "EXPLICIT_DELETE"
+      }
+    },
+    {
+      "why": "a single image above 8 MiB is rejected",
+      "value": {
+        "media_id": "media_7f3a9c21",
+        "kind": "IMAGE",
+        "mime_type": "image/jpeg",
+        "byte_size": 9000000,
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "width": 1200,
+        "height": 800,
+        "pixel_count": 960000,
+        "source_evidence_id": "learn.course_files",
+        "storage_purpose": "MEDIA",
+        "account_domain": "CAMPUS",
+        "service_domain": "LEARN",
+        "created_at": "2026-11-16T12:00:00+00:00",
+        "external_transfer_allowed": false,
+        "retention": "EXPLICIT_DELETE"
+      }
+    },
+    {
+      "why": "an image above 16 million pixels is rejected",
+      "value": {
+        "media_id": "media_7f3a9c21",
+        "kind": "IMAGE",
+        "mime_type": "image/webp",
+        "byte_size": 1048576,
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "width": 5000,
+        "height": 4000,
+        "pixel_count": 20000000,
+        "source_evidence_id": "learn.course_files",
+        "storage_purpose": "MEDIA",
+        "account_domain": "CAMPUS",
+        "service_domain": "LEARN",
+        "created_at": "2026-11-16T12:00:00+00:00",
+        "external_transfer_allowed": false,
+        "retention": "EXPLICIT_DELETE"
+      }
+    },
+    {
+      "why": "a local path or data URL must never cross the media contract",
+      "value": {
+        "media_id": "media_7f3a9c21",
+        "kind": "IMAGE",
+        "mime_type": "image/png",
+        "byte_size": 1048576,
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "width": 1200,
+        "height": 800,
+        "pixel_count": 960000,
+        "source_evidence_id": "learn.course_files",
+        "storage_purpose": "MEDIA",
+        "account_domain": "CAMPUS",
+        "service_domain": "LEARN",
+        "created_at": "2026-11-16T12:00:00+00:00",
+        "external_transfer_allowed": false,
+        "retention": "EXPLICIT_DELETE",
+        "source_path": "synthetic/Pictures/course.png"
+      }
+    }
+  ]
+}

@@ -1,0 +1,1212 @@
+{
+  "x-schema-version": 1,
+  "x-contract-version": "module-ownership-v1",
+  "target_version": "0.2.0",
+  "integration_branch": "hermes/1-install-diagnostics",
+  "version_pr": 2,
+  "issue": 4,
+  "rule": "One version plan, one integration branch, one version PR. Module work does not create a new PR. Overlapping paths across batches are sequential handoffs; within one batch, no writable path may be owned twice.",
+  "modules": [
+    {
+      "id": "1.1",
+      "title": "版本基线、架构契约与调度冻结",
+      "batch": 1,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "plans/v0.2.0/",
+        "contracts/v0.2/",
+        "plans/v0.2.0/VERSION_MANIFEST.json",
+        "tests/test_v020_contracts.py",
+        "requirements-dev.txt"
+      ],
+      "input_contracts": [
+        "result-envelope-v1",
+        "error-classification-v1",
+        "secure-storage-header-v1",
+        "source-evidence-v1",
+        "media-reference-v1",
+        "calendar-event-v1",
+        "business-facade-v1",
+        "local-read-api-v1"
+      ],
+      "dependencies": [],
+      "parallel_peers": [],
+      "parallel_eligible": false,
+      "outputs": [
+        "冻结的版本基线、八类契约 + 兼容基线、模块负责表、批次门禁和总体验收映射",
+        "JSON Schema 实例校验与可执行拒绝样例"
+      ],
+      "integration_order": 1,
+      "status": "accepted",
+      "audit_fix": "1.1-audit-20261116 P0/P1/P2"
+    },
+    {
+      "id": "2.1",
+      "title": "收编安装诊断与统一配置路径",
+      "batch": 2,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "scripts/dev_diagnostics.py",
+        "scripts/dev.py",
+        "src/thu_assistant/configuration.py",
+        "src/thu_assistant/paths.py",
+        "tests/test_configuration.py",
+        "tests/test_dev_diagnostics.py"
+      ],
+      "input_contracts": [
+        "result-envelope-v1",
+        "business-facade-v1"
+      ],
+      "dependencies": [
+        "1.1"
+      ],
+      "parallel_peers": [
+        "2.2",
+        "2.3"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "统一配置与路径解析；诊断命令接入统一配置；首装依赖与平台提示"
+      ],
+      "integration_order": 2,
+      "status": "accepted",
+      "accepted_at": "2026-11-16",
+      "delivery_commit": "690cbab",
+      "audit_fix": "2.1-audit-20261116 P1/P2/P3",
+      "evidence": [
+        "31 module tests passed on delivery commit 690cbab",
+        "clean-tree full offline suite: Python 479 passed/5 skipped, Node 54 passed; check 367 files/0 findings",
+        "plan and contract validators ok; no live campus/model calls",
+        "Windows CI a273d0e: 2.1 test files have no failures; the job was then blocked by 2.2, which is fixed in later commits",
+        "batch-2 record head 34c463d: ubuntu-24.04 and windows-2025 both successful; 2.1 tests included"
+      ]
+    },
+    {
+      "id": "2.2",
+      "title": "跨平台加密存储与密钥生命周期",
+      "batch": 2,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/secure_store/",
+        "tests/test_secure_store.py"
+      ],
+      "input_contracts": [
+        "secure-storage-header-v1",
+        "result-envelope-v1"
+      ],
+      "dependencies": [
+        "1.1"
+      ],
+      "parallel_peers": [
+        "2.1",
+        "2.3"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "跨平台认证加密存储、随机主密钥、权限/链接检查、旧 DPAPI 只读兼容"
+      ],
+      "integration_order": 3,
+      "status": "accepted",
+      "accepted_at": "2026-11-16",
+      "delivery_commit": "a6b54bb6502947e401999d4c14fa70c92ee4b268",
+      "audit_fix": "2.2-audit-20261116 P1/P2/P3 via 6e99d3d and a6b54bb; P2-5 TOCTOU and P2-6 wiring retained as documented limits",
+      "evidence": [
+        "AES-256-GCM envelope, Windows DPAPI and POSIX owner-only key backends",
+        "record_id bound into AAD; record substitution rejected; legacy unbound stores read-only",
+        "rotation rejects a key inside data; restarted rollback loads THU_SECURE_RETIRED_KEY_FILES",
+        "health authenticates ciphertext; unreadable records counted without path leakage",
+        "33 Linux module tests passed at a6b54bb, 39 after the 2026-11-17 re-audit; Windows secure-store failures 0",
+        "final tree: Python 505/5 Linux and 505/5 Windows; Node 54; check 371/0",
+        "CI ubuntu-24.04 and windows-2025 successful at a6b54bb, at the batch-2 record head 34c463d and at the final tree dcece7b"
+      ],
+      "cross_module_handoffs": [
+        "contracts/v0.2/storage-header.schema.json (owned by 1.1): additive optional record_id under secure-storage-header-v1; old records stay readable, so the contract version is unchanged. Owner review is recorded in the batch gate.",
+        "requirements-dev.txt (owned by 1.1, later 6.3): added jsonschema and cryptography development pins.",
+        "pyproject.toml (owned by 6.3): added cryptography==50.0.2 as a runtime dependency; 6.3 keeps the final lock and packaging layout."
+      ]
+    },
+    {
+      "id": "2.3",
+      "title": "校园来源证据与业务数据契约",
+      "batch": 2,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "contracts/v0.2/sources/",
+        "docs/contracts/",
+        "tests/fixtures/sources/"
+      ],
+      "input_contracts": [
+        "source-evidence-v1",
+        "result-envelope-v1"
+      ],
+      "dependencies": [
+        "1.1"
+      ],
+      "parallel_peers": [
+        "2.1",
+        "2.2"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "校园来源证据、字段映射、阻塞登记和合成来源夹具"
+      ],
+      "integration_order": 4,
+      "status": "accepted",
+      "accepted_at": "2026-11-16",
+      "delivery_commit": "f7fe6408ad3e9e16bdee2ca041cb648a2fc2b2ab",
+      "audit_fix": "2.3-audit-20261116 P1/P2/P3 via d4a2f03",
+      "audit_fix_commit": "d4a2f03d7395c41ad71569aa1520d0214abffd92",
+      "evidence": [
+        "29 source rows, 10 domain models, 8 source tasks, 14 adapter-readiness rows, 7 synthetic fixtures",
+        "contracts/v0.2/sources/validate.py: ok=true; 9 schema samples, 24 rejection samples",
+        "tests/test_source_contracts.py: 6 passed",
+        "shared-tree check: 371 files, 0 findings; test: 505 Python passed/5 skipped, 54 Node passed; no failures",
+        "results mirrored at plans/v0.2.0/交付/模块结果/2.3.json and contracts/v0.2/sources/module-result.json"
+      ]
+    },
+    {
+      "id": "3.1",
+      "title": "跨平台认证会话与网关迁移",
+      "batch": 3,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/gateway.js",
+        "src/thu_assistant/gateway_client.py",
+        "src/thu_assistant/session-store.js",
+        "src/thu_assistant/session-policy.js",
+        "src/thu_assistant/browser.py",
+        "src/thu_assistant/crypto-bridge.js",
+        "src/thu_assistant/crypto_service.py",
+        "src/learn_assistant/auth.py",
+        "runtime/windows/",
+        "tests/test_session_gateway.py",
+        "tests/campus-session-v3.test.js",
+        "tests/campus-crypto-bridge.test.js"
+      ],
+      "input_contracts": [
+        "secure-storage-header-v1",
+        "source-evidence-v1",
+        "result-envelope-v1"
+      ],
+      "dependencies": [
+        "2.1",
+        "2.2",
+        "2.3"
+      ],
+      "parallel_peers": [
+        "3.2",
+        "3.3"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "跨平台认证会话、网关迁移、Windows 兼容包装和会话边界"
+      ],
+      "integration_order": 5,
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "b0ecc64c803b144a6050816764cc6eb5232224ee",
+      "evidence": [
+        "Module tests: 14 Python (2 Linux skips; 16 Windows pass) + 7 Node v3 + 5 Node crypto; shared-tree check 402 files/0 findings; Linux 645/7, Node 66/0; Windows 641/11, Node 66/0.",
+        "GitHub Actions run 43956001264 at b0ecc64: ubuntu-24.04 and windows-2025 both successful.",
+        "Linux without a key fails protected session operations with SECURE_KEY_NOT_CONFIGURED; public reads and the static catalog remain available.",
+        "Browser state is sealed through the owned gateway; gateway stdout contains ciphertext only, never a cookie value.",
+        "learn_assistant/auth.py writes session.secure with scope learn-session; captured _dpapi_protect/_dpapi_unprotect references in action_store and todos reach the new provider.",
+        "Audit remediation 6930dde through b0ecc64 adds Learn account binding, ACTION-only compatibility decrypt, fail-closed access helper, browser identity rejection, default-key discovery, verified temp-file writes and real Windows DPAPI migration coverage."
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/secure_store/keys.py (owned by 2.2): the private DPAPI backend now calls _dpapi_protect_legacy/_dpapi_unprotect_legacy from learn_assistant.auth so the provider master key cannot re-enter the secure provider; behaviour unchanged, 2.2 tests pass.",
+        "contracts/v0.2/error-classification.json (owned by 1.1): session/storage codes registered in the batch-3 integration commit after 3.1's explicit request; additive registry entries only.",
+        "src/learn_assistant/models.py, providers/web.py and thu_assistant/mcp_stdio.py (owned by 6.1/7.3): LoginStatus.error_code and account-scoped Learn session wiring; wording follows SecureSessionStore.protection.",
+        "src/thu_assistant/action_store.py (owned by 4.4): outer THU-ACTION-1 container and stable record_id remain 4.4 scope; 3.1 only narrows compatibility unseal to ACTION envelopes.",
+        "src/thu_assistant/todos.py (owned by 5.4): outer THU-TODOS-1 container and stable record_id remain 5.4 scope.",
+        "crypto_service.py / crypto-bridge.js packaging and default key creation (owned by 6.3)."
+      ]
+    },
+    {
+      "id": "3.2",
+      "title": "统一查询、数据模型与完整性规则",
+      "batch": 3,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/queries.py",
+        "src/thu_assistant/catalog.py",
+        "src/thu_assistant/pagination.js",
+        "src/thu_assistant/domain_models.py",
+        "src/thu_assistant/source_state.py",
+        "src/thu_assistant/cache_policy.py",
+        "tests/test_query_contracts.py",
+        "tests/fixtures/query/"
+      ],
+      "input_contracts": [
+        "result-envelope-v1",
+        "source-evidence-v1",
+        "calendar-event-v1"
+      ],
+      "dependencies": [
+        "2.1",
+        "2.2",
+        "2.3"
+      ],
+      "parallel_peers": [
+        "3.1",
+        "3.3"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "统一数据模型、完整性三态、稳定键、缓存策略和分页语义"
+      ],
+      "integration_order": 6,
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "ec2f61723a332777cf21c7d2d73e335ca566ee5c",
+      "audit_fix": "3.2-audit-20261117 P1/P2 via 734d41a (follow-up a579c2f)",
+      "evidence": [
+        "source-state-v1 completeness triad, source-evidence builder and error-classification mirror; 40 module tests passed",
+        "domain-models-v1 stable identities, time precision, integer status mapping and same-title/different-id relations; cache-v2 live/directory/history policies",
+        "cursor c1 bound to parameters/account/snapshot-v2 for learn, authenticated pages and account-bound services; cancelled continuation stays partial",
+        "clean-tree full offline suite at 734d41a: Python 622 passed/5 skipped, Node 64 passed; check 402 files/0 findings; validators ok",
+        "GitHub Actions ubuntu-24.04 and windows-2025 succeeded at final 3.2 audit-fix head 456e7a5 (run 43945010355); the earlier head 4281df0 also passed (run 43942584816)",
+        "no live campus, model or business calls; batch 3 was reconnected at the single integration commit 400adbe"
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/gateway.js and mcp_stdio.py (owned by 6.1): the facade must use source_state.public_error and preserve the 29 legacy tools; pagination.js keeps both expectedPages and expected_pages for compatibility.",
+        "contracts/v0.2/error-classification.json (owned by 1.1): cursor/completeness codes added during 3.2 implementation; additive registry entries only.",
+        "4.1/4.2/4.3/4.5/5.1/5.3/5.4: adapters must use domain_models for stable identities, time precision and duplicate relations, and cache_policy for history fallback.",
+        "6.2: cursors and snapshots are process-local; a second process cannot resume another process's cursor."
+      ]
+    },
+    {
+      "id": "3.3",
+      "title": "附件与图片的本地隐私处理",
+      "batch": 3,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/media_assets/",
+        "tests/test_media_assets.py"
+      ],
+      "input_contracts": [
+        "media-reference-v1",
+        "secure-storage-header-v1",
+        "source-evidence-v1"
+      ],
+      "dependencies": [
+        "2.1",
+        "2.2",
+        "2.3"
+      ],
+      "parallel_peers": [
+        "3.1",
+        "3.2"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "图片/附件本地检查、临时目录、哈希和媒体引用"
+      ],
+      "integration_order": 7,
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "036a00dc0f49d0efdd0633b72b47e8a51818a304",
+      "audit_fix": "3.3-audit-20261117 P1/P2 via 036a00d; P2-8 coverage gaps and P3 items retained as documented limits",
+      "evidence": [
+        "84 module tests at 036a00d; content signature, image limits, metadata removal, account/task/purpose/expiry binding, single-use model grant, locked temp root.",
+        "Shared tree Python 645 passed/7 skipped, Node 66 passed/0 failed, check 402 files/0 findings; validators ok.",
+        "Encrypted reference state restores across processes through the 2.2 secure store and rejects a different account.",
+        "No live campus, model or business call; Windows conclusions come from windows-2025 CI."
+      ],
+      "cross_module_handoffs": [
+        "pyproject.toml (owned by 6.3) and requirements-dev.txt (owned by 1.1): added Pillow==13.0.0 per the frozen dependency proposal; 6.3 keeps the final lock, wheel resource manifest and packaging validation.",
+        "contracts/v0.2/error-classification.json (owned by 1.1): the MEDIA_* codes were registered additively in the batch-4 integration commit (X1) because 4.5 re-raises them on its own channel; 6.1 only needs to reuse them.",
+        "SecureStore.account_scope() (owned by 2.2, added in the batch-3 integration commit): the sanctioned derivation for the acct_ pseudonym that media references require.",
+        "4.2/4.5/6.1: pass the configured 2.1 temp_dir as MediaAssets(temp_root), use purpose COURSE_RESOURCE/MODEL_INPUT, and send only through prepare/authorize/consume.",
+        "7.2: include tests/test_media_assets.py and tests/test_batch3_integration.py in cross-platform fault-injection regression."
+      ]
+    },
+    {
+      "id": "4.1",
+      "title": "个人课表、考试与成绩只读适配",
+      "batch": 4,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/academics/",
+        "tests/test_academics.py",
+        "tests/fixtures/academics/"
+      ],
+      "input_contracts": [
+        "source-evidence-v1",
+        "result-envelope-v1",
+        "calendar-event-v1"
+      ],
+      "dependencies": [
+        "3.1",
+        "3.2",
+        "3.3"
+      ],
+      "parallel_peers": [
+        "4.2",
+        "4.3",
+        "4.4",
+        "4.5"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "个人课表、考试、成绩只读适配与来源阻塞记录"
+      ],
+      "integration_order": 8,
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "bbe620a",
+      "audit_fix": "4.1-audit: 4 P1 + 9 P2 fixed at bbe620a; the P2-7 contract-registration item is closed by the batch-4 integration (X1); a missing grade record id stays MISSING_STABLE_ID because grade-v1 has no temporary slot.",
+      "evidence": [
+        "98 module tests at bbe620a; check 422 files/0 findings; Linux Python 746 passed/7 skipped/0 failed, Node 66 passed",
+        "three productions adapters stay BLOCKED_SOURCE_EVIDENCE with ADAPTER_REQUIRED and zero items; no live campus/grade read",
+        "events and grade rows validate against calendar-event-v1 and grade-v1; audit probes for the four P1 findings pass",
+        "reconnected in the batch-4 integration commit; Windows conclusions come from windows-2025 CI"
+      ],
+      "cross_module_handoffs": [
+        "contracts/v0.2/error-classification.json (owned by 1.1): the 11 ACADEMICS_* codes were registered additively in the batch-4 integration commit (X1); the module no longer needs classification_map() as a bridge before 6.1.",
+        "6.1: register timetable, exams and grades from operation_schemas(); keep the explicit-request gate for grades and enrich the MCP error boundary.",
+        "5.4: consume calendar_events(exams|timetable); grades are never events.",
+        "6.2/7.1: dashboard summaries must call sensitivity.dashboard_summary and never read grade values.",
+        "2.3/integration: only after sanitized source evidence arrives, update source-registry.json and adapter-readiness.json, then wire a production transport."
+      ]
+    },
+    {
+      "id": "4.2",
+      "title": "课程资料中心与跨课程检索",
+      "batch": 4,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/resources/",
+        "tests/test_resources.py"
+      ],
+      "input_contracts": [
+        "source-evidence-v1",
+        "media-reference-v1",
+        "result-envelope-v1"
+      ],
+      "dependencies": [
+        "3.1",
+        "3.2",
+        "3.3"
+      ],
+      "parallel_peers": [
+        "4.1",
+        "4.3",
+        "4.4",
+        "4.5"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "课程资料中心、跨课程检索、下载清单和稳定资源标识"
+      ],
+      "integration_order": 9,
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "c66ee2e",
+      "audit_fix": "4.2-audit: P0-1 + 11 P1 + 18 P2 fixed through c66ee2e; the module record reports residual [] and re-ran the audit probes.",
+      "evidence": [
+        "98 module tests at c66ee2e; check 420 files/0 findings; Linux Python 746 passed/7 skipped/0 failed, Node 66 passed",
+        "real AES-GCM SecureStore index (file key on Linux, DPAPI on Windows), account and semester scoped; no test encoder",
+        "audit probes confirm version monotonicity, index/write ordering, completeness scope and UTF-8 archive names",
+        "P1-10 replaced the POSIX-only /tmp destination with tmp_path, so the module has no platform skip; windows-2025 CI is the Windows evidence"
+      ],
+      "cross_module_handoffs": [
+        "contracts/v0.2/error-classification.json (owned by 1.1): 26 RESOURCE_* codes registered additively in the batch-4 integration commit (X1).",
+        "src/thu_assistant/media_assets/ (owned by 3.3): downloads register with purpose COURSE_RESOURCE and service_domain LEARN; a resource reference is not a MODEL_INPUT reference (covered by tests/test_batch4_integration.py).",
+        "pyproject.toml (owned by 6.3): no new dependency; the module uses the 2.2 store and 3.3 media assets already pinned.",
+        "6.1: expose the resource centre through the facade without adding a 30th tool; keep confirm=True for one process-local plan."
+      ]
+    },
+    {
+      "id": "4.3",
+      "title": "图书馆体育查询一致性与规则读取",
+      "batch": 4,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/precheck.py",
+        "src/thu_assistant/library.py",
+        "src/thu_assistant/spaces.py",
+        "src/thu_assistant/sports.py",
+        "tests/test_library_contracts.py",
+        "tests/test_spaces_contracts.py",
+        "tests/test_sports_contracts.py"
+      ],
+      "input_contracts": [
+        "source-evidence-v1",
+        "result-envelope-v1",
+        "calendar-event-v1"
+      ],
+      "dependencies": [
+        "3.1",
+        "3.2",
+        "3.3"
+      ],
+      "parallel_peers": [
+        "4.1",
+        "4.2",
+        "4.4",
+        "4.5"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "图书馆/体育查询一致性、规则读取和部分结果语义"
+      ],
+      "integration_order": 10,
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "e14c11c",
+      "audit_fix": "4.3-audit: 4 P1 + 16 P2 fixed through e14c11c; ROOM_RULE_UNVERIFIED registered by the module itself.",
+      "evidence": [
+        "52 module tests at e14c11c; 277 related read regressions passed/1 skipped; Linux Python 700 passed/7 skipped/0 failed, Node 66 passed; check 410 files/0 findings",
+        "precheck separates selection, window, free scope, account eligibility, fees and rules; empty/unmapped seat rows are UNKNOWN, never FULL",
+        "cursor pages keep SNAPSHOT_ONLY_NOT_LIVE and the original checked_at; no write path changed",
+        "reconnected in the batch-4 integration commit; windows-2025 CI is the Windows evidence"
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/queries.py and source_state.py (owned by 3.2/6.1): additive precheck exposure and snapshot freshness on cursor pages; registered as a sequential handoff, 277 related read tests pass.",
+        "contracts/v0.2/error-classification.json (owned by 1.1): ROOM_RULE_UNVERIFIED added additively by 4.3; no other contract change.",
+        "contracts/v0.2/sources/source-registry.json (owned by 2.3): code_refs refreshed for library/sports after the 4.3 edits.",
+        "5.1/5.2: consume precheck selection/availability/eligibility/fees/rules; preparation_state is not authorization and money is never derived from display text.",
+        "6.1: precheck is additive; preserve the 29 legacy tools and the ROOM_RULE_UNVERIFIED classification."
+      ]
+    },
+    {
+      "id": "4.4",
+      "title": "统一办理框架与跨平台授权凭据",
+      "batch": 4,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/actions.py",
+        "src/thu_assistant/action_store.py",
+        "src/thu_assistant/action_recovery.py",
+        "src/thu_assistant/browser.py",
+        "src/thu_assistant/consent/",
+        "tests/test_action_framework.py"
+      ],
+      "input_contracts": [
+        "business-facade-v1",
+        "secure-storage-header-v1",
+        "error-classification-v1"
+      ],
+      "dependencies": [
+        "3.1",
+        "3.2",
+        "3.3"
+      ],
+      "parallel_peers": [
+        "4.1",
+        "4.2",
+        "4.3",
+        "4.5"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "统一办理状态机、可信宿主授权、一次派发和未决恢复"
+      ],
+      "integration_order": 11,
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "cf255de",
+      "audit_fix": "4.4-audit: 3 P1 + 14 P2 fixed through cf255de; the in-process confirmation path is normalized to a signed challenge-bound grant.",
+      "evidence": [
+        "47 module tests and 199 compatibility tests at cf255de; Linux Python 695 passed/7 skipped/0 failed, Node 66 passed; check 412 files/0 findings",
+        "Windows CI run 44009070509: Python 690 passed/12 skipped/0 failed, Node 66 passed",
+        "one-time signed host authorization, single dispatch, revision-bound transitions and a bounded public state history",
+        "real local confirmation CLI exercised with a 2.2 key; no live campus, payment or booking call"
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/browser.py (owned by 3.1): preview now adds authorization_protocol and local_confirmation_command when an adapter is registered; additive keys only.",
+        "pyproject.toml and MANIFEST.in (owned by 6.3): consent/README.md added to package-data and the source manifest; no dependency change.",
+        "src/thu_assistant/action_store.py: the outer THU-ACTION-1 container is unchanged; the record-id and container migration stays with 5.4/6.1.",
+        "5.3: attachment identity comparison is an extension point; current contracts reject the field.",
+        "5.1/5.2: adapters declare accepts_ledger=True only when they can record NOT_SENT/SENT/UNKNOWN per step; never replay an uncertain write."
+      ]
+    },
+    {
+      "id": "4.5",
+      "title": "模型图片输入与资料引用增强",
+      "batch": 4,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/models.py",
+        "src/thu_assistant/models.js",
+        "src/thu_assistant/model_media.py",
+        "tests/test_model_media.py"
+      ],
+      "input_contracts": [
+        "media-reference-v1",
+        "source-evidence-v1",
+        "result-envelope-v1"
+      ],
+      "dependencies": [
+        "3.1",
+        "3.2",
+        "3.3"
+      ],
+      "parallel_peers": [
+        "4.1",
+        "4.2",
+        "4.3",
+        "4.4"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "模型图片输入、资料引用增强和传输前媒体检查"
+      ],
+      "integration_order": 12,
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "2df5772",
+      "audit_fix": "4.5-audit: 3 P1 + 11 P2 fixed in scope at 2df5772; the P2-3 error-registration item is closed by the batch-4 integration (X1); P2-13 source-registry/doc wording stays with 1.1/2.3.",
+      "evidence": [
+        "58 module tests (51 Python + 7 Node) at 2df5772; Linux Python 706 passed/7 skipped/0 failed, Node 66 passed; check 407 files/0 findings",
+        "shipped ProtocolRegistry is empty: an image call fails with MODEL_IMAGE_PROTOCOL_UNVERIFIED or MODEL_IMAGE_INPUT_UNAVAILABLE and sends nothing",
+        "staging is 0600 under a 0700 root, one grant per send, cancellation never replays",
+        "remediation verifier P1-1..P2-12 PASS; P2-3 and P2-13 recorded as cross-module items"
+      ],
+      "cross_module_handoffs": [
+        "contracts/v0.2/error-classification.json (owned by 1.1): 11 MODEL_IMAGE_*/MODEL_* codes registered additively in the batch-4 integration commit (X1).",
+        "src/thu_assistant/media_assets/ (owned by 3.3): outbound images use manifest -> prepare_model_bundle -> authorize_model_send -> consume_model_bundle with purpose MODEL_INPUT; MEDIA_* codes stay module-internal until 6.1 registers them.",
+        "src/thu_assistant/models.js and models.py (owned by 4.5/6.1): the Node transport enforces the same frozen ceiling and refuses unverified protocols; 6.1 must pass the MediaBinding from the authenticated host, never from tool arguments.",
+        "2.3: the model.image_input source row stays BLOCKED_SOURCE_EVIDENCE until sanitized protocol evidence exists; do not probe with personal images."
+      ]
+    },
+    {
+      "id": "5.1",
+      "title": "图书馆预约、取消与续借适配",
+      "batch": 5,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/library_actions.py",
+        "src/thu_assistant/library_wire.py",
+        "src/thu_assistant/library_contracts.py",
+        "src/thu_assistant/renewal/",
+        "tests/test_library_actions.py",
+        "tests/test_library_renewal.py"
+      ],
+      "input_contracts": [
+        "business-facade-v1",
+        "error-classification-v1",
+        "source-evidence-v1"
+      ],
+      "dependencies": [
+        "4.1",
+        "4.2",
+        "4.3",
+        "4.4",
+        "4.5"
+      ],
+      "parallel_peers": [
+        "5.2",
+        "5.3",
+        "5.4"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "图书馆预约、取消、续借适配和精确核对"
+      ],
+      "integration_order": 13,
+      "status": "accepted",
+      "delivery_commit": "6788e1a",
+      "audit_fix": "5.1-audit: P0=0, P1-1..P1-7 and P2-1..P2-16 fixed through 6788e1a.",
+      "evidence": [
+        "127 module tests at 6788e1a; 342 collected/341 passed/1 skipped related regression; Linux Python 1052 passed/7 skipped/0 failed, Node 66 passed; check 468 files/0 findings",
+        "seat/room plans persist the 4.3 precheck summary; unknown availability, map changes and rule gaps hand off instead of writing",
+        "renew_loan binds one own loan, its Primo account and the exact request contract; SYNTHETIC evidence needs an explicit opt-in and the production default is an official handoff",
+        "branch history has no home-directory path; no PR created, main not merged, no release published"
+      ],
+      "accepted_at": "2026-11-17",
+      "cross_module_handoffs": [
+        "contracts/v0.2/error-classification.json and src/thu_assistant/source_state.py (1.1/3.2): 15 additive LIBRARY_RENEW_*/RENEWAL_* codes, no existing code changed.",
+        "contracts/v0.2/business-facade.schema.json (1.1): renew_loan added to the operation enum only; no field was removed.",
+        "src/thu_assistant/actions.py (4.4): todo window widened to the new due date, per-operation declared prechecks, disabled_reason and reconciliation_scope added additively.",
+        "docs/ (7.3) and pyproject.toml/MANIFEST.in (6.3): renewal README packaging and five capability/handover notes; 7.3 rechecks the wording at release.",
+        "contracts/v0.2/sources/source-registry.json (2.3): library.renewal code_refs and evidence note refreshed; implementation_state stays PARTIAL."
+      ]
+    },
+    {
+      "id": "5.2",
+      "title": "体育预约取消与付款状态闭环",
+      "batch": 5,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/sports_actions.py",
+        "src/thu_assistant/sports_transport.py",
+        "tests/test_sports_actions.py"
+      ],
+      "input_contracts": [
+        "business-facade-v1",
+        "error-classification-v1",
+        "source-evidence-v1"
+      ],
+      "dependencies": [
+        "4.1",
+        "4.2",
+        "4.3",
+        "4.4",
+        "4.5"
+      ],
+      "parallel_peers": [
+        "5.1",
+        "5.3",
+        "5.4"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "体育预约/取消、付款状态闭环和未知结果核对"
+      ],
+      "integration_order": 14,
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "53d59570b6f02f30c7a886f7a74c01030d1bf22e",
+      "audit_fix": "5.2-audit: P1-1/P1-2 fixed; P2-1..P2-6 and P2-8..P2-18 fixed in scope; P2-7, authorization consumption and the browser service-worker hardening are recorded 4.4 handoffs.",
+      "evidence": [
+        "55 module tests at f0b2444; 117 sports regressions; 306 related transaction/query tests passed/1 skipped; Linux Python 1060 passed/7 skipped/0 failed, Node 66 passed; check 463 files/0 findings; 247 error codes",
+        "effective RESV_EFFECT orders prepare an official cancel plan; unobserved dispatches stay UNKNOWN with the ledger UNKNOWN; pre-dispatch failures are definite not-sent",
+        "expired/cancelled payment maps to FAILED; payType is a recorded soft match; preview and evidence agree on total comparison; nine sports codes registered",
+        "reconnected at the single batch-5 integration commit by the integration owner; no delivery PR, no main merge, no release"
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/source_state.py and contracts/v0.2/error-classification.json (owned by 1.1/3.2): nine sports codes added additively by 5.2.",
+        "contracts/v0.2/sources/source-registry.json (owned by 2.3): five sports code_refs refreshed; sports.orders points at the read implementation.",
+        "4.4/6.1: NOT_CREATED terminal state or controlled close entry; authorization consumption on failure; browser context service_workers='block'.",
+        "6.1: register sports_actions.capabilities(); keep the 29 legacy tools; expose platform.refresh to todo/kanban readers."
+      ]
+    },
+    {
+      "id": "5.3",
+      "title": "网络学堂作业上传与正式提交",
+      "batch": 5,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/submissions/",
+        "tests/test_submissions.py"
+      ],
+      "input_contracts": [
+        "media-reference-v1",
+        "business-facade-v1",
+        "source-evidence-v1"
+      ],
+      "dependencies": [
+        "4.1",
+        "4.2",
+        "4.3",
+        "4.4",
+        "4.5"
+      ],
+      "parallel_peers": [
+        "5.1",
+        "5.2",
+        "5.4"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "作业上传、草稿/正式提交分离和结果核对"
+      ],
+      "integration_order": 15,
+      "status": "accepted",
+      "delivery_commit": "b49f86d",
+      "previous_delivery_commit": "6eca3de",
+      "implemented_at": "2026-11-17",
+      "accepted_at": "2026-11-17",
+      "audit_fix": "5.3-audit: 4 P1 + 16 P2 fixed through c2766a6 and b49f86d; assignment rules are fail-closed, the submit is rechecked, submission-v1 is enforced and the batch-5 merge is conflict free.",
+      "evidence": [
+        "98 module tests and 159 related regression tests at b49f86d; Linux Python 1103 passed/7 skipped/0 failed, Node 66 passed; check 474 files/0 findings",
+        "ordered single-use upload -> draft -> submit sequence on the 4.4 action engine with a per-step side-effect ledger and a pre-submit recheck",
+        "file identity re-hashed at preflight and before each upload; a changed file invalidates the plan with zero requests",
+        "hermes/5.3 + hermes/5.4 merge tree validates and both module test files pass (138 passed)",
+        "no live campus call, model call or assignment submission"
+      ],
+      "cross_module_handoffs": [
+        "contracts/v0.2/error-classification.json and src/thu_assistant/source_state.py: 20 additive SUBMISSION_* codes; no existing code changed.",
+        "contracts/v0.2/sources/source-registry.json: learn.submission moves PLANNED -> BLOCKED with refreshed code_refs; 2.3 owns the file.",
+        "6.1: mount the facade and add a learn write switch instead of inheriting THU_SPORTS_WRITE; describe_actions('learn') stays ADAPTER_REQUIRED until then.",
+        "6.3: submissions/README.md needs package-data and MANIFEST.in entries."
+      ]
+    },
+    {
+      "id": "5.4",
+      "title": "统一日程、增量事件与日历导出",
+      "batch": 5,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/todos.py",
+        "src/thu_assistant/events.py",
+        "src/thu_assistant/calendar_export.py",
+        "src/thu_assistant/snapshot_diff.py",
+        "tests/test_events.py",
+        "tests/test_calendar_export.py"
+      ],
+      "input_contracts": [
+        "calendar-event-v1",
+        "result-envelope-v1",
+        "source-evidence-v1"
+      ],
+      "dependencies": [
+        "4.1",
+        "4.2",
+        "4.3",
+        "4.4",
+        "4.5"
+      ],
+      "parallel_peers": [
+        "5.1",
+        "5.2",
+        "5.3"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "统一日程、增量事件、稳定事件编号和 ICS 导出"
+      ],
+      "integration_order": 16,
+      "status": "accepted",
+      "accepted_at": "2026-11-17",
+      "delivery_commit": "6145ed2",
+      "audit_baseline_commit": "f9e9918",
+      "audit_fix": "5.4-audit: P0=0; P1-1..P1-4 and P2-1..P2-12 closed through 90dcdb5 with named regressions; pure export, academic window, full paging and monotonic SEQUENCE.",
+      "evidence": [
+        "58 module tests and 203 related regression tests at 6145ed2; audit P1-1..P1-4 and P2-1..P2-12 verified by named cases",
+        "export_calendar is a pure local write; agenda collects every snapshot page; academic events respect the request window; per-UID SEQUENCE never resets",
+        "follow-up 6145ed2 keeps malformed academic events visible to the excluded report and 16083d9 pins the opt-in get_todos description",
+        "batch-5 joint tree: check 493 files/0 findings, Linux and Windows full offline suites green, Node 66 passed; 0 live campus/model/business calls"
+      ],
+      "cross_module_handoffs": [
+        "contracts/v0.2/error-classification.json and src/thu_assistant/source_state.py (1.1/3.2): 29 additive EVENT_*/AGENDA_*/SNAPSHOT_*/EXPORT_* codes, no existing code changed.",
+        "src/thu_assistant/mcp_stdio.py (6.1): wording-only get_todos description update; no tool added, the 29-tool surface is unchanged.",
+        "6.1/8.1: THU-TODOS-1 container and record_id-in-AAD migration remains a later storage step; 5.4 did not change the cache format.",
+        "6.2/7.1: read calendar_events/views/conflicts only and apply their own HTML escaping."
+      ],
+      "followup_commits": [
+        "16083d9",
+        "6145ed2"
+      ]
+    },
+    {
+      "id": "6.1",
+      "title": "公共业务门面与 MCP CLI 集成",
+      "batch": 6,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/mcp_stdio.py",
+        "src/thu_assistant/queries.py",
+        "src/thu_assistant/__main__.py",
+        "src/thu_assistant/facade/",
+        "src/thu_assistant/local_ops.py",
+        "tests/test_facade.py",
+        "tests/test_cli.py",
+        "tests/test_facade_audit.py"
+      ],
+      "input_contracts": [
+        "result-envelope-v1",
+        "error-classification-v1",
+        "secure-storage-header-v1",
+        "source-evidence-v1",
+        "media-reference-v1",
+        "calendar-event-v1",
+        "business-facade-v1",
+        "local-read-api-v1",
+        "compatibility-baseline-v1"
+      ],
+      "dependencies": [
+        "5.1",
+        "5.2",
+        "5.3",
+        "5.4"
+      ],
+      "parallel_peers": [
+        "6.2",
+        "6.3"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "公共业务门面、MCP/CLI 接线、29 工具兼容和启用条件"
+      ],
+      "integration_order": 17,
+      "status": "accepted",
+      "delivery_commit": "aee255924fe58743221ad9830f7f2d70efb3622a",
+      "accepted_at": "2026-11-17",
+      "audit_fix": "6.1-audit P0=0/P1=8/P2=15",
+      "evidence": [
+        "68 module tests (test_facade 37, test_cli 8, test_facade_audit 23) and 370 related regression tests at aee2559",
+        "check 504 files/0 findings; Linux Python 1336/7, Node 66; 0 live campus/model/business calls",
+        "audit 6.1-audit P0=0, eight P1 and fifteen P2 fixed or explicitly downgraded; probes re-run"
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/queries.py (3.2): adds the local pseudo-service registration and dispatch; the existing query registry, schemas and pagination are unchanged.",
+        "src/thu_assistant/mcp_stdio.py (3.1/4.5/5.1): handlers route through the facade; the 29 tool names, inputs and the legacy result fields are unchanged.",
+        "contracts/v0.2/error-classification.json and src/thu_assistant/source_state.py (1.1): 13 additive codes (7 facade, 5 provider gaps, 1 dashboard), mirrored in both files.",
+        "contracts/v0.2/local-read-api.schema.json (1.1): /resources documents the semester parameter as a compatible x-revisions entry.",
+        "README.md (7.3): CLI subcommand, output field and error-shape migration section; 7.3 owns the final user manual."
+      ]
+    },
+    {
+      "id": "6.2",
+      "title": "本地看板读取 API 与进程边界",
+      "batch": 6,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/local_api/",
+        "tests/test_local_api.py"
+      ],
+      "input_contracts": [
+        "local-read-api-v1",
+        "business-facade-v1",
+        "result-envelope-v1"
+      ],
+      "dependencies": [
+        "5.1",
+        "5.2",
+        "5.3",
+        "5.4"
+      ],
+      "parallel_peers": [
+        "6.1",
+        "6.3"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "本地只读 API、回环监听、分页和同源安全边界"
+      ],
+      "integration_order": 18,
+      "status": "accepted",
+      "delivery_commit": "198aeb19c4d0105a0726d51490a5ac9ee936e8c0",
+      "accepted_at": "2026-11-17",
+      "audit_fix": "6.2-audit P0=0/P1=3/P2=16",
+      "evidence": [
+        "162 module tests and 57 related regression tests at 198aeb1",
+        "check 505 files/0 findings; Linux Python 1430/7, Node 66; 18 audit probes re-run; 0 live calls",
+        "audit 6.2-audit P0=0, three P1 and sixteen P2 fixed or explicitly scoped"
+      ],
+      "cross_module_handoffs": [
+        "contracts/v0.2/error-classification.json and src/thu_assistant/source_state.py (1.1): 32 additive LOCAL_API_* codes placed before the 6.1 block so the two batches merge without a tail conflict.",
+        "src/thu_assistant/local_api/contract.py (6.2): /resources accepts the semester that 6.1's additive contract revision documents; the other six routes keep the frozen argument lists.",
+        "src/thu_assistant/local_api/facade.py (6.2): the consumer protocol gained semester on resources at the batch-6 seam; 6.1 implements it."
+      ]
+    },
+    {
+      "id": "6.3",
+      "title": "完整发行布局与安装升级迁移",
+      "batch": 6,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "pyproject.toml",
+        "MANIFEST.in",
+        "requirements.txt",
+        "requirements-dev.txt",
+        "setup.py",
+        "build_support/",
+        "scripts/package_release.py",
+        "scripts/migrate_state.py",
+        "scripts/configure_mcp.py",
+        "scripts/dev_diagnostics.py",
+        "src/thu_assistant/version.py",
+        "src/thu_assistant/upgrade.py",
+        "src/thu_assistant/doctor.py",
+        "src/thu_assistant/paths.py",
+        "src/thu_assistant/gateway_client.py",
+        "src/thu_assistant/gateway.js",
+        "src/learn_assistant/__init__.py",
+        "src/learn_assistant/mcp_stdio.py",
+        ".github/workflows/ci.yml",
+        "tests/test_distribution.py",
+        "tests/test_upgrade.py"
+      ],
+      "input_contracts": [
+        "compatibility-baseline-v1",
+        "secure-storage-header-v1"
+      ],
+      "dependencies": [
+        "5.1",
+        "5.2",
+        "5.3",
+        "5.4"
+      ],
+      "parallel_peers": [
+        "6.1",
+        "6.2"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "完整发行布局、依赖锁、配置生成、安装升级迁移和候选包"
+      ],
+      "integration_order": 19,
+      "status": "accepted",
+      "delivery_commit": "6f5df604aa21c56229663576353737a72945efec",
+      "accepted_at": "2026-11-17",
+      "audit_fix": "6.3-audit P0=0/P1=7/P2=14",
+      "evidence": [
+        "49 module tests (test_distribution 33, test_upgrade 16) at 6f5df60; full offline suite green on both platforms",
+        "candidate build is deterministic: two builds produce byte-identical source zip/tar, wheel and sdist; verify binds the artifact to HEAD and checks wheel metadata, entry points, licences and bundled hashes",
+        "install-check installs the wheel outside the repository, resolves only bundled resources, starts 29 MCP tools and leaves the synthetic user state unchanged",
+        "audit 6.3-audit P0=0, seven P1 and fourteen P2 fixed; migration refuses unsupported DPAPI copies, path traversal and program-directory targets"
+      ],
+      "cross_module_handoffs": [
+        "pyproject.toml, MANIFEST.in, requirements-dev.txt (1.1/2.2): 6.3 owns the final dependency, packaging and licence layout; the cryptography pin and jsonschema dev pin are preserved.",
+        "scripts/dev_diagnostics.py and src/thu_assistant/paths.py (2.1): 6.3 adds the installed layout, the blocking source-package check and 3.12/3.13 wording; existing check ids keep their meaning.",
+        "src/thu_assistant/gateway_client.py and gateway.js (3.1): 6.3 adds bundled resource resolution (THU_ACCESS_HELPER, THU_MADMODEL_DIR); the gateway protocol and session handling are unchanged.",
+        "src/learn_assistant/__init__.py and mcp_stdio.py (3.1): both MCP servers now report the single product version from thu_assistant.version.",
+        ".github/workflows/ci.yml (7.2): 6.3 adds the Linux 3.13 job; 7.2 owns the final regression workflow."
+      ]
+    },
+    {
+      "id": "7.1",
+      "title": "轻量本地看板与统一使用体验",
+      "batch": 7,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "src/thu_assistant/web_assets/",
+        "tests/test_web_assets.py"
+      ],
+      "input_contracts": [
+        "local-read-api-v1",
+        "calendar-event-v1",
+        "result-envelope-v1"
+      ],
+      "dependencies": [
+        "6.1",
+        "6.2",
+        "6.3"
+      ],
+      "parallel_peers": [
+        "7.2",
+        "7.3"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "轻量本地看板、统一空/错/部分状态和响应式体验"
+      ],
+      "integration_order": 20,
+      "status": "accepted",
+      "delivery_commit": "e2b45facd3b9ff311ab4071b973277f63ed748ef",
+      "accepted_at": "2026-11-18",
+      "audit_fix": "7.1-audit P0=0/P1=3/P2=14",
+      "evidence": [
+        "77 module tests at e2b45fa; 231 related regression tests; full offline Linux Python 1649 passed/7 skipped, Node 66 passed",
+        "audit 7.1-audit P0=0, three P1 and fourteen P2 fixed: CLI static_dir wiring, wheel/sdist web assets, resource-page read generation, plus the navigation, wording, timezone and link-whitelist findings",
+        "Chromium against a synthetic facade over the real LocalApiServer: same-origin GET only, no CDN/analytics, no browser storage, 401 clears previous account data",
+        "both dashboard construction paths (--check and serve) pass web_assets.static_dir(); wheel and sdist contain index.html, app.css and app.js"
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/__main__.py (6.1): 7.1 adds the two `static_dir=web_assets.static_dir()` arguments; command names, output shape and exit codes are unchanged.",
+        "pyproject.toml and MANIFEST.in (6.3): 7.1 adds the web_assets package-data patterns and the recursive MANIFEST include; dependency pins and entry points are unchanged.",
+        "contracts local-read-api-v1 (1.1/8.1): resolved in 8.1; the three dashboard routes declare the request-side cursor, the runtime mirror matches, and a foreign or expired cursor is refused.",
+        "tests/test_web_assets.py (7.2): the browser matrix entry for 7.1 is now covered; Firefox/Safari Sec-Fetch-Mode remains a 7.2 cross-engine check."
+      ]
+    },
+    {
+      "id": "7.2",
+      "title": "跨平台回归、隐私与故障注入",
+      "batch": 7,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "tests/release_regression/",
+        "tests/security_regression/",
+        ".github/workflows/",
+        "scripts/regression_report.py"
+      ],
+      "input_contracts": [
+        "result-envelope-v1",
+        "error-classification-v1",
+        "secure-storage-header-v1",
+        "source-evidence-v1",
+        "media-reference-v1",
+        "calendar-event-v1",
+        "business-facade-v1",
+        "local-read-api-v1",
+        "compatibility-baseline-v1"
+      ],
+      "dependencies": [
+        "6.1",
+        "6.2",
+        "6.3"
+      ],
+      "parallel_peers": [
+        "7.1",
+        "7.3"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "跨平台回归、隐私扫描、故障注入和验证报告生成"
+      ],
+      "integration_order": 21,
+      "status": "accepted",
+      "delivery_commit": "3eeb2d335059f5c41ff4dc08a79242e0c890cb30",
+      "accepted_at": "2026-11-18",
+      "audit_fix": "7.2-audit P0=0/P1=6/P2=10",
+      "evidence": [
+        "100 module cases (99 passed, 1 Windows-only skip) at 3eeb2d3; full offline Linux Python 1670 passed/8 skipped, Node 66 passed",
+        "audit 7.2-audit P0=0, six P1 and ten P2 fixed: platform identity, commit binding, evidence floor, fail-closed markers, archive/POSIX privacy scanning, nodeid sanitising and the report/gate accounting findings",
+        "release-gate fails closed on this Linux-only host: platform report missing and python_matrix_incomplete, the other eight checks pass; no shape report is accepted",
+        "coverage matrix 24 modules, 63 feature mappings, 8 acceptance criteria and 45 legacy test files; 7.1 became covered during batch integration"
+      ],
+      "cross_module_handoffs": [
+        ".github/workflows/ci.yml (6.3): 6.3 introduced the Linux 3.13 matrix; 7.2 owns the regression workflow, the release-gate job and the job names the machine gate matches.",
+        "scripts/privacy_scan.py (2.1/7.2): 7.2 adds the POSIX user-path rule; existing findings and exit semantics are unchanged.",
+        "docs/MAINTENANCE.md (7.3): 7.2 adds the report/gate/release-gate section; 7.3 owns the surrounding release documentation.",
+        "tests/release_regression/coverage_matrix.json (7.1): the dashboard entry moved from pending_same_batch to covered in the batch integration commit."
+      ]
+    },
+    {
+      "id": "7.3",
+      "title": "能力文档、用户手册与升级记录",
+      "batch": 7,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "README.md",
+        "docs/",
+        "CHANGELOG.md",
+        "integrations/",
+        "CONTRIBUTING.md"
+      ],
+      "input_contracts": [
+        "result-envelope-v1",
+        "error-classification-v1",
+        "secure-storage-header-v1",
+        "source-evidence-v1",
+        "media-reference-v1",
+        "calendar-event-v1",
+        "business-facade-v1",
+        "local-read-api-v1",
+        "compatibility-baseline-v1"
+      ],
+      "dependencies": [
+        "6.1",
+        "6.2",
+        "6.3"
+      ],
+      "parallel_peers": [
+        "7.1",
+        "7.2"
+      ],
+      "parallel_eligible": true,
+      "outputs": [
+        "能力矩阵、用户手册、升级记录和贡献维护文档"
+      ],
+      "integration_order": 22,
+      "status": "accepted",
+      "delivery_commit": "97265350445c2ae0c04f7aafafa828c9ad5c1dc6",
+      "accepted_at": "2026-11-18",
+      "audit_fix": "7.3-audit P0=0/P1=4/P2=12",
+      "evidence": [
+        "36 module cases at 9726535 (28 documentation consistency + 8 facade failure envelopes); full offline Linux Python 1607 passed/7 skipped, Node 66 passed",
+        "audit 7.3-audit P0=0, four P1 and twelve P2 fixed: README Chromium step, executable Linux key creation, schema-valid image example, facade _local_failure binding, plus the entry-point, changelog, tools, evidence, error-code and table findings",
+        "capability matrix regenerated from 81 registrations (63 READ, 15 CAMPUS_WRITE, 2 LOCAL_WRITE, 1 MODEL); 29 MCP tools and the six legacy entry points unchanged",
+        "candidate notes stay candidate-not-released; no live campus, model, browser or business call was made"
+      ],
+      "cross_module_handoffs": [
+        "src/thu_assistant/facade/core.py and __main__.py (6.1): 7.3 fixes the _local_failure binding and forwards --semester on agenda export; tool schemas and registrations are unchanged.",
+        "README.md, docs/, CHANGELOG.md, integrations/, CONTRIBUTING.md (7.3): the docs module owns the public wording; 7.2's MAINTENANCE section and 7.1's dashboard shell are described, not reimplemented.",
+        "docs/contracts/source-matrix.md (2.3): resolved in 8.1; the difference register now records the 8.1 confirmation and the retained v0.1 preview boundary."
+      ]
+    },
+    {
+      "id": "8.1",
+      "title": "全版本集成、候选构建与交审",
+      "batch": 8,
+      "owner": "Hermes",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "plans/v0.2.0/交付/集成清单.md",
+        "plans/v0.2.0/交付/候选版本记录.md",
+        "dist/"
+      ],
+      "input_contracts": [
+        "result-envelope-v1",
+        "error-classification-v1",
+        "secure-storage-header-v1",
+        "source-evidence-v1",
+        "media-reference-v1",
+        "calendar-event-v1",
+        "business-facade-v1",
+        "local-read-api-v1",
+        "compatibility-baseline-v1"
+      ],
+      "dependencies": [
+        "7.1",
+        "7.2",
+        "7.3"
+      ],
+      "parallel_peers": [],
+      "parallel_eligible": false,
+      "outputs": [
+        "全版本集成、候选构建、恢复安装验证和交审说明"
+      ],
+      "integration_order": 23,
+      "status": "accepted",
+      "delivery_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+      "evidence": [
+        "audit 8.1-audit P0=0/P1=3/P2=9 closed; total-audit 17/17 (P1x4, P2x11, P3x2) closed at 43f19ef/4a03ecd",
+        "pre-batch-9 optimization 71dbe9f maps all repository test files (0 unmapped), unifies learn_assistant default state/download roots with atomic 0600 previews, and fixes BusinessFacade live env and injected switch tracking",
+        "CI push 44468735503 and PR 44468740959 at 71dbe9f green on both platforms: Linux Python 1843/8 + Node 66 (1909/8), Windows Python 1830/21 + Node 66 (1896/21), release gate PASS 9/9 checks, 0 gaps",
+        "candidate build/verify/install-check pass at 71dbe9f (4 artifacts, source 568, wheel 214/54 bundled, sdist 499, privacy 571 source + 1849 archive members / 0 findings); batch 8 merged at 5ec73d9"
+      ],
+      "accepted_at": "2026-11-18",
+      "integration_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+      "audit_fix": "8.1-audit P0=0/P1=3/P2=9; total-audit P0=0/P1=4/P2=11/P3=2; pre-batch-9 optimization 71dbe9f",
+      "cross_module_handoffs": [
+        "1.1 (contract owner): local-read-api-v1 was revised in place with an 8.1 revision row for the request-side cursor; error-classification.json holds 370 registered codes.",
+        "4.4: the actions.py module docstring was corrected by the integrator because it contradicted the registered seat/room/sports operations; consent peek/take concurrency fixed at 2bd42cc.",
+        "2.3: the source-matrix difference register was rewritten to the observed resolved/retained state; the v0.1 preview boundary is kept with 0600 atomic creation and no absolute path leaks.",
+        "6.2: the QUERY_EXTENSION note and the describe_api query_extension field were removed after the contract declared the parameter; lac1 cursors bind account_scope.",
+        "7.2 (.github/workflows/ci.yml, scripts/regression_report.py): the test job checks out full history and every test file in tests/ is mapped in MODULE_BY_FILE with a repository-wide test guard.",
+        "9.1: rebuild and re-verify the candidate at the final merged head before tagging; the recorded CI SHA256 set belongs to 71dbe9f.",
+        "2.1/6.1 (src/learn_assistant/core.py, auth.py, facade/core.py, registry.py, queries.py, actions.py, library_contracts.py): unified learn state/download defaults and live/injected switch env plumbing landed in 71dbe9f."
+      ],
+      "merge_commit": "5ec73d955073fdd283c8f5a6bab1fee072e848ed"
+    },
+    {
+      "id": "9.1",
+      "title": "Codex 整体审查与正式发行管理",
+      "batch": 9,
+      "owner": "Codex",
+      "integration_branch": "hermes/1-install-diagnostics",
+      "exclusive_paths": [
+        "plans/v0.2.0/交付/Codex审查.md"
+      ],
+      "input_contracts": [
+        "result-envelope-v1",
+        "error-classification-v1",
+        "secure-storage-header-v1",
+        "source-evidence-v1",
+        "media-reference-v1",
+        "calendar-event-v1",
+        "business-facade-v1",
+        "local-read-api-v1",
+        "compatibility-baseline-v1"
+      ],
+      "dependencies": [
+        "8.1"
+      ],
+      "parallel_peers": [],
+      "parallel_eligible": false,
+      "outputs": [
+        "Codex 独立审查、必要修复、正式合并、标签和 Release 验证"
+      ],
+      "integration_order": 24,
+      "status": "ready"
+    }
+  ],
+  "gate_note": "Batch 8 accepted: 8.1 accepted after 8.1-audit, total-audit 17/17 remediation and pre-batch-9 optimization 71dbe9f (CI push 44468735503 / PR 44468740959 green on both platforms and release gate PASS); version PR #2 carries the candidate. Batch 9 is ready for Codex; no new PR, main merge, tag or release was created."
+}

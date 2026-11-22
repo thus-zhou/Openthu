@@ -1,0 +1,323 @@
+{
+  "module": "4.2",
+  "title": "课程资料中心与跨课程检索",
+  "batch": 4,
+  "owner": "Hermes",
+  "status": "accepted",
+  "baseline_commit": "323a98b",
+  "delivery_commit": "c66ee2e",
+  "code_commits": [
+    "de72370",
+    "7e7ccd3",
+    "c66ee2e"
+  ],
+  "branch": "hermes/4.2",
+  "worktree": ".local/worktrees/4.2",
+  "version_pr": 2,
+  "paths": [
+    "src/thu_assistant/resources/",
+    "tests/test_resources.py",
+    "tests/synthetic_resources.py"
+  ],
+  "contracts": [
+    "source-evidence-v1",
+    "media-reference-v1",
+    "result-envelope-v1",
+    "stable-identity-samples-v1",
+    "secure-storage-header-v1"
+  ],
+  "interfaces": {
+    "index": [
+      "ResourceCenter.collect",
+      "ResourceCenter.ingest",
+      "ResourceCenter.search",
+      "ResourceCenter.coverage",
+      "ResourceCenter.manifest",
+      "ResourceCenter.resource"
+    ],
+    "download": [
+      "ResourceCenter.preview_download",
+      "ResourceCenter.execute_download",
+      "ResourceCenter.download_records"
+    ],
+    "export": [
+      "ResourceCenter.export_summary"
+    ],
+    "lifecycle": [
+      "ResourceCenter.delete_cache"
+    ],
+    "adapter": [
+      "resources.sources.collect",
+      "resources.sources.LearnDownloader"
+    ]
+  },
+  "outputs": [
+    "加密、按账号与学期隔离的课程资料索引",
+    "跨课程元数据与已读取公告正文检索",
+    "稳定资源清单与同内容/同名/多版本分组",
+    "批量下载预览、确认执行与逐项结果",
+    "安全归档路径与不覆盖写入",
+    "资料摘要导出与下载记录查询"
+  ],
+  "audit": {
+    "report": ".local/audits/4.2-audit.md",
+    "status": "closed",
+    "p0_fixed": 1,
+    "p1_fixed": 11,
+    "p2_fixed": 18,
+    "residual": [],
+    "summary": "P0-1 version monotonicity; P1 index/write ordering, completeness scope, per-operation evidence, body truncation, real notice_detail signature, UTF-8 names, boolean gates, entry cap, Windows test path and record privacy; P2 cancellation records, media scope, STALE find, total_known, source-link state, self-describing results, auth mapping, payload corruption, restore validation, message cap, publish race, export overwrite, delete/plan safety, hash budget, type validation, Windows assertions, record numbers and fixture packaging."
+  },
+  "security_summary": {
+    "identity": "source record id, never title; learn:FILE / learn:NOTICE_ATTACHMENT / learn:ASSIGNMENT_ATTACHMENT",
+    "index_storage": "2.2 SecureStore, purpose INDEX, account_domain CAMPUS, service_domain LEARN; account and semester scoped; decrypted in memory only",
+    "index_limits": {
+      "max_entries_per_semester": 2000,
+      "max_index_bytes": 4194304,
+      "max_body_chars": 2000,
+      "retention_days": 180,
+      "check_history": 20
+    },
+    "version_rules": [
+      "an older known source version never replaces a newer active version",
+      "a content version c:<hash> stores base_version and survives same-base refreshes",
+      "only a strictly newer source version may supersede a content version",
+      "content is committed to the index only after a verified archive write"
+    ],
+    "no_implicit_download": "indexing and preview never call download_file; execution requires confirm=True for one process-local plan",
+    "archive": [
+      "sanitised course component and UTF-8-byte-bounded title plus (uid, version) token",
+      "parent traversal, absolute paths, reserved Windows device names, superscript device names and overlong names refused",
+      "short temp file plus hash re-check plus atomic hard-link publish",
+      "existing file never overwritten; identical content reused; different content reported as conflict",
+      "disk-full, locked-file and name-too-long failures keep the original file and leave no .part file"
+    ],
+    "privacy": [
+      "no absolute download directory in index, download records, export or errors",
+      "download records store destination_id hash and archive-relative path only",
+      "free-text source errors and warnings are reduced to stable code tokens",
+      "no socket/urllib/requests/http import; no print; socket guard test",
+      "export inside a Git work tree refused",
+      "module record stores a repository-relative worktree path only"
+    ],
+    "media": {
+      "account_scope": "SecureStore.account_scope(purpose=MEDIA, account_domain=CAMPUS, service_domain=LEARN)",
+      "service_domain": "LEARN",
+      "task_id": "download record ID",
+      "retention": "EXPLICIT_DELETE",
+      "expires_in_seconds": 86400,
+      "kind": "IMAGE for image MIME/extension, ATTACHMENT otherwise"
+    },
+    "encryption_evidence": "real AES-GCM SecureStore (file-key on Linux, DPAPI on Windows); no test encoder or disabled-encryption mode"
+  },
+  "checks": {
+    "module_tests_linux": {
+      "passed": 98,
+      "skipped": 0,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_resources.py"
+    },
+    "full_offline": {
+      "python_passed": 746,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test"
+    },
+    "check": {
+      "files_checked": 420,
+      "privacy_findings": 0,
+      "mcp_tools": 29,
+      "live_campus_calls": 0,
+      "model_calls": 0,
+      "business_submissions": 0,
+      "command": "python scripts/dev.py check"
+    },
+    "validators": {
+      "plan": "ok, 24 modules / 9 batches",
+      "contracts": "ok, 8 contracts / 9 schema samples / 35 rejection samples / 8 extra samples / 29 legacy tools"
+    },
+    "windows": {
+      "status": "not_run_in_this_worktree",
+      "note": "P1-10 is fixed by using tmp_path instead of a POSIX-only destination; no platform skip is declared. Batch integration must still run tests/test_resources.py on windows-2025."
+    },
+    "audit_probes": {
+      "command": "patched copy of .local/audits/4.2-audit-probes.py with the test fixture moved to tests/synthetic_resources.py",
+      "P0-1": "older version stays SUPERSEDED; c: stays ACTIVE after same-base refresh; default action REUSE c:",
+      "P1-1": "failed write leaves one ACTIVE base version and no phantom c:",
+      "P1-2": "metadata-only refresh reports incomplete and keeps ACTIVE entries; skipped metadata is incomplete",
+      "P1-5": "truncated body yields PARTIAL and BODY_TEXT_COVERAGE_TRUNCATED",
+      "P1-6": "real Course-object notice_detail indexes one attachment",
+      "P1-7": "100-Chinese-character title filename is 137 UTF-8 bytes and downloads",
+      "P1-9": "entry-cap content change fails before writing; index versions stay at one ACTIVE base",
+      "P2-cancel": "two cancelled items persist two download records",
+      "P2-total-known": "total_known=false when source_complete=false",
+      "P2-auth": "AuthenticationRequired maps to AUTH_REQUIRED/AUTH"
+    },
+    "setup_note": "python scripts/dev.py setup-node installed 3 npm packages in this worktree; no package.json or lockfile change was committed"
+  },
+  "acceptance": [
+    {
+      "case": "same-title attachments from different courses keep identity and archive directory",
+      "tests": [
+        "test_same_title_different_course_keeps_identity_and_paths",
+        "test_manifest_has_stable_identity_shape"
+      ]
+    },
+    {
+      "case": "index construction performs no download or upload",
+      "tests": [
+        "test_index_build_never_downloads_or_uploads",
+        "test_adapter_course_filter_limits_scope_and_does_not_mark_other_courses_absent",
+        "test_full_flow_makes_no_socket_connection"
+      ]
+    },
+    {
+      "case": "partial notice reading reports incomplete body coverage",
+      "tests": [
+        "test_body_coverage_is_reported_for_full_text",
+        "test_adapter_reads_attachment_metadata_and_body_state",
+        "test_adapter_reads_assignment_attachments_only_when_requested",
+        "test_truncated_body_is_reported_as_partial"
+      ]
+    },
+    {
+      "case": "one batch failure keeps successful items and continues",
+      "tests": [
+        "test_batch_partial_failure_keeps_successes_and_continues",
+        "test_cancel_stops_remaining_items_without_success_claim",
+        "test_cancelled_items_are_persisted_as_download_records"
+      ]
+    },
+    {
+      "case": "parent paths and reserved device names cannot escape the archive boundary",
+      "tests": [
+        "test_unsafe_titles_cannot_escape_or_use_device_names",
+        "test_title_of_only_dots_is_rejected",
+        "test_existing_file_is_never_overwritten",
+        "test_long_chinese_title_uses_utf8_byte_budget",
+        "test_reserved_windows_names_include_superscript_and_clock",
+        "test_archive_publish_race_never_overwrites",
+        "test_disk_full_leaves_no_partial_file"
+      ]
+    },
+    {
+      "case": "changed content after refresh becomes a new version instead of overwriting",
+      "tests": [
+        "test_new_source_version_supersedes_and_keeps_old_file",
+        "test_content_change_under_same_version_creates_new_version",
+        "test_content_version_survives_same_base_refresh",
+        "test_newer_source_version_supersedes_content_version",
+        "test_older_known_source_version_does_not_replace_active",
+        "test_verify_can_rebuild_a_lost_index_without_overwriting"
+      ]
+    },
+    {
+      "case": "another account cannot read index, references or download records",
+      "tests": [
+        "test_other_account_cannot_read_index_references_or_records",
+        "test_index_is_encrypted_and_persisted"
+      ]
+    },
+    {
+      "case": "export and errors carry no unselected content or private path",
+      "tests": [
+        "test_export_default_fields_exclude_unselected_courses_and_paths",
+        "test_export_with_body_requires_acknowledgement",
+        "test_export_inside_git_tree_is_refused",
+        "test_export_refuses_existing_file_and_allows_explicit_overwrite",
+        "test_download_record_contains_no_absolute_path",
+        "test_download_record_rejects_absolute_paths",
+        "test_error_taxonomy_is_complete_and_leaks_nothing"
+      ]
+    }
+  ],
+  "audit_regressions": [
+    "test_older_known_source_version_does_not_replace_active",
+    "test_content_version_survives_same_base_refresh",
+    "test_newer_source_version_supersedes_content_version",
+    "test_failed_archive_write_does_not_mutate_the_index",
+    "test_existing_user_file_conflict_does_not_poison_index",
+    "test_historical_content_change_is_refused",
+    "test_content_change_at_entry_cap_fails_before_write",
+    "test_content_change_can_prune_a_superseded_version",
+    "test_metadata_only_refresh_does_not_mark_attachments_missing",
+    "test_skipped_course_file_metadata_is_incomplete_not_missing",
+    "test_single_course_failure_does_not_stale_another_course",
+    "test_per_operation_read_evidence_is_aggregated",
+    "test_notice_detail_receives_a_course_object",
+    "test_string_booleans_are_rejected",
+    "test_stale_entry_requires_allow_historical_for_explicit_version",
+    "test_total_known_is_false_when_source_is_incomplete",
+    "test_search_manifest_and_download_records_are_self_describing",
+    "test_authentication_error_is_not_a_download_failure",
+    "test_download_port_maps_expired_authentication",
+    "test_encrypted_payload_that_is_not_json_is_index_corruption",
+    "test_refresh_preserves_known_size_and_updates_course_name",
+    "test_cross_semester_entry_is_rejected_on_load",
+    "test_source_url_is_resanitised_on_load",
+    "test_error_message_caps_a_long_detail",
+    "test_reserved_windows_names_include_superscript_and_clock",
+    "test_archive_publish_race_never_overwrites",
+    "test_export_refuses_existing_file_and_allows_explicit_overwrite",
+    "test_delete_cache_failure_keeps_index_and_plans",
+    "test_pending_plans_are_capped",
+    "test_preview_hash_budget_avoids_unbounded_reads",
+    "test_verify_plan_bytes_count_toward_the_limit",
+    "test_search_and_selections_reject_bad_types",
+    "test_body_truncated_field_requires_body_export",
+    "test_media_registration_uses_media_scope_and_learn_service",
+    "test_media_kind_uses_image_for_an_image_course_file",
+    "test_export_reports_source_link_state",
+    "test_synthetic_fixtures_are_not_in_the_installed_package"
+  ],
+  "limits": [
+    "No PDF, image, Office or audio content parsing; full-text search covers only already-read notice body and assignment instructions. A truncated body is marked body_truncated and full-text search returns PARTIAL.",
+    "A notice without an attachment does not become a resource entry, so its body is not separately searchable.",
+    "Default reuse trusts a saved file with matching hash; same-version content change requires verify_known=True or a new source version.",
+    "The index is a bounded, in-memory-decrypted document (4 MiB, 2000 entries per semester), not an incremental full-text engine.",
+    "One writer per account and semester is assumed; the 2.2 store lock protects writes but the last write wins on concurrent read-modify-write.",
+    "Plans are process-local, expire after 10 minutes, are single-use and are capped at 20 pending plans; a restart requires a new preview.",
+    "STALE entries require allow_historical=True; MISSING entries require include_superseded=True.",
+    "Archive writes use an atomic hard-link publish where supported and a checked replace fallback otherwise; a single writer per destination is assumed.",
+    "Preview hashes existing files within a 512 MiB budget; when the budget is exhausted the item is REVIEW_EXISTING and is not overwritten.",
+    "The current source interface does not provide a reliable page URL, so source_link remains null and the export states source_link_state=NOT_AVAILABLE_IN_THIS_VERSION.",
+    "The module is not registered in queries.py, MCP or CLI; 6.1 owns the public facade and resource error-code registration.",
+    "This result is synthetic engineering evidence only; it does not prove a real campus read or download."
+  ],
+  "cross_module_requests": [
+    {
+      "owner": "6.1",
+      "request": "Register the remaining RESOURCE_* codes in contracts/v0.2/error-classification.json (AUTH_REQUIRED and FORBIDDEN already exist); expose ResourceCenter only, not Archive/Index; use the INDEX account scope for the index and the MEDIA account scope for media registration."
+    },
+    {
+      "owner": "6.2",
+      "request": "Use stable_resource_uid and public fields only; do not read archive-relative paths or download directories. A resource reference is not local file read permission."
+    },
+    {
+      "owner": "6.3",
+      "request": "If the installed layout ships module docs, add resources/README.md to package-data; tests/synthetic_resources.py must not be packaged; no new runtime dependency is required."
+    },
+    {
+      "owner": "7.2",
+      "request": "Include tests/test_resources.py in cross-platform regression. P1-10 removed the POSIX-only test destination; Windows execution of hard-link publish, os.replace fallback and reserved device-name cases is still required."
+    },
+    {
+      "owner": "8.1",
+      "request": "Reconcile learn:FILE:<source record id> (frozen stability sample, used here) with domain_models.resource_uid producing learn:RESOURCE:<id>, so 4.2 and other adapters do not publish two stable identities."
+    }
+  ],
+  "blockers": [],
+  "rollback": "Stop calling ResourceCenter; delete_cache(semester) atomically replaces the encrypted index with an empty record. Downloaded files and the user directory are untouched; the existing Learn course file list and download entry remain available. Do not convert the index to plaintext or bulk-delete archive directories.",
+  "next_step": "Batch integration reconnects 4.1-4.5 on one commit, runs batch-level check, the full offline suite and contract linkage, and runs windows-2025.",
+  "evidence_boundary": {
+    "synthetic_only": true,
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0,
+    "real_download_evidence": false
+  },
+  "batch_state": "accepted at the batch-4 integration commit recorded in 交付/批次门禁.json",
+  "next": "Batch 5 may start once the gate records batch 4 accepted; this module opens no PR, does not merge main and does not publish a release."
+}

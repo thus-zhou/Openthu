@@ -1,0 +1,54 @@
+{
+  "synthetic": true,
+  "note": "合成课程。同名课程保留不同编号与教学班；跨学期同名同样保留。",
+  "courses": [
+    {
+      "course_id": "SYNTH-COURSE-A",
+      "semester": "2026-2027-1",
+      "title": "合成数据结构",
+      "teacher_names": ["合成教师甲"],
+      "role": "student",
+      "teaching_class_id": "CLASS-01"
+    },
+    {
+      "course_id": "SYNTH-COURSE-A2",
+      "semester": "2026-2027-1",
+      "title": "合成数据结构",
+      "teacher_names": ["合成教师乙"],
+      "role": "student",
+      "teaching_class_id": "CLASS-02"
+    },
+    {
+      "course_id": "SYNTH-COURSE-B",
+      "semester": "2026-2027-1",
+      "title": "合成操作系统",
+      "teacher_names": ["合成教师丙"],
+      "role": "student",
+      "teaching_class_id": "CLASS-11"
+    },
+    {
+      "course_id": "SYNTH-COURSE-C",
+      "semester": "2026-2027-2",
+      "title": "合成操作系统",
+      "teacher_names": ["合成教师丁"],
+      "role": "student",
+      "teaching_class_id": "CLASS-21"
+    },
+    {
+      "course_id": "SYNTH-COURSE-D",
+      "semester": "2026-2027-1",
+      "title": "合成同名课程",
+      "teacher_names": ["合成教师戊"],
+      "role": "student",
+      "teaching_class_id": "CLASS-31"
+    },
+    {
+      "course_id": "SYNTH-COURSE-E",
+      "semester": "2026-2027-1",
+      "title": "合成同名课程",
+      "teacher_names": ["合成教师己"],
+      "role": "student",
+      "teaching_class_id": "CLASS-32"
+    }
+  ]
+}

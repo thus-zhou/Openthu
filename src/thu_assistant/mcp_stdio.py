@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import os
 from datetime import datetime, timezone
 import sys
 import queue
@@ -14,9 +15,12 @@ from learn_assistant.mcp_stdio import TOOL_DEFINITIONS as LEARN_TOOLS
 from . import __version__
 from .bridge import CampusError, gateway, close_gateway, request_control
 from . import catalog
+from . import source_state
 from .browser import BrowserManager
 from .actions import ActionEngine
-from .queries import QueryEngine, describe, legacy_metadata, metadata
+from .facade import BusinessFacade, FacadeError
+from .facade.requests import TERMINAL as REQUEST_TERMINAL, scope as request_scope
+from .queries import QueryEngine, legacy_metadata, metadata
 from . import models
 from . import todos
 
@@ -36,8 +40,8 @@ TOOLS=[t for t in LEARN_TOOLS if t['name'] not in ('login','get_login_status')]+
     tool('get_login_status','实时检查网络学堂的业务会话；不把某个站点登录成功视为所有服务都已登录。'),
     tool('list_services','查询清华官方服务目录（含图书馆、入校、体育场馆等）；目录命中不等于业务已验证。',{'query':S,'category':S}),
     tool('refresh_service_directory','读取 info 门户全部应用目录及分页，更新本地服务索引；不逐站登录、不提交业务。'),
-    tool('describe_service','列出本地代码登记的只读查询、参数与分页方式；网页内容不能登记新能力。',{'service_id':S},('service_id',)),
-    tool('query_service','执行登记过的只读查询；游标绑定本次参数与快照，十分钟失效。返回来源、完整性、缺页及证据级别。',
+    tool('describe_service','通过统一业务门面列出该服务已登记的只读查询、参数、分页方式、写操作能力与阻塞原因；网页内容不能登记新能力。',{'service_id':S},('service_id',)),
+    tool('query_service','通过统一业务门面执行登记过的只读查询；游标绑定本次参数与快照，十分钟失效。返回来源、完整性、缺页及证据级别。service_id=local 时提供 agenda/agenda_changes/resources 本地汇总读取。',
          {'service_id':S,'operation':S,'parameters':{'type':'object'},'cursor':CURSOR,'page_size':{'type':'integer','minimum':1,'maximum':200}},('service_id','operation','parameters')),
     tool('prepare_service_action','准备登记的 create/cancel 业务预览和十分钟加密计划；不提交。体育预约和取消按当前场次或本人记录生成预览。',
          {'service_id':S,'operation':S,'parameters':{'type':'object'}},('service_id','operation','parameters')),
@@ -50,7 +54,7 @@ TOOLS=[t for t in LEARN_TOOLS if t['name'] not in ('login','get_login_status')]+
          {'url':S,'destination':S,'max_bytes':{'type':'integer','minimum':1024,'maximum':1073741824}},('url','destination')),
     tool('get_service_status','实时读取指定服务入口并报告实际页面状态，不把 HTTP 200 当作登录成功。',{'service_id':S},('service_id',)),
     tool('list_models','读取学校官方模型目录和能力标注；目录不批量生成探测，历史目录明确标时。',{'refresh':B}),
-    tool('get_todos','按规则汇总未来七天作业、借阅与已有图书馆预约，含未完成逾期项；保留每个来源的失败、读取范围和时间，最多200项一页。默认实时重查，不创建提醒或预约。',todos.PROPERTIES),
+    tool('get_todos','按规则汇总未来七天作业、借阅与已有图书馆预约，含未完成逾期项；学业考试/课表为可选来源，默认阻塞并返回 ADAPTER_REQUIRED。保留每个来源的失败、读取范围和时间，最多200项一页。默认实时重查，不创建提醒或预约。',todos.PROPERTIES),
     tool('model_chat','调用学校模型。prompt/messages 二选一；仅发送指定文本与资料，返回用量和来源映射；支持标准 MCP 取消。',models.PROPERTIES),
     tool('browser_open','用已加密保存的清华会话打开独立浏览器，支持动态网页、子系统及预约表单；仅代表页面观察，不代表提交成功。',
          {**TARGET,'visible':B}),
@@ -73,7 +77,8 @@ TOOL_BY_NAME['model_chat']['inputSchema']['oneOf']=[
     {'required':['messages'],'not':{'required':['prompt']}}]
 
 class CampusAssistant:
-    def __init__(self,learning_factory=None,bridge=gateway):
+    def __init__(self,learning_factory=None,bridge=gateway,*,resources=None,media=None,
+                 media_binding=None,submissions=None,facade=None):
         self.verify_learning_state=learning_factory is None
         self.learning_factory=learning_factory or (lambda:LearnAssistant(create_read_provider()))
         self.bridge=bridge
@@ -89,11 +94,31 @@ class CampusAssistant:
         from . import library_contracts
         from .library_actions import LibraryAction
         self.actions.adapters.update({('library',op):LibraryAction(self.browsers,op) for op in library_contracts.INPUTS})
+        # 5.1 cross-module request: renewal is registered beside the three
+        # legacy library operations; only an official handoff (no verified
+        # contract) can be prepared, execution stays disabled.
+        from .renewal import RenewalAction
+        self.actions.adapters[('library',library_contracts.RENEW_LOAN)]=RenewalAction(self.browsers)
         self.queries=QueryEngine(self)
         self.todos=todos.TodoEngine(self)
+        # 6.1: composition-root providers are injected, never invented here.  A
+        # missing resource index or media pipeline stays a named capability gap.
+        self.resources=resources
+        self.media=media
+        self.media_binding=media_binding
+        self.facade=facade or BusinessFacade(self,resources=resources,media=media,submissions=submissions)
 
     def _learning(self,force=False):
-        if self.verify_learning_state:self.bridge('ensure_learn_session')
+        if self.verify_learning_state:
+            try:
+                identity = self.bridge('action_identity').get('account_id')
+            except CampusError:
+                identity = None
+            if identity:
+                os.environ['THU_LEARN_ACCOUNT'] = str(identity)
+            else:
+                os.environ.pop('THU_LEARN_ACCOUNT', None)
+            self.bridge('ensure_learn_session')
         store=SecureSessionStore()
         try:
             st=store.path.stat();signature=(st.st_mtime_ns,st.st_size)
@@ -101,6 +126,10 @@ class CampusAssistant:
         if force or self.learning is None or signature!=self.session_signature:
             self.learning=self.learning_factory();self.session_signature=signature
         return self.learning
+
+    def model_media_binding(self):
+        """The injected 3.3/4.5 binding, or None so image calls fail closed."""
+        return self.media_binding() if self.media_binding is not None else None
 
     def call(self,name,args):
         if name not in TOOL_BY_NAME:raise CampusError('UNKNOWN_TOOL')
@@ -121,21 +150,21 @@ class CampusAssistant:
                 result['service']=self.bridge('read',**catalog.request_arguments(service_id=args['service_id']))
             return result
         if name=='get_login_status':
-            result=self._learning().get_login_status();authenticated=result['status']['authenticated']
+            result=self._learning().get_login_status();status=result.get('status') or {};authenticated=status.get('authenticated');error_code=status.get('error_code')
             return {**metadata('learn','status','https://learn.tsinghua.edu.cn/','AUTHENTICATED_PAGE' if authenticated else 'NONE',complete=True),
-                **result,'service_state':'AUTHENTICATED' if authenticated else 'AUTH_REQUIRED'}
-        if name=='describe_service':return describe(**args)
-        if name=='query_service':return self.queries.query(**args)
+                **result,'service_state':'AUTHENTICATED' if authenticated else ('AUTH_UNKNOWN' if error_code else 'AUTH_REQUIRED')}
+        if name=='describe_service':return self.facade.describe_service(**args)
+        if name=='query_service':return self.facade.query(**args)
         if name=='get_todos':return self.todos.get(**args)
-        if name=='prepare_service_action':return self.actions.prepare(**args)
-        if name=='execute_service_action':return self.actions.execute(**args)
-        if name=='get_action_result':return self.actions.result(**args)
+        if name=='prepare_service_action':return self.facade.prepare(**args)
+        if name=='execute_service_action':return self.facade.execute(**args)
+        if name=='get_action_result':return self.facade.result(**args)
         if name=='list_services':return catalog.list_services(**args)
         if name=='refresh_service_directory':return catalog.refresh_directory()
         if name in ('read_page','get_service_status'):
             return self.queries.read_page(args,operation='status' if name=='get_service_status' else 'page')
         if name=='list_models':return self.bridge('models',**args)
-        if name=='model_chat':return models.chat(self.bridge,args)
+        if name=='model_chat':return models.chat(self.bridge,args,media=self.model_media_binding())
         if name=='download_campus_file':return self.bridge('download',**args)
         if name=='browser_open':return self.browsers.open(**args)
         if name=='browser_snapshot':return self.browsers.snapshot(**args)
@@ -180,7 +209,11 @@ class McpServer:
                 result={'content':[{'type':'text','text':json.dumps(value,ensure_ascii=False)}],
                         'structuredContent':value,'isError':False}
             except Exception as error:
-                code=error.code if isinstance(error,CampusError) else type(error).__name__
+                # A provider error may not inherit CampusError (4.2/4.1 do not);
+                # its registered .code must survive the boundary, and only a
+                # code-less exception falls back to the class name.
+                raw_code=getattr(error,'code',None)
+                code=raw_code if isinstance(raw_code,str) and raw_code else type(error).__name__
                 args=params.get('arguments') or {}
                 service=args.get('service_id','learn' if str(params.get('name','')).startswith('list_') else 'campus') if isinstance(args,dict) else 'campus'
                 if params.get('name') in ('list_models','model_chat'):service='madmodel'
@@ -195,8 +228,14 @@ class McpServer:
                     'LIBRARY_NETWORK_ERROR':'NETWORK_ERROR','LIBRARY_RESPONSE_INVALID':'BUSINESS_RESPONSE_INVALID',
                     'SPORTS_NETWORK_ERROR':'NETWORK_ERROR','SPORTS_QUERY_REJECTED':'BUSINESS_QUERY_FAILED','SPORTS_RESPONSE_INVALID':'BUSINESS_RESPONSE_INVALID',
                     'LIBRARY_QUERY_FAILED':'BUSINESS_QUERY_FAILED','LIBRARY_REDIRECT_BLOCKED':'REDIRECT_BLOCKED'}
-                value={**metadata(service,str(params.get('name')),status=states.get(code,'ERROR')),'data':None,
-                    'error':{'code':code,'message':'需要官方二次认证，请使用已授权验证码来源完成本次认证。' if code=='TWO_FACTOR_REQUIRED' else '操作未完成；请依据错误码检查会话、页面或参数，不得报告业务成功。'}}
+                value={**metadata(service,str(params.get('name')),status=states.get(code,'ERROR')),'data':None}
+                if isinstance(error,FacadeError) and error.capability:
+                    # A registered-but-unavailable capability names itself; the
+                    # block is already sanitised and never carries error text.
+                    value['capability']=error.capability
+                classified=source_state.public_error(code if isinstance(code,str) else 'UNKNOWN')
+                value['error']={**classified,'code':code,
+                    'message':'需要官方二次认证，请使用已授权验证码来源完成本次认证。' if code=='TWO_FACTOR_REQUIRED' else classified['message']}
                 if isinstance(error,CampusError) and error.retry_after_ms is not None:
                     value['error']['retry_after_ms']=error.retry_after_ms
                 if params.get('name')=='model_chat':
@@ -205,14 +244,98 @@ class McpServer:
         else:return {'jsonrpc':'2.0','id':rid,'error':{'code':-32601,'message':'Method not found'}}
         return {'jsonrpc':'2.0','id':rid,'result':result}
 
+def request_key(rid):
+    """A JSON-RPC id is (type, value): 1 and "1" are different requests."""
+    if rid is None:
+        return None
+    return f'{type(rid).__name__}:{rid}'
+
+
+def error_response(rid, code):
+    """One public error result with the frozen classified fields."""
+    public = source_state.public_error(code)
+    public['code'] = code
+    value = {'error': public}
+    return {'jsonrpc': '2.0', 'id': rid,
+            'result': {'content': [{'type': 'text', 'text': json.dumps(value)}],
+                       'structuredContent': value, 'isError': True}}
+
+
+class RequestRunner:
+    """Process one MCP request under the facade request registry.
+
+    Queue state, cancellation, progress and cleanup are bound to the same
+    request id here, so the stdio loop and its tests exercise one path.
+    """
+
+    def __init__(self, server, registry, emit, *, timeout=240):
+        self.server = server
+        self.registry = registry
+        self.emit = emit
+        self.timeout = timeout
+
+    def run(self, request, event, enqueued):
+        rid = request.get('id')
+        step = [0]
+        token = ((request.get('params') or {}).get('_meta') or {}).get('progressToken')
+
+        def progress(status):
+            if token is not None:
+                step[0] += 1
+                self.emit({'jsonrpc': '2.0', 'method': 'notifications/progress',
+                           'params': {'progressToken': token, 'progress': step[0],
+                                      'message': status, 'request_id': request_key(rid)}})
+
+        scope = None
+        response = None
+        if rid is not None:
+            try:
+                scope = self.registry.begin(request_key(rid))
+            except FacadeError as error:
+                response = error_response(rid, error.code)
+                self.emit(response)
+                return response
+        try:
+            if event.is_set() or time.monotonic() - enqueued >= self.timeout:
+                if scope is not None:
+                    self.registry.finish(scope, state='CANCELLED' if event.is_set() else 'FINISHED',
+                                         reason='CANCELLED_BEFORE_START' if event.is_set() else 'QUEUE_TIMEOUT')
+                value = {'error': {'code': 'CANCELLED' if event.is_set() else 'QUEUE_TIMEOUT'}}
+                if (request.get('params') or {}).get('name') == 'model_chat':
+                    value.update(usage=None, usage_state='UNKNOWN', generation_started=False,
+                                 output_is_authorization=False)
+                response = {'jsonrpc': '2.0', 'id': rid, 'result': {
+                    'content': [{'type': 'text', 'text': json.dumps(value)}],
+                    'structuredContent': value, 'isError': True}}
+            else:
+                if scope is not None:
+                    self.registry.start(scope)
+                with request_control(event, progress), request_scope(scope):
+                    response = self.server.handle(request)
+            if response is not None:
+                self.emit(response)
+            return response
+        finally:
+            if scope is not None and scope.state not in REQUEST_TERMINAL:
+                if scope.event.is_set() or scope.state == 'CANCELLATION_REQUESTED':
+                    # A running cancel stays visible after the handler returns.
+                    self.registry.finish(scope, state='CANCELLED')
+                elif isinstance(response, dict) and (response.get('result') or {}).get('isError'):
+                    self.registry.finish(scope, state='FAILED')
+                else:
+                    self.registry.finish(scope, state='FINISHED')
+
+
 def main():
     if hasattr(sys.stdin,'reconfigure'):sys.stdin.reconfigure(encoding='utf-8')
     if hasattr(sys.stdout,'reconfigure'):sys.stdout.reconfigure(encoding='utf-8')
     server=McpServer()
+    registry=server.assistant.facade.requests
     inbox=queue.Queue(maxsize=64)
     pending={};pending_lock=threading.Lock();output_lock=threading.Lock()
     def emit(value):
         with output_lock:print(json.dumps(value,ensure_ascii=False),flush=True)
+    runner=RequestRunner(server,registry,emit)
     def receive():
         try:
             for line in sys.stdin:
@@ -225,19 +348,25 @@ def main():
                     meta=(request.get('params') or {}).get('_meta')
                     if meta is not None and not isinstance(meta,dict):raise ValueError()
                     if request['method']=='notifications/cancelled':
+                        key=request_key((request.get('params') or {}).get('requestId'))
                         with pending_lock:
-                            event=pending.get((request.get('params') or {}).get('requestId'))
+                            event=pending.get(key)
                             if event:event.set()
+                        # The facade records whether the request was still
+                        # queued or already running, and runs its cleanup.
+                        try:registry.cancel(key,'PROTOCOL_CANCELLED')
+                        except CampusError:pass
                         continue
                     rid=request.get('id')
                     if rid is not None and (isinstance(rid,bool) or not isinstance(rid,(str,int))):raise ValueError()
+                    key=request_key(rid)
                     event=threading.Event()
                     with pending_lock:
-                        if rid is not None and rid in pending:raise ValueError()
-                        if rid is not None:pending[rid]=event
+                        if key is not None and key in pending:raise ValueError()
+                        if key is not None:pending[key]=event
                     try:inbox.put_nowait((request,event,time.monotonic()))
                     except queue.Full:
-                        with pending_lock:pending.pop(rid,None)
+                        with pending_lock:pending.pop(key,None)
                         emit({'jsonrpc':'2.0','id':rid,'error':{'code':-32000,'message':'QUEUE_FULL'}})
                 except (ValueError,TypeError,AttributeError):
                     emit({'jsonrpc':'2.0','id':None,'error':{'code':-32700,'message':'Invalid JSON-RPC request'}})
@@ -247,23 +376,10 @@ def main():
         while True:
             item=inbox.get()
             if item is None:break
-            request,event,enqueued=item;rid=request.get('id');step=[0]
-            token=((request.get('params') or {}).get('_meta') or {}).get('progressToken')
-            def progress(status):
-                if token is not None:
-                    step[0]+=1
-                    emit({'jsonrpc':'2.0','method':'notifications/progress','params':{'progressToken':token,'progress':step[0],'message':status}})
-            try:
-                if event.is_set() or time.monotonic()-enqueued>=240:
-                    value={'error':{'code':'CANCELLED' if event.is_set() else 'QUEUE_TIMEOUT'}}
-                    if (request.get('params') or {}).get('name')=='model_chat':
-                        value.update(usage=None,usage_state='UNKNOWN',generation_started=False,output_is_authorization=False)
-                    response={'jsonrpc':'2.0','id':rid,'result':{'content':[{'type':'text','text':json.dumps(value)}],'structuredContent':value,'isError':True}}
-                else:
-                    with request_control(event,progress):response=server.handle(request)
-                if response is not None:emit(response)
+            request,event,enqueued=item
+            try:runner.run(request,event,enqueued)
             finally:
-                with pending_lock:pending.pop(rid,None)
+                with pending_lock:pending.pop(request_key(request.get('id')),None)
     finally:
         close_gateway()
         server.assistant.browsers.close_all()

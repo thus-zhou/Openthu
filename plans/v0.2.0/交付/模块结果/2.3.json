@@ -1,0 +1,165 @@
+{
+  "module": "2.3",
+  "title": "校园来源证据与业务数据契约",
+  "batch": 2,
+  "owner": "Hermes",
+  "status": "accepted",
+  "baseline_commit": "970cb0d",
+  "integration_parent_commit": "eff7d1a",
+  "delivery_commit": "f7fe6408ad3e9e16bdee2ca041cb648a2fc2b2ab",
+  "audit_fix_commit": "d4a2f03d7395c41ad71569aa1520d0214abffd92",
+  "code_commits": [
+    "f7fe640",
+    "d4a2f03"
+  ],
+  "branch": "hermes/1-install-diagnostics",
+  "version_pr": 2,
+  "paths": [
+    "contracts/v0.2/sources/",
+    "docs/contracts/",
+    "tests/fixtures/sources/",
+    "tests/test_source_contracts.py"
+  ],
+  "contracts": [
+    "source-evidence-v1",
+    "calendar-event-v1 (reused from 1.1)",
+    "course-v1",
+    "resource-v1",
+    "grade-v1",
+    "order-v1",
+    "attachment-v1",
+    "assignment-v1",
+    "submission-v1",
+    "renewal-v1",
+    "model-image-capability-v1",
+    "result-envelope-v1"
+  ],
+  "checks": {
+    "module_tests_linux": {
+      "passed": 6,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_source_contracts.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "fixtures": 7,
+      "schema_samples": 9,
+      "rejection_samples": 24,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "compatibility_baselines": 1,
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 497,
+      "python_skipped": 5,
+      "python_failed": 0,
+      "node_passed": 54,
+      "node_failed": 0,
+      "check_files": 369,
+      "check_findings": 0,
+      "commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "worktree": "shared batch-2 integration tree; not a 2.3-only count"
+    },
+    "github_actions": {
+      "ubuntu-24.04": "success",
+      "windows-2025": "success",
+      "head_sha": "34c463d97fe15ff25a2054506b5aa5e47c70aa5e",
+      "note": "The earlier 3b848d3/a273d0e/d4a2f03 Windows failures were 2.1 configuration and 2.2 secure-store defects; 2.3 tests never failed."
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0
+  },
+  "accepted_cases": [
+    "login page returns HTTP 200 but no business data; is_success=false and is_real_empty=false",
+    "same-title courses in different semesters stay separate; missing stable ids never merge",
+    "empty result, first page empty with a next page, and source failure stay distinct",
+    "upload staging, draft save and final submission are separate states; only SUBMITTED is final",
+    "SUBMITTED requires result_observed=true and a remote_submission_id",
+    "renewal eligibility may be ELIGIBLE while execution FAILED; a failed renewal keeps its due date",
+    "renewal_uid is derived as <source_id>:RENEWAL:<loan_uid> and is checked",
+    "model catalog flag and current protocol stay UNVERIFIED when they disagree",
+    "learn.course_files maps nine attachment-v1 fields, including download_state and external_transfer_allowed",
+    "every source has an owner and at least one module-level readiness conclusion",
+    "every fixture is synthetic and every schema sample/rejection sample is executed"
+  ],
+  "blocked": [
+    {
+      "module": "4.1",
+      "capability": "timetable, exams and grades",
+      "status": "BLOCKED_SOURCE_EVIDENCE"
+    },
+    {
+      "module": "4.5",
+      "capability": "model image input",
+      "status": "BLOCKED_SOURCE_EVIDENCE"
+    },
+    {
+      "module": "5.1",
+      "capability": "library renewal execution",
+      "status": "BLOCKED_SOURCE_EVIDENCE"
+    },
+    {
+      "module": "5.3",
+      "capability": "assignment upload, draft and final submit",
+      "status": "BLOCKED_SOURCE_EVIDENCE"
+    }
+  ],
+  "limits": [
+    "Offline evidence package only: no real campus login, read, booking, payment or submission was performed.",
+    "The registry documents existing code fields and intended canonical fields; it does not implement runtime normalisation for downstream modules.",
+    "library.renewal eligibility reading is PARTIAL/LIMITED; only renewal execution is blocked.",
+    "visitors.form has only a public entry point; the current form and permission contract remain blocked for 4.4.",
+    "A JSON Schema cannot express every business rule; the explicit semantic checks in validate.py are the executable part of those rules."
+  ],
+  "rollback": "Revert contracts/v0.2/sources/, docs/contracts/ and tests/fixtures/sources/ to the 1.1 tree and delete tests/test_source_contracts.py. No user data, credential or campus session is touched; module 2.3 has no runtime code path.",
+  "next": "2.3 is accepted and mirrored at plans/v0.2.0/交付/模块结果/2.3.json. Batch 2 is accepted and batch 3 is ready. Downstream modules must consume these contracts without upgrading a BLOCKED_SOURCE_EVIDENCE conclusion to success.",
+  "cross_module_requests": [
+    "contracts/v0.2/README.md and docs/contracts: 1.1 owner receives the added source-contract index; no frozen field semantics changed.",
+    "3.2/4.1/4.5/5.1/5.3 must implement the runtime normalisation rules (empty title, uppercase role, renewal identity) that the contracts can only describe."
+  ],
+  "reaudit": {
+    "date": "2026-11-17",
+    "scope": "batch-2 integration re-audit",
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0,
+    "fixes": [
+      "renewal_uid semantic check tightened to require the ':RENEWAL:<loan_uid>' suffix; test_renewal_identity_requires_the_renewal_segment added.",
+      "Contract-side module-result refreshed (delivery, audit-fix commit, current CI, retained limits) and mirrored here."
+    ],
+    "module_tests": {
+      "passed": 6,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_source_contracts.py"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 505,
+      "python_skipped": 5,
+      "python_failed": 0,
+      "node_passed": 54,
+      "check_files": 371,
+      "check_findings": 0
+    }
+  }
+}

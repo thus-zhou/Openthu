@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openthu.invalid/contracts/v0.2/sources/data-models/order.schema.json",
+  "title": "Openthu v0.2 canonical order or reservation",
+  "description": "A reservation, loan or payment-bearing record normalized from one campus source. Platform approval, payment and refund are separate axes and must not be collapsed into a single success flag.",
+  "x-contract-version": "order-v1",
+  "x-owner": "2.3/Hermes",
+  "x-status": "frozen",
+  "x-semantics": "Internal normalized transaction record. The platform_status and approval_status values are source labels retained for diagnosis; status, payment_status and refund_status are Openthu interpretations.",
+  "x-identity-rule": "order_uid = <source_id>:ORDER:<source_record_id>. Title and array position are display-only. A missing source record id yields order_uid null and identity_state MISSING_STABLE_ID.",
+  "x-unknown-values": {
+    "source_record_id": null,
+    "order_uid": null,
+    "platform_status": null,
+    "approval_status": null,
+    "paid_amount_fen": null,
+    "expected_total_fen": null,
+    "start_at": null,
+    "end_at": null,
+    "due_at": null,
+    "null_meaning": "unknown or not applicable; null is never a paid, approved or completed state"
+  },
+  "type": "object",
+  "required": [
+    "source_id",
+    "source_record_id",
+    "order_uid",
+    "order_kind",
+    "title",
+    "status",
+    "platform_status",
+    "approval_status",
+    "payment_status",
+    "refund_status",
+    "paid_amount_fen",
+    "expected_total_fen",
+    "currency",
+    "start_at",
+    "end_at",
+    "due_at",
+    "renewal_state",
+    "identity_state",
+    "source_evidence_id",
+    "synthetic"
+  ],
+  "properties": {
+    "source_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{2,120}$"
+    },
+    "source_record_id": {
+      "type": ["string", "null"],
+      "maxLength": 240
+    },
+    "order_uid": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z][a-z0-9_.-]{1,80}:ORDER:[A-Za-z0-9_.:-]{1,180}$",
+      "maxLength": 280
+    },
+    "order_kind": {
+      "type": "string",
+      "enum": ["SPORTS_RESERVATION", "LIBRARY_SEAT", "LIBRARY_ROOM", "LIBRARY_LOAN", "OTHER"]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "PENDING_PAYMENT",
+        "PROCESSING",
+        "PAID",
+        "PENDING_APPROVAL",
+        "SCHEDULED",
+        "COMPLETED",
+        "CANCELLED",
+        "FAILED",
+        "UNKNOWN"
+      ]
+    },
+    "platform_status": {
+      "type": ["string", "null"],
+      "maxLength": 120
+    },
+    "approval_status": {
+      "type": ["string", "null"],
+      "maxLength": 120
+    },
+    "payment_status": {
+      "type": "string",
+      "enum": [
+        "UNPAID",
+        "PENDING_PAYMENT",
+        "PROCESSING",
+        "PAID",
+        "PAYMENT_CANCELLED",
+        "PAYMENT_EXPIRED",
+        "UNKNOWN"
+      ]
+    },
+    "refund_status": {
+      "type": "string",
+      "enum": [
+        "NONE",
+        "REQUESTED",
+        "REJECTED",
+        "REFUNDING",
+        "REFUNDED",
+        "FAILED",
+        "PENDING",
+        "MANUAL",
+        "UNKNOWN"
+      ]
+    },
+    "paid_amount_fen": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "expected_total_fen": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "currency": {
+      "const": "CNY"
+    },
+    "start_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "end_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "due_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "renewal_state": {
+      "type": "string",
+      "enum": ["NOT_APPLICABLE", "ELIGIBLE", "NOT_ELIGIBLE", "ATTEMPTED", "UNKNOWN"]
+    },
+    "identity_state": {
+      "type": "string",
+      "enum": ["STABLE", "MISSING_STABLE_ID", "CONFLICT"]
+    },
+    "source_evidence_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 200}
+    },
+    "synthetic": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {"identity_state": {"const": "STABLE"}},
+        "required": ["identity_state"]
+      },
+      "then": {
+        "properties": {
+          "source_record_id": {"type": "string", "minLength": 1},
+          "order_uid": {"type": "string"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"identity_state": {"const": "MISSING_STABLE_ID"}},
+        "required": ["identity_state"]
+      },
+      "then": {
+        "properties": {"order_uid": {"type": "null"}}
+      }
+    }
+  ],
+  "x-compatibility-sample": {
+    "source_id": "sports.orders",
+    "source_record_id": "SYNTHETIC-ORDER-1",
+    "order_uid": "sports.orders:ORDER:SYNTHETIC-ORDER-1",
+    "order_kind": "SPORTS_RESERVATION",
+    "title": "合成体育场预约",
+    "status": "SCHEDULED",
+    "platform_status": "RESV_EFFECT",
+    "approval_status": "RESV_APPROVE_PASS",
+    "payment_status": "PAID",
+    "refund_status": "NONE",
+    "paid_amount_fen": 2000,
+    "expected_total_fen": 2000,
+    "currency": "CNY",
+    "start_at": "2026-11-20T18:00:00+08:00",
+    "end_at": "2026-11-20T19:00:00+08:00",
+    "due_at": null,
+    "renewal_state": "NOT_APPLICABLE",
+    "identity_state": "STABLE",
+    "source_evidence_id": "sports.orders",
+    "warnings": [],
+    "synthetic": true
+  },
+  "x-rejection-samples": [
+    {
+      "why": "a negative paid amount is not a valid amount",
+      "value": {
+        "source_id": "sports.orders",
+        "source_record_id": "SYNTHETIC-ORDER-1",
+        "order_uid": "sports.orders:ORDER:SYNTHETIC-ORDER-1",
+        "order_kind": "SPORTS_RESERVATION",
+        "title": "合成体育场预约",
+        "status": "SCHEDULED",
+        "platform_status": "RESV_EFFECT",
+        "approval_status": "RESV_APPROVE_PASS",
+        "payment_status": "PAID",
+        "refund_status": "NONE",
+        "paid_amount_fen": -1,
+        "expected_total_fen": 2000,
+        "currency": "CNY",
+        "start_at": "2026-11-20T18:00:00+08:00",
+        "end_at": "2026-11-20T19:00:00+08:00",
+        "due_at": null,
+        "renewal_state": "NOT_APPLICABLE",
+        "identity_state": "STABLE",
+        "source_evidence_id": "sports.orders",
+        "synthetic": true
+      }
+    },
+    {
+      "why": "SUCCESS is not a payment status and must not replace the source mapping",
+      "value": {
+        "source_id": "sports.orders",
+        "source_record_id": "SYNTHETIC-ORDER-1",
+        "order_uid": "sports.orders:ORDER:SYNTHETIC-ORDER-1",
+        "order_kind": "SPORTS_RESERVATION",
+        "title": "合成体育场预约",
+        "status": "SCHEDULED",
+        "platform_status": "RESV_EFFECT",
+        "approval_status": "RESV_APPROVE_PASS",
+        "payment_status": "SUCCESS",
+        "refund_status": "NONE",
+        "paid_amount_fen": 2000,
+        "expected_total_fen": 2000,
+        "currency": "CNY",
+        "start_at": "2026-11-20T18:00:00+08:00",
+        "end_at": "2026-11-20T19:00:00+08:00",
+        "due_at": null,
+        "renewal_state": "NOT_APPLICABLE",
+        "identity_state": "STABLE",
+        "source_evidence_id": "sports.orders",
+        "synthetic": true
+      }
+    }
+  ]
+}

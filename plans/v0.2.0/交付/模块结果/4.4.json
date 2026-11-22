@@ -1,0 +1,403 @@
+{
+  "module": "4.4",
+  "title": "统一办理框架与跨平台授权凭据",
+  "batch": 4,
+  "owner": "Hermes",
+  "status": "accepted",
+  "status_note": "Implementation, module tests and the 4.4 audit remediation (P0=0, P1=3, P2=14) are complete and verified; reconnected in the single batch-4 integration commit.",
+  "baseline_commit": "323a98b",
+  "delivery_commit": "cf255de",
+  "previous_delivery_commit": "8a36186",
+  "branch": "hermes/4.4",
+  "worktree": ".local/worktrees/4.4",
+  "version_pr": 2,
+  "paths": [
+    "src/thu_assistant/actions.py",
+    "src/thu_assistant/action_store.py",
+    "src/thu_assistant/action_recovery.py",
+    "src/thu_assistant/browser.py",
+    "src/thu_assistant/consent/",
+    "tests/test_action_framework.py",
+    "ACTION-FRAMEWORK.md",
+    "pyproject.toml",
+    "MANIFEST.in"
+  ],
+  "contracts": [
+    "business-facade-v1",
+    "secure-storage-header-v1",
+    "error-classification-v1"
+  ],
+  "interfaces": {
+    "authorization": [
+      "consent.VERSION",
+      "consent.DECLINED",
+      "consent.NOT_APPLICABLE",
+      "consent.issue",
+      "consent.verify",
+      "consent.HostConsent.issue_for",
+      "consent.HostConsent.put",
+      "consent.HostConsent.peek",
+      "consent.HostConsent.take",
+      "consent.HostConsent.discard",
+      "consent.HostConsent.verify_signed",
+      "consent.authorize"
+    ],
+    "engine": [
+      "ActionEngine.prepare",
+      "ActionEngine.execute",
+      "ActionEngine.result",
+      "ActionEngine.ledger",
+      "describe_states",
+      "next_actions",
+      "public"
+    ],
+    "adapter": [
+      "preview(business)",
+      "preflight(record)",
+      "dispatch(record, gate) or dispatch(record, gate, ledger) when accepts_ledger=True",
+      "reconcile(record)"
+    ],
+    "cli": [
+      "python -m thu_assistant.consent --plan <operation_id>",
+      "python -m thu_assistant.action_recovery --state-dir <actions-v1>"
+    ]
+  },
+  "host_authorization": {
+    "protocol": "host-authorization-v1",
+    "bound_fields": [
+      "plan_id",
+      "account",
+      "digest",
+      "adapter_version",
+      "challenge",
+      "source",
+      "reference",
+      "issued_at",
+      "expires_at"
+    ],
+    "challenge": "64 lowercase hex characters generated per plan; never public; added to pre-4.4 records before local confirmation",
+    "signature": "HMAC-SHA256 with a 32-byte host key held in protected storage",
+    "single_use": "peek verifies without consuming, take consumes after a successful preflight; success, decline or plan expiry discards the file",
+    "issuance_paths": [
+      "local interactive terminal: python -m thu_assistant.consent --plan <id> (shows every business field and the digest prefix; requires the exact word CONFIRM)",
+      "trusted in-process callback: the existing Windows MessageBox returns a legacy dictionary that the engine normalizes into a signed, challenge-bound grant before storage; DECLINED is an explicit refusal, NOT_APPLICABLE falls back to a pending grant, None is no evidence"
+    ],
+    "never_authorization": [
+      "MCP tool arguments",
+      "browser or page content",
+      "model output",
+      "ordinary environment variables",
+      "authorization description string"
+    ]
+  },
+  "state_table": {
+    "PREPARED": {
+      "authorization": "REQUIRED_NOT_CONSUMED",
+      "remote_write": "NONE"
+    },
+    "NEEDS_USER_ACTION": {
+      "authorization": "NOT_APPLICABLE",
+      "remote_write": "NONE"
+    },
+    "AWAITING_OFFICIAL": {
+      "authorization": "RECORDED_FOR_HANDOFF_ONLY",
+      "remote_write": "NONE"
+    },
+    "DISPATCHING": {
+      "authorization": "CONSUMED",
+      "remote_write": "MAY_HAVE_STARTED"
+    },
+    "UNKNOWN": {
+      "authorization": "CONSUMED",
+      "remote_write": "UNKNOWN"
+    },
+    "PENDING_APPROVAL": {
+      "authorization": "CONSUMED",
+      "remote_write": "ACCEPTED"
+    },
+    "PENDING_PAYMENT": {
+      "authorization": "CONSUMED",
+      "remote_write": "ACCEPTED"
+    },
+    "SUCCEEDED": {
+      "authorization": "CONSUMED",
+      "remote_write": "ACCEPTED"
+    },
+    "FAILED": {
+      "authorization": "NOT_CONSUMABLE",
+      "remote_write": "NONE_OR_FAILED"
+    }
+  },
+  "outputs": [
+    "one-time plan challenge, signed host authorization and one-time consumption",
+    "revision-bound state transitions and dispatch intent persisted before any request",
+    "exact preflight comparison of business digest, page context and attachment identities (attachment field is a 5.3 extension point)",
+    "exact ordered single-use RequestGate plus a dispatch-bound multi-stage SideEffectLedger",
+    "public effects, bounded state history (last 20 + event_count) and next actions without business or authorization values",
+    "unchanged polls do not rewrite the journal or append events",
+    "resilient offline read-only inventory with per-file error categories, pending flags and cancellation=NOT_PERFORMED",
+    "classified local storage failures (STATE_READ_FAILED / STATE_WRITE_FAILED) instead of raw OSError"
+  ],
+  "audit_remediation": {
+    "report": ".local/audits/4.4-audit.md",
+    "p0": 0,
+    "p1": 3,
+    "p2": 14,
+    "fixed": [
+      "P1-1 local confirmation displays every business field and the digest prefix, including seat, room, scene, site and session ids",
+      "P1-2 explicit decline and native Windows None veto a pending signed grant; NOT_APPLICABLE is the only fallback; custom None is no evidence and does not fall back",
+      "P1-3 repeated polls with unchanged state/reason/remote record neither rewrite the journal nor append events; public history is the last 20 with event_count",
+      "P2-1 result() recovers from a concurrent revision conflict instead of raising it",
+      "P2-2 in-process confirmation, decline and plan expiry discard pending grants; put() reports replacement; a grant is consumed only after a successful preflight",
+      "P2-3 a transient preflight failure keeps the human grant and allows a retry",
+      "P2-4 legacy in-process confirmation dictionaries are normalized into signed, challenge-bound grants before storage; unsigned evidence is never stored",
+      "P2-5 the effect ledger is bound to the current DISPATCHING record and owner process",
+      "P2-6 one unreadable journal no longer aborts the offline inventory; each error is reported without a path",
+      "P2-7 a pre-4.4 PREPARED record receives a challenge before local confirmation",
+      "P2-8 attachment comparison is documented as a 5.3 extension point; current contracts reject the field and the digest covers current content",
+      "P2-9 local storage read/write failures are classified CampusErrors; unchanged read-only polls do not write",
+      "P2-10 consent state lives inside a custom or explicit root and beside the default actions-v1 root; roots never share a host key",
+      "P2-11 the CLI no longer reports storage failures as ACTION_NOT_FOUND; the inventory always returns an ok key and per-file errors",
+      "P2-12 the consent README now distinguishes plan expiry (FAILED) from grant expiry (plan stays PREPARED, re-confirm)",
+      "P2-13 adapterless plans advertise WAIT_FOR_A_REGISTERED_ADAPTER and no local confirmation command",
+      "P2-14 unused imports and the unused fingerprint export are removed; the consent README ships in package-data and MANIFEST; the lost-response test now starts from UNKNOWN"
+    ],
+    "verification": {
+      "P1-1": [
+        "test_local_consent_summary_shows_the_whole_business_object",
+        "audit probe P1-1 now prints 区域/座位/房间 ids"
+      ],
+      "P1-2": [
+        "test_explicit_decline_vetoes_a_pending_signed_grant",
+        "audit probe P1-2 now raises TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED and sends 0"
+      ],
+      "P1-3": [
+        "test_repeated_poll_does_not_rewrite_or_grow_history",
+        "test_public_history_is_bounded_and_counted",
+        "audit probe P1-3: events 4->4, 2000 polls 0.4s"
+      ],
+      "P2-1": [
+        "test_result_does_not_raise_an_internal_revision_conflict"
+      ],
+      "P2-2": [
+        "test_in_process_confirmation_cleans_up_a_pending_grant",
+        "test_expired_plan_consumes_no_request_and_requires_reprepare",
+        "test_put_reports_replacement"
+      ],
+      "P2-3": [
+        "test_preflight_failure_keeps_the_human_grant"
+      ],
+      "P2-4": [
+        "test_in_process_confirmation_is_normalized_to_a_signed_grant"
+      ],
+      "P2-5": [
+        "test_ledger_is_bound_to_the_current_dispatch",
+        "test_effect_ledger_never_regresses_a_sent_step"
+      ],
+      "P2-6": [
+        "test_offline_inventory_survives_one_unreadable_journal",
+        "test_offline_inventory_cli_shape"
+      ],
+      "P2-7": [
+        "test_local_consent_adds_a_challenge_to_old_records"
+      ],
+      "P2-8": [
+        "test_current_contracts_reject_attachments",
+        "test_attachment_identity_is_exactly_compared"
+      ],
+      "P2-9": [
+        "test_storage_failures_are_classified_not_raw",
+        "audit probe P2-9: unchanged poll succeeds, changed write gives STATE_WRITE_FAILED"
+      ],
+      "P2-10": [
+        "test_two_roots_never_share_a_host_authority"
+      ],
+      "P2-11": [
+        "test_consent_cli_maps_storage_errors",
+        "test_offline_inventory_cli_shape"
+      ],
+      "P2-12": [
+        "test_grant_challenge_mismatch_and_expiry_are_distinct asserts PREPARED after grant expiry",
+        "consent/README.md rejection table"
+      ],
+      "P2-13": [
+        "test_adapterless_plan_does_not_advertise_confirmation",
+        "test_generic_browser_text_never_opens_a_write_window"
+      ],
+      "P2-14": [
+        "test_lost_response_starts_unknown_and_restart_only_reconciles",
+        "grep: no secrets import, no fingerprint(), package-data contains consent/README.md, MANIFEST includes it"
+      ]
+    }
+  },
+  "checks": {
+    "module_tests_linux": {
+      "passed": 47,
+      "skipped": 0,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_action_framework.py"
+    },
+    "compatibility_tests_linux": {
+      "passed": 199,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_action_framework.py tests/test_actions.py tests/test_sports.py tests/test_library_actions.py tests/test_campus.py",
+      "note": "Existing action, sports, library and campus tests were not modified and still pass, including the legacy confirmation callbacks."
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 695,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test"
+    },
+    "full_offline_suite_windows": {
+      "python_passed": 690,
+      "python_skipped": 12,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test (windows-2025 job of run 44009070509)",
+      "note": "Platform-specific POSIX permission/descriptor cases skip; no module failure."
+    },
+    "privacy_check": {
+      "ok": true,
+      "files_checked": 412,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check"
+    },
+    "validators": {
+      "plan": "ok, 24 modules / 9 batches",
+      "contracts": "ok, 9 schema samples / 35 rejection samples / 8 extra samples",
+      "sources": "ok, 29 sources / 10 models / 8 tasks / 14 readiness rows / 7 fixtures"
+    },
+    "github_actions": {
+      "run": 44009070509,
+      "head_sha": "cf255de",
+      "ubuntu_24_04": "success: Python 695 passed / 7 skipped / 0 failed; Node 66; check 412 files / 0 findings; 29 MCP tools",
+      "windows_2025": "success: Python 690 passed / 12 skipped / 0 failed; Node 66; check 412 files / 0 findings; 29 MCP tools",
+      "note": "Both jobs of the frozen offline-checks workflow succeeded on the audit-fixed delivery commit."
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0
+  },
+  "acceptance": [
+    {
+      "case": "a grant used for another account, another plan or a different file hash is rejected",
+      "tests": [
+        "test_grant_for_another_plan_digest_or_account_is_rejected",
+        "test_attachment_identity_is_exactly_compared",
+        "test_tampered_signature_and_unknown_protocol_never_authorize"
+      ],
+      "note": "The digest covers every business field, including any attachment hash. The attachment identity comparison is an engine-level extension for 5.3 because no current contract accepts the field."
+    },
+    {
+      "case": "concurrent execution of one plan dispatches at most once",
+      "tests": [
+        "test_concurrent_execute_dispatches_once",
+        "test_concurrent_execute_sends_once",
+        "test_two_real_processes_claim_once"
+      ]
+    },
+    {
+      "case": "a lost response and restart only reconcile, never resend",
+      "tests": [
+        "test_lost_response_starts_unknown_and_restart_only_reconciles",
+        "test_restarted_engine_only_reconciles_and_owner_probe_is_non_destructive"
+      ],
+      "note": "The 4.4 test now actually leaves a plan in UNKNOWN before the restarted engine reconciles it."
+    },
+    {
+      "case": "a disk failure while saving the dispatch journal sends zero requests",
+      "tests": [
+        "test_dispatch_intent_save_failure_sends_nothing"
+      ]
+    },
+    {
+      "case": "a fee, member, date or attachment change after preview invalidates the plan",
+      "tests": [
+        "test_preview_change_invalidates_the_plan",
+        "test_attachment_identity_is_exactly_compared"
+      ]
+    },
+    {
+      "case": "disabling the write switch keeps result and recovery for existing transactions",
+      "tests": [
+        "test_write_switch_off_blocks_new_writes_but_keeps_result_and_inventory",
+        "test_unresolved_cancel_is_reconciled_after_switch_off"
+      ]
+    },
+    {
+      "case": "ordinary browser controls and model text cannot forge host confirmation or open a general write window",
+      "tests": [
+        "test_generic_browser_text_never_opens_a_write_window",
+        "test_model_text_and_environment_never_become_a_grant",
+        "test_real_browser_controls_iframe_and_csrf_exclusion"
+      ]
+    },
+    {
+      "case": "code rollback and local log cleanup never trigger a real business cancellation",
+      "tests": [
+        "test_offline_inventory_reports_effects_without_dispatch_or_cancel",
+        "test_offline_inventory_survives_one_unreadable_journal"
+      ]
+    }
+  ],
+  "security_summary": {
+    "authorization_binding": "plan id, account, business digest, adapter version, one-time challenge, human source, host reference and expiry",
+    "signature": "HMAC-SHA256, constant-time comparison, verified before binding comparisons; legacy callback results are signed before storage",
+    "decline": "DECLINED and the native Windows None veto a pending grant; NOT_APPLICABLE is the only fallback; custom None is no evidence",
+    "storage": "THU-CONSENT-KEY-1 and THU-CONSENT-1 containers use the same protect/unprotect as the action journal; POSIX 0600; host key write is read back; journal writes are atomic temp+fsync+replace and the 2.2 envelope authenticates the ciphertext (the journal itself is not re-read after every write)",
+    "no_backdoors": "MCP arguments, page content, model output and ordinary environment variables never create a grant",
+    "dispatch_intent": "DISPATCHING, authorization evidence and owner pid are durable before the adapter receives the request gate",
+    "preflight": "business digest, page context and attachment identity compared exactly; authenticator tokens may refresh, business content may not change; a transient preflight failure keeps the grant",
+    "effects": "NOT_SENT -> SENT -> UNKNOWN only; 50 steps maximum; bound to the DISPATCHING owner; terminal records refuse further changes",
+    "replay": "lost responses, crashes, UNKNOWN, PENDING_* and terminal records never resend; only readback reconciliation",
+    "public_result": "effects, last 20 state transitions with event_count and next actions only; no business originals, challenge, signature or grant reference",
+    "polling": "unchanged reconciliation results do not rewrite the journal or grow history",
+    "rollback": "offline inventory is read-only, reports per-file errors, is distinct from a business cancel, and reports cancellation=NOT_PERFORMED"
+  },
+  "cross_module_requests": [
+    {
+      "owner": "5.2",
+      "request": "native_grant can now return consent.issue_for(record) directly; the engine already normalizes the legacy dictionary, so this is cleanup rather than a security dependency."
+    },
+    {
+      "owner": "5.1/5.2/5.3",
+      "request": "New write adapters must use the engine's authorization, exact preflight, one-use RequestGate and SideEffectLedger; never add a second weaker consent path or automatic retry."
+    },
+    {
+      "owner": "6.1",
+      "request": "Map TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED to a local confirmation action, expose next_actions/local_confirmation_command, and keep the 29 legacy tools unchanged; do not advertise the command for ADAPTER_REQUIRED plans."
+    },
+    {
+      "owner": "6.3",
+      "request": "4.4 added consent/README.md to package-data and MANIFEST.in; verify it in the final lock, wheel and installed layout, and adjust if the packaging layout changes."
+    },
+    {
+      "owner": "1.1 / batch integrator",
+      "request": "If dedicated host-authorization rejection codes are wanted, register them in contracts/v0.2/error-classification.json before they cross the facade; this module reuses existing codes (STATE_READ_FAILED/STATE_WRITE_FAILED for storage)."
+    },
+    {
+      "owner": "7.2",
+      "request": "Include tests/test_action_framework.py in cross-platform regression; the POSIX mode assertion skips on Windows for platform reasons."
+    }
+  ],
+  "remaining_limits": [
+    "The outer THU-ACTION-1 journal container and operation_id.dpapi file name are unchanged; the 2.2 envelope is nested inside, but binding a stable record_id into AAD remains a later storage/integration step.",
+    "The legacy in-process consent_verifier interface is still accepted, but its result is normalized into a signed, challenge-bound grant before storage; unsigned evidence is never stored.",
+    "A duplicate concurrent execute that loses the single-use grant fails safely with TRUSTED_AUTHORIZATION_EVIDENCE_REQUIRED and dispatches nothing; the client should query the result. The winner still dispatches at most once.",
+    "The attachments field is defined by each adapter's business contract; current contracts reject it, so the identity comparison is an engine-level extension for 5.3. The digest already covers attachment content once a contract includes it.",
+    "docs/contracts/action-boundaries.md was not edited because docs/ belongs to 7.3; the protocol is documented in src/thu_assistant/consent/README.md.",
+    "Real booking, cancellation, renewal, payment and assignment submission remain batch 5; this module proves only the framework with synthetic transports.",
+    "The Windows native message box still returns a legacy dictionary; the engine normalizes it, but 5.2 should call issue_for(record) for clearer evidence and no legacy branch."
+  ],
+  "blockers": [],
+  "rollback": "Stop issuing grants and executing new plans; keep actions-v1, consent-v1 and every pending journal, and revert only code and local pointers. The retained runtime must still read the new record format; deleting local journals is never a remote cancellation.",
+  "next_step": "The batch integrator reconnects 4.1-4.5 on one batch commit, runs the batch-level check, full offline suite and contract linkage, and only then marks batch 4 accepted. This module does not create a PR, merge main, tag or publish.",
+  "worktree_note": "Linked worktree relative to the repository root; the absolute home path is intentionally not committed (privacy rule).",
+  "batch_state": "accepted at the batch-4 integration commit recorded in 交付/批次门禁.json",
+  "next": "Batch 5 may start once the gate records batch 4 accepted; this module opens no PR, does not merge main and does not publish a release."
+}

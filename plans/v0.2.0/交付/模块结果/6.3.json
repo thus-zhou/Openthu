@@ -1,0 +1,282 @@
+{
+  "module": "6.3",
+  "title": "完整发行布局与安装升级迁移",
+  "batch": 6,
+  "owner": "Hermes",
+  "status": "accepted",
+  "baseline_commit": "bb1f963d7aaa8f38ca861fad7259d05ee5d243ec",
+  "integration_parent_commit": "bb1f963d7aaa8f38ca861fad7259d05ee5d243ec",
+  "delivery_commit": "6f5df604aa21c56229663576353737a72945efec",
+  "implementation_commits": [
+    "c8412d8419def881d9020dbe89b82028e0fad8b2",
+    "47ce3d0f6b60233972ab7d25555ce77c0fc2ffdf",
+    "f42a2d7616cf845cdd90efd979c7f9a776ea2281",
+    "28b468b35f166b7adffe98601e5217729dc9a896",
+    "f21f751b59841c11ca30ec599ff5f539d22663e3",
+    "2a68db0a916d62b10829e2b26065a958970f5d3b",
+    "173606d7017178e6f6f519d5df7235c4a90f4611",
+    "1ebd5bbeaed606a325ee01b8cbfbeab03cda7b0a",
+    "8fc331767874727145834cd4b86101504e25f7ef",
+    "27afeaa033eea116ee32a380b313c2dae593bc86",
+    "f003a8b5c1239244e8a3307329c5901bcdc6d77d",
+    "edd5fa547a853502ed67e60f797b37deda9cbbf6",
+    "6f5df604aa21c56229663576353737a72945efec"
+  ],
+  "audit_fix_commits": [
+    "edd5fa5: P1-1..P1-7 and P2-1..P2-14 fixes across upgrade.py, package_release.py, materialize.py, dev_diagnostics.py, doctor.py, learn_assistant/mcp_stdio.py and the CI matrix",
+    "6f5df60: openthu-doctor writes UTF-8 on a cp1252 console (found by run 44072763128)"
+  ],
+  "record_commit": "the commit containing this record file",
+  "branch": "hermes/6.3",
+  "worktree": "~/projects/Openthu/.local/worktrees/6.3",
+  "worktree_note": "Recorded relative to the user home because the contract privacy validator rejects absolute home-directory paths; the absolute path stays in the execution session.",
+  "version_pr": null,
+  "batch_state": "batch 5 accepted at 0779fff; batch 6 open; 6.3 accepted after the audit remediation, batch reconnect still outstanding",
+  "evidence_tree": "clean tracked checkout of 6f5df60 after `python scripts/dev.py setup-node`; the candidate build refuses a dirty tracked tree by design",
+  "paths": [
+    "pyproject.toml",
+    "MANIFEST.in",
+    "requirements.txt",
+    "requirements-dev.txt",
+    "setup.py",
+    "build_support/distribution.json",
+    "build_support/materialize.py",
+    "scripts/package_release.py",
+    "scripts/migrate_state.py",
+    "scripts/configure_mcp.py",
+    "scripts/dev_diagnostics.py",
+    "src/thu_assistant/version.py",
+    "src/thu_assistant/__init__.py",
+    "src/learn_assistant/__init__.py",
+    "src/learn_assistant/mcp_stdio.py",
+    "src/thu_assistant/paths.py",
+    "src/thu_assistant/upgrade.py",
+    "src/thu_assistant/doctor.py",
+    "src/thu_assistant/gateway_client.py",
+    "src/thu_assistant/gateway.js",
+    ".github/workflows/ci.yml",
+    "docs/INSTALL.md",
+    "docs/UPGRADE.md",
+    "README.md",
+    "CHANGELOG.md",
+    "THIRD_PARTY.md",
+    "tests/test_distribution.py",
+    "tests/test_upgrade.py"
+  ],
+  "contracts": [
+    "compatibility-baseline-v1",
+    "secure-storage-header-v1",
+    "result-envelope-v1"
+  ],
+  "additive_runtime_objects": [
+    "thu_assistant/version.py: single product version plus separately managed state/contract/layout version names",
+    "thu_assistant/_bundled/layout.json: openthu-bundled-layout-v1 with product version, commit and logical resource ids",
+    "thu_assistant.upgrade: openthu-migration-preview-v1, openthu-migration-result-v1 and openthu-migration-journal-v1",
+    "release-manifest.json: openthu-release-manifest-v1 with artifacts, per-file hashes, dependencies and licenses",
+    "thu_assistant.doctor: installed-layout self-check exported as the openthu-doctor console script",
+    "doctor capabilities block: development/readonly/browser/production-auth/packaging/config states"
+  ],
+  "outputs": [
+    "one version source: pyproject dynamic version, thu_assistant, learn_assistant, both MCP serverInfo blocks, release manifest and candidate notes all read thu_assistant.version",
+    "minimum Python 3.12 (validated 3.12 and 3.13 in CI); Node 24 and the pinned tough-cookie lock are unchanged",
+    "runtime dependencies pinned to cryptography 50.0.2, Pillow 13.0.0 and requests 2.33.0; playwright is an optional browser extra",
+    "pytest, build, jsonschema, wheel and setuptools stay development-only; a normal install never pulls a test framework and verify rejects a wheel that declares one as a hard dependency",
+    "build_support/distribution.json is the only resource list; the wheel, sdist and source archives are generated from it",
+    "setup.py copies the Windows helper and the pinned upstream proxy into thu_assistant/_bundled at build time instead of keeping a second drifting copy in Git",
+    "materialize rebuilds _bundled on every build, refuses source/install paths that are absolute, contain .., escape or are symbolic links, and writes 0444 resources that stay read-only inside the wheel",
+    "build reads committed Git blobs, so worktree line endings, file times and untracked caches/logs/keys never enter an archive",
+    "build stages into a temporary directory and only replaces dist/ after every artifact verifies; a failed build keeps the previous candidate",
+    "verify binds the artifact to HEAD (or --expected-commit), checks Requires-Python/Requires-Dist, all seven entry points, the exact licence paths, the read-only bundled mode and the sdist PKG-INFO version",
+    "release-manifest.json records every bundled file (53 records for 54 files, layout.json excluded) with logical id, install path, sha256 and size, and reports source.files equal to the archive member count",
+    "source-scope resources resolve from a live checkout first and then from the installed bundled layout; an installed wheel has no checkout and cannot fall back to a developer tree",
+    "gateway_environment fills THU_ACCESS_HELPER and THU_MADMODEL_DIR from the layout, and gateway.js prefers the bundled directories",
+    "openthu-doctor runs from an installed wheel without scripts/dev.py, writes UTF-8 on a cp1252 console, does not log in, read credentials or write state, and install-check proves the synthetic user state is byte-identical afterwards",
+    "an installed layout without _bundled/layout.json is a blocking doctor failure instead of being mistaken for a source checkout",
+    "migration preview lists kind, format, target, compatibility and re-authentication need without reading or decrypting anything, and classifies the directories the runtime really writes (actions-v1, consent-v1, submissions-v1, todos-v1, events-v1, sports-scheduler, keys)",
+    "pending journals and submission plans are REVIEW_REQUIRED; consent authority keys, grants and key material are EXCLUDED_SENSITIVE and never copied",
+    "Windows DPAPI ciphertext is never offered to another platform, even into an existing target with --replace; apply skips on compatibility, not on status",
+    "the Windows default layout previews as a successful NO_MIGRATION_NEEDED no-op while apply still refuses the same root",
+    "target conflicts stay NEEDS_DECISION until an explicit replace/keep; replace keeps a .pre-migration copy, and apply reports complete/pending_decisions with a non-zero CLI exit while a decision is pending",
+    "copies go through a .migrating file, fsync and SHA256 verification before an atomic rename; a failure keeps the original file and appends to the journal",
+    "apply treats the plan as untrusted input: absolute target root, no traversal, source inside the legacy tree, protected program directories, resolved-path same-root and duplicate items are all refused before any copy",
+    "a --key-file outside the runtime default (config dir keys/master.key) no longer claims the session survives, so requires_reauth stays true with an explicit reason",
+    "downloads and logs are EXCLUDED_USER_FILES and stay exactly where they are; nothing is moved, deleted or replayed",
+    "doctor reports one state per capability and names the affected capabilities when Node or Chromium is missing",
+    "doctor release-layout blocks start-up when the program version and the bundled layout version disagree"
+  ],
+  "checks": {
+    "module_tests": {
+      "passed": 71,
+      "failed": 0,
+      "breakdown": {
+        "tests/test_distribution.py": 47,
+        "tests/test_upgrade.py": 24
+      },
+      "command": "PYTHONPATH=src python -m pytest -o addopts='' -q tests/test_distribution.py tests/test_upgrade.py"
+    },
+    "dev_check": {
+      "ok": true,
+      "files_checked": 505,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 1334,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test",
+      "evidence_tree": "clean tracked checkout of 6f5df60 after setup-node"
+    },
+    "full_offline_suite_windows": {
+      "python_passed": 1327,
+      "python_skipped": 14,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "files_checked": 505,
+      "source": "GitHub Actions windows-2025 job of run 44076049516"
+    },
+    "github_actions": {
+      "commit": "6f5df60",
+      "run": 44076049516,
+      "jobs": {
+        "ubuntu-24.04 (3.12)": "success",
+        "ubuntu-24.04 (3.13)": "success",
+        "windows-2025 (3.12)": "success"
+      },
+      "earlier_runs": {
+        "44072763128": "failure on windows-2025: openthu-doctor aborted with UnicodeEncodeError on a cp1252 console; fixed in 6f5df60",
+        "44063076693": "head bb2a7fa, success (implementation record)",
+        "44059743559": "head b9d337e (contains f003a8b), success"
+      }
+    },
+    "candidate_build": {
+      "artifacts": 4,
+      "commit": "6f5df60",
+      "dirty": false,
+      "wheel_members": 193,
+      "sdist_members": 441,
+      "bundled_files": 54,
+      "resource_records": 53,
+      "source_files": 502,
+      "source_archive_members": 502,
+      "verify": "ok=true, 9 wheel checks and 6 sdist checks pass",
+      "reproducible_on_linux": true
+    },
+    "install_check": {
+      "source_root": null,
+      "missing": [],
+      "mcp_tools": 29,
+      "doctor_ok": true,
+      "doctor_mode": "installed",
+      "user_state_unchanged": true,
+      "resource_locations": {
+        "source.windows_auth": "bundled",
+        "source.madmodel_proxy": "bundled"
+      }
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "compatibility_baselines": 1,
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8,
+      "legacy_tools": 29,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "fixtures": 7,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "audit_probes": "all 19 probes of .local/audits/6.3-probes.py were re-run on the fixed tree; each P1/P2 item shows its observed result in the module record",
+    "windows": "GitHub Actions windows-2025 passed for 6f5df60 (run 44076049516): check 505 files/0 findings, Python 1327 passed/14 skipped/0 failed, Node 66 passed; not reproduced on a local Windows host",
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0,
+    "message_sends": 0
+  },
+  "verified_cases": [
+    "a wheel installed in a temporary virtual environment outside the repository resolves the helper and proxy from _bundled with source_root null, starts 29 MCP tools and runs openthu-doctor with mode=installed",
+    "installing the wheel and running the self-check leaves a synthetic user state tree (config.json plus downloads/keep.bin) byte-identical",
+    "a wheel rebuilt from the sdist still contains the bundled layout, the tokenizer, package-lock.json and the licenses",
+    "synthetic .env, master.key, cache, log and download files placed in the checkout never appear in the source zip or tar.gz",
+    "rewriting README.md with CRLF and an old mtime leaves committed_sources() and the generated archive byte-identical",
+    "verify rejects a candidate whose release-manifest commit is not HEAD (RELEASE_COMMIT_MISMATCH) and accepts --expected-commit for a deliberate older artifact",
+    "tampering with Requires-Python, Requires-Dist or the entry points of a built wheel makes verify fail",
+    "deleting the bundled upstream LICENSE makes verify fail with RELEASE_WHEEL_LICENSE_MISSING although dist-info/licenses/LICENSE is still present",
+    "a failed build keeps the previous wheel, SHA256SUMS and release-manifest in dist/",
+    "materialize refuses an escaping install path, an escaping source path and a symbolic link that resolves outside the repository",
+    "removing a file from a bundle removes it from the rebuilt _bundled directory, and bundled files are 0444 and not writable",
+    "a failed migration copy keeps the legacy file, the leftover staging file and a journal with started/failed/finished events",
+    "an existing target stays NEEDS_DECISION with complete=false and pending_decisions=1, and the CLI exits 1 until replace or keep is chosen explicitly",
+    "a real 0.2 state tree classifies actions-v1 journals as ACTION_JOURNAL/REVIEW_REQUIRED and consent-v1 host keys and grants as CONSENT_AUTHORITY/EXCLUDED_SENSITIVE without copying them",
+    "Windows DPAPI ciphertext stays SKIPPED_UNSUPPORTED on POSIX even when the target already has the same name and --replace is given",
+    "a plan with ../escaped.txt, an outside source path, a relative target root, a program directory target or a duplicate item is refused before any copy",
+    "a symbolic-link target that resolves to the legacy tree previews as NO_MIGRATION_NEEDED and apply refuses MIGRATION_SAME_ROOT",
+    "the Windows default layout previews as a successful no-op, and a THU_ASSISTANT_STATE_DIR legacy tree is found and reported as the legacy source",
+    "a --key-file outside the runtime default keeps requires_reauth true with an explicit reason",
+    "a missing Node command names the campus gateway, browser and production-auth capabilities instead of a generic install error",
+    "a missing Chromium binary is reported as a browser-only gap while readonly stays available; a missing Playwright client is distinguished from a missing browser",
+    "an installed layout without _bundled blocks doctor, while a complete install passes release-layout and runtime-resources",
+    "openthu-doctor exits 0 and emits parseable JSON with PYTHONIOENCODING=cp1252",
+    "both MCP servers report 0.2.0 in serverInfo",
+    "program and layout version disagreement blocks doctor start-up",
+    "package metadata, bundled layout, release manifest, SHA256SUMS and CHANGELOG all carry 0.2.0",
+    "a dirty tracked tree is refused before any artifact is written",
+    "downloads and logs are reported EXCLUDED_USER_FILES and are neither copied nor removed"
+  ],
+  "limits": [
+    "Linux was executed locally; the Windows result comes from GitHub Actions run 44076049516 on the same delivery commit (Python 1327 passed / 14 skipped / 0 failed) and was not reproduced on a local Windows host. Real Windows DPAPI authentication and a real Windows migration are outside this module.",
+    "The audit probe that simulates Windows drive-letter paths on Linux now stops at MIGRATION_PATH_NOT_ABSOLUTE; that is a limitation of simulating Windows path semantics on POSIX, not of the Windows behaviour, which the Windows CI test covers.",
+    "The audit probes that reuse the pre-fix dist/ snapshot (27afeaa) now stop at the new commit binding or still print that old artifact's numbers; per-item verification uses the rebuilt candidate and the unit tests instead.",
+    "The wheel does not contain node_modules or the offline tests: after installing, run npm ci --ignore-scripts in the package directory when Node features are needed; scripts/dev.py exists only in the source package.",
+    "Dependencies are pinned to exact direct versions with a license table; no transitive hash lock was generated because resolving every platform wheel needs network access, so artifact integrity comes from SHA256SUMS and the Node lock file.",
+    "Source archives are generated from Git objects, so uncommitted work never enters them and a dirty tracked tree must be committed or stashed before a build.",
+    "install-check uses a temporary --system-site-packages virtual environment to resolve runtime dependencies offline; it proves the layout, entry points, self-check and untouched user state, not real campus authentication.",
+    "Migration copies files only: it does not replay pending transactions, does not decrypt Windows DPAPI ciphertext on another platform, does not copy consent keys or grants and never deletes or moves the legacy tree.",
+    "The THU-TODOS-1 and THU-ACTION-1 outer containers are unchanged; record-level storage work remains with 6.1/8.1.",
+    "The module ownership table, batch gate and VERSION_MANIFEST were not edited to avoid conflicts with parallel 6.1/6.2 work; batch integration updates them.",
+    "No PR was opened, main was not merged, no tag or Release was created; release-manifest.json states candidate-not-released and published=false.",
+    "Byte-for-byte reproducibility was verified for two consecutive Linux builds of the same commit; cross-platform reproducibility is not claimed."
+  ],
+  "rollback": "Restore the 6.3 files to bb1f963 (pyproject.toml, MANIFEST.in, requirements*.txt, setup.py, build_support/, the four scripts, version.py, upgrade.py, doctor.py, paths.py, gateway_client.py, gateway.js, docs, the CI matrix and the two test files). The _bundled directory is additive: removing it returns resource resolution to the source layout. dist/ can be deleted wholesale. Migration never modified the legacy state directory, so no user directory has to be cleaned up; copied targets and .pre-migration backups stay for the user to keep or remove.",
+  "next": "Batch 6 reconnects 6.1, 6.2 and 6.3 into one integration commit, runs scripts/dev.py check and test plus both-platform CI, then updates the ownership table, acceptance map, batch gate and VERSION_MANIFEST. No PR, merge, tag or release is opened by this module.",
+  "cross_module_requests": [
+    "6.1: gateway_environment now fills THU_ACCESS_HELPER and THU_MADMODEL_DIR from the resolved layout; do not reintroduce repository-relative paths, and register any new repository-level runtime file in build_support/distribution.json instead of copying it.",
+    "6.2/7.1: register new local dashboard static assets in package-data (and in the distribution manifest when they live outside the package), otherwise a wheel install will miss them.",
+    "7.2: re-run install-check and the archive-exclusion cases on Windows, and raise the CI time budget for the added build, install check and 3.13 job (windows-2025 takes about 14 minutes).",
+    "7.3: docs/UPGRADE.md covers install, upgrade, migration and rollback only; the user manual, capability matrix and full upgrade record remain 7.3 scope.",
+    "8.1: the candidate build must run build/verify/install-check on the final integrated tree; any new repository-level runtime resource that is not in the manifest is a release blocker."
+  ],
+  "audit_report": "~/projects/Openthu/.local/audits/6.3-audit.md",
+  "audit_findings": {
+    "P0": 0,
+    "P1": 7,
+    "P2": 14,
+    "closed": 21,
+    "open": 0
+  },
+  "accepted_at": "2026-11-17",
+  "acceptance_scope": "audit remediation verified locally on Linux and on GitHub Actions run 44076049516 (ubuntu-24.04 3.12/3.13 and windows-2025 3.12); no real campus, model, browser or business call was made",
+  "batch_reconnection": {
+    "batch": 6,
+    "integration_commit": "4f5c62ee4526839dc69d32c6ba6f90a5833937be",
+    "accepted_at": "2026-11-17",
+    "seam_notes": "X5 the wheel now carries facade/ and local_api/ (208 members, 54 bundled) and install-check passes outside the repository; the ledger records the delivered paths instead of the planning-time placeholders."
+  }
+}

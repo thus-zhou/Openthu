@@ -1,0 +1,259 @@
+{
+  "x-schema-version": 1,
+  "target_version": "0.2.0",
+  "release_status": "candidate-not-released",
+  "package_version_at_baseline": "0.1.0",
+  "baseline": {
+    "main_commit": "9135a75abc1847f317b8aedd1bb7447945669ac9",
+    "pr_head_before_main_merge": "4d09cd2e6f041690a5e6dcc624280056aff390a7",
+    "integration_merge_commit": "e92fd4712801f41923c74e26a0256653ec73bebf",
+    "date": "2026-11-16",
+    "workspace": "clean before 1.1 deliverables",
+    "toolchain": {
+      "python": "3.12.3",
+      "node": "24.18.0",
+      "npm": "11.16.0",
+      "platform": "Linux"
+    },
+    "checks": {
+      "dev_check_files": 264,
+      "dev_check_findings": 0,
+      "mcp_tools": 29,
+      "python_passed": 428,
+      "python_skipped": 2,
+      "python_failed": 0,
+      "node_passed": 54,
+      "node_failed": 0,
+      "live_campus_calls": 0,
+      "model_calls": 0,
+      "business_submissions": 0
+    }
+  },
+  "integration": {
+    "branch": "hermes/1-install-diagnostics",
+    "version_pr": 2,
+    "issue": 4,
+    "one_version_one_pr": true
+  },
+  "dependencies": {
+    "proposed_direct": {
+      "cryptography": "50.0.2",
+      "Pillow": "13.0.0",
+      "requests": "2.33.0",
+      "playwright": "1.57.0",
+      "pytest": "8.3.4",
+      "build": "1.2.2.post1",
+      "tough-cookie": "6.0.0"
+    },
+    "verification": {
+      "cryptography": {
+        "pypi_version_exists": true,
+        "license_expression": "Apache-2.0 OR BSD-3-Clause",
+        "cp312_cp313_wheels": "cp39-abi3 manylinux x86_64/aarch64 and win_amd64"
+      },
+      "Pillow": {
+        "pypi_version_exists": true,
+        "license_expression": "MIT-CMU",
+        "cp312_cp313_wheels": "manylinux x86_64/aarch64 and win_amd64"
+      },
+      "requests": {
+        "pinned": "2.33.0",
+        "baseline_venv": "2.33.0",
+        "note": "An inherited external PYTHONPATH shadowed this with 2.34.2 until cleared."
+      },
+      "tough-cookie": {
+        "lockfile": "6.0.0",
+        "package_lock_sha256": "0f8f72de59ef08f9f689c8298109a37b8c49f7def1e845d698f1f8f61078d9d5"
+      },
+      "jsonschema": {
+        "version": "4.26.0",
+        "purpose": "Draft 2020-12 instance validation in contract validator and pytest wrapper"
+      }
+    },
+    "policy": "No module chooses latest independently. Dependency changes require an impact record and a lock refresh owned by 6.3.",
+    "dev_tools": {
+      "jsonschema": "4.26.0"
+    }
+  },
+  "contracts": {
+    "directory": "contracts/v0.2",
+    "versions": [
+      "result-envelope-v1",
+      "error-classification-v1",
+      "secure-storage-header-v1",
+      "source-evidence-v1",
+      "media-reference-v1",
+      "calendar-event-v1",
+      "business-facade-v1",
+      "local-read-api-v1",
+      "compatibility-baseline-v1"
+    ],
+    "frozen": true,
+    "validator": "contracts/v0.2/validate.py",
+    "schema_samples": 9,
+    "rejection_samples": 35,
+    "extra_samples": 8,
+    "validator_test": "tests/test_v020_contracts.py"
+  },
+  "modules": {
+    "total": 24,
+    "accepted": 23,
+    "implemented": 0,
+    "pending": 1,
+    "ownership_file": "交付/模块负责表.json",
+    "acceptance_file": "交付/验收映射.json"
+  },
+  "source_contracts": {
+    "directory": "contracts/v0.2/sources/",
+    "registry_version": "source-registry-v1",
+    "sources": 29,
+    "domain_models": 10,
+    "source_tasks": 8,
+    "adapter_readiness": 14,
+    "fixtures": 7,
+    "schema_samples": 9,
+    "rejection_samples": 24,
+    "validator": "contracts/v0.2/sources/validate.py",
+    "test": "tests/test_source_contracts.py",
+    "delivery_commit": "f7fe6408ad3e9e16bdee2ca041cb648a2fc2b2ab"
+  },
+  "batches": {
+    "total": 9,
+    "current": 8,
+    "current_status": "accepted",
+    "module_status_note": "Batches 1-8 accepted; 8.1 accepted after the 8.1-audit remediation and merged into hermes/1-install-diagnostics at 5ec73d9; total-audit 17/17 remediation (43f19ef/4a03ecd) and pre-batch-9 optimization (71dbe9f) are integrated and CI green. Batch 9 is ready for Codex review on version PR #2.",
+    "next": 9,
+    "gate_file": "交付/批次门禁.json",
+    "status_model": "accepted prefix -> one ready -> locked remainder; all accepted only at version completion",
+    "gate_validation": {
+      "mode": "monotonic accepted prefix -> one ready -> locked remainder",
+      "test": "tests/test_v020_contracts.py",
+      "rejection_cases": [
+        "two ready batches",
+        "skipped accepted batch",
+        "ready after unaccepted predecessor",
+        "accepted after ready"
+      ],
+      "serial_gate_batches": [
+        1,
+        8,
+        9
+      ]
+    }
+  },
+  "compatibility": {
+    "mcp_tools": 29,
+    "entry_points": 6,
+    "legacy_fields": [
+      "status",
+      "source",
+      "checked_at",
+      "complete",
+      "source_complete",
+      "next_cursor",
+      "missing_pages",
+      "warnings",
+      "data",
+      "error",
+      "verification_level"
+    ],
+    "baseline_file": "contracts/v0.2/compatibility-baseline.json",
+    "legacy_error_sample": "contracts/v0.2/compatibility-baseline.json#legacy_error_sample"
+  },
+  "release_rules": {
+    "hermes_scope": "batches 1 through 8; candidate preparation only",
+    "codex_scope": "batch 9 independent review, merge, tag and Release",
+    "no_early_tag": true,
+    "no_early_release": true
+  },
+  "post_delivery_checks": {
+    "commit": "2fcc0a6252653f484aa21a2b5a96967375c48e6d",
+    "dev_check_files": 315,
+    "dev_check_findings": 0,
+    "python_passed": 428,
+    "python_skipped": 2,
+    "node_passed": 54,
+    "github_actions": {
+      "ubuntu-24.04": "success",
+      "windows-2025": "success"
+    },
+    "note": "This is the 1.1 delivery tree, not the pre-1.1 baseline. The audit-fix tree adds one pytest wrapper and contract fixtures; see the current run."
+  },
+  "audit_fix": {
+    "report": "1.1-audit-20261116",
+    "fixed": [
+      "P0-1 calendar regex/sample",
+      "P1-1 legacy data/error shape",
+      "P1-2 315-file acceptance evidence",
+      "P1-3 contract validator in pytest/CI"
+    ],
+    "fixtures_added": [
+      "source failure/empty/partial",
+      "blocked source",
+      "same-title stable identities",
+      "legacy error sample"
+    ],
+    "remaining": "P2 semantic rejection samples are explicitly checked where JSON Schema cannot express the rule; P3 wording is aligned.",
+    "dev_check_files": 320,
+    "dev_check_findings": 0,
+    "python_passed": 429,
+    "python_skipped": 2,
+    "node_passed": 54,
+    "node_failed": 0,
+    "contract_samples": {
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8
+    },
+    "commit_note": "current audit-fix commit; see PR #2 head"
+  },
+  "candidate": {
+    "status": "candidate-not-released",
+    "code_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+    "previous_candidates": [
+      "4a03ecd1fc4cc1059f544381a16c3d3f348712ef",
+      "2bd42cc6ea414a246b71abe530b99eb759b78930"
+    ],
+    "artifacts": 4,
+    "artifact_names": [
+      "Openthu-0.2.0-source.tar.gz",
+      "Openthu-0.2.0-source.zip",
+      "openthu-0.2.0-py3-none-any.whl",
+      "openthu-0.2.0.tar.gz"
+    ],
+    "wheel_members": 214,
+    "bundled_files": 54,
+    "sdist_members": 499,
+    "source_files": 568,
+    "verify": "ok=true at 71dbe9f; metadata, requires-python, requires-dist, forbidden-files, bundled-layout, resources, resource-modes, licenses and entry-points pass",
+    "install_check": "outside the repository; 29 MCP tools, doctor ok, user state unchanged",
+    "published": false,
+    "record": "交付/候选版本记录.md",
+    "release_gate": "PASS; nine checks true, 0 gaps; run 44468735503 (push) and 44468740959 (pull_request)",
+    "artifact_files": [
+      {
+        "name": "Openthu-0.2.0-source.tar.gz",
+        "size": 3709412,
+        "sha256": "4381e95abc347a0c2228c7f731f8be189503ed42c4d662a27c4cfb2bead46f33"
+      },
+      {
+        "name": "Openthu-0.2.0-source.zip",
+        "size": 4170441,
+        "sha256": "21d0a87a9fb87b09c8b3d58a26d8a924897837239b2dc1eacc44a26b280f727f"
+      },
+      {
+        "name": "openthu-0.2.0-py3-none-any.whl",
+        "size": 2812279,
+        "sha256": "d15c2fc8fde2733f396813e5b9643e09b3eb73246d2db827c20a4e021e4aee31"
+      },
+      {
+        "name": "openthu-0.2.0.tar.gz",
+        "size": 3471570,
+        "sha256": "a242ae64d6ad197246e1af230f78f8dca6e96f14f5928f7865ffaedff481da66"
+      }
+    ],
+    "artifact_commit": "71dbe9ffd79227a3f794b326a1498cbbc4045224",
+    "candidate_head": "the commit containing this record file (record-only after 71dbe9f)",
+    "note": "code_commit is the final pre-batch-9 product-code and CI artifact commit (71dbe9f); record-only commits after 71dbe9f synchronize ledgers without changing wheel product code, and Codex rebuilds at the final merged head before tagging."
+  }
+}

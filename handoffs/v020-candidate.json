@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "task_id": "v020-candidate",
+  "status": "READY_FOR_CODEX",
+  "next_owner": "codex",
+  "branch": "hermes/1-install-diagnostics",
+  "code_commit": "0f685f7270e3b29e9fd61498d6321a421cb4bf9d",
+  "created_at": "2026-11-19T10:24:20+00:00",
+  "context_file": "handoffs/v020-candidate.md",
+  "dispatch": "manual"
+}

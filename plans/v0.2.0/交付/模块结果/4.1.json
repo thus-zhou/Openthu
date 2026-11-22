@@ -1,0 +1,188 @@
+{
+  "module": "4.1",
+  "title": "个人课表、考试与成绩只读适配",
+  "batch": 4,
+  "owner": "Hermes",
+  "status": "accepted",
+  "baseline_commit": "323a98b",
+  "delivery_commit": "bbe620a",
+  "audit_fix_commit": "bbe620a",
+  "record_commit": "the commit containing this record",
+  "branch": "hermes/4.1",
+  "worktree": "~/projects/Openthu/.local/worktrees/4.1",
+  "worktree_note": "The contract privacy validator rejects absolute home-directory paths, so the worktree is recorded relative to the user home.",
+  "batch_state": "accepted at the batch-4 integration commit recorded in 交付/批次门禁.json",
+  "paths": [
+    "src/thu_assistant/academics/__init__.py",
+    "src/thu_assistant/academics/errors.py",
+    "src/thu_assistant/academics/rules.py",
+    "src/thu_assistant/academics/models.py",
+    "src/thu_assistant/academics/sensitivity.py",
+    "src/thu_assistant/academics/events.py",
+    "src/thu_assistant/academics/reader.py",
+    "src/thu_assistant/academics/README.md",
+    "tests/test_academics.py",
+    "tests/fixtures/academics/"
+  ],
+  "contracts": [
+    "course-v1",
+    "grade-v1",
+    "calendar-event-v1",
+    "result-envelope-v1",
+    "source-evidence-v1",
+    "error-classification-v1"
+  ],
+  "enablement": {
+    "timetable": {
+      "source_id": "academics.timetable",
+      "start_conclusion": "BLOCKED_SOURCE_EVIDENCE",
+      "implementation_state": "BLOCKED",
+      "runtime_availability": "UNAVAILABLE",
+      "evidence_level": "NONE"
+    },
+    "exams": {
+      "source_id": "academics.exams",
+      "start_conclusion": "BLOCKED_SOURCE_EVIDENCE",
+      "implementation_state": "BLOCKED",
+      "runtime_availability": "UNAVAILABLE",
+      "evidence_level": "NONE"
+    },
+    "grades": {
+      "source_id": "academics.grades",
+      "start_conclusion": "BLOCKED_SOURCE_EVIDENCE",
+      "implementation_state": "BLOCKED",
+      "runtime_availability": "UNAVAILABLE",
+      "evidence_level": "NONE"
+    }
+  },
+  "outputs": [
+    "academics-read-v1: three read-only capabilities, blocked production entry (UNKNOWN + ADAPTER_REQUIRED + zero items) and a synthetic-only rehearsal path",
+    "semester selection by source id; equal titles with different ids stay separate; no near-title merge",
+    "course association by source course id or teaching class; title-only association returns candidates but never a course_uid",
+    "timetable entry model retains weeks, parity, weekday, periods, date range, room, platform time, teaching class and attempt",
+    "week-expansion-v1: explicit school calendar and period table only; holidays, makeup days, replacement dates and out-of-term weeks are explicit; missing inputs keep the raw cycle",
+    "exam model retains id, course association, date, start/end, room, seat, time precision, state, release state and coverage",
+    "grade-v1 output distinguishes GRADED, UNGRADED, WITHHELD and UNKNOWN; zero is GRADED; level and pass/fail grades stay textual; no GPA or rank",
+    "exam-event-v1 and timetable-event-v1 converters to calendar-event-v1; grades are refused",
+    "academics-grade-privacy-v1: counts-only audit, dashboard exclusion, explicit model context, encrypted-cache requirement",
+    "operation_schemas and capability report for the future 6.1 registration"
+  ],
+  "checks": {
+    "module_tests_linux": {
+      "passed": 98,
+      "failed": 0,
+      "command": "python -m pytest -o addopts='' -q tests/test_academics.py"
+    },
+    "plan_validator": {
+      "ok": true,
+      "modules": 24,
+      "batches": 9,
+      "command": "python plans/v0.2.0/工具/validate_plan.py"
+    },
+    "contract_validator": {
+      "ok": true,
+      "contracts": 8,
+      "compatibility_baselines": 1,
+      "schema_samples": 9,
+      "rejection_samples": 35,
+      "extra_samples": 8,
+      "command": "python contracts/v0.2/validate.py"
+    },
+    "source_validator": {
+      "ok": true,
+      "sources": 29,
+      "models": 10,
+      "tasks": 8,
+      "readiness": 14,
+      "fixtures": 7,
+      "command": "python contracts/v0.2/sources/validate.py"
+    },
+    "privacy_check": {
+      "ok": true,
+      "files_checked": 422,
+      "findings": 0,
+      "mcp_tools": 29,
+      "command": "python scripts/dev.py check"
+    },
+    "full_offline_suite_linux": {
+      "python_passed": 746,
+      "python_skipped": 7,
+      "python_failed": 0,
+      "node_passed": 66,
+      "node_failed": 0,
+      "command": "python scripts/dev.py test",
+      "worktree": "clean tree at bbe620a"
+    },
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0
+  },
+  "accepted_cases": [
+    "same-title courses in different semesters and different teaching classes keep distinct course and entry identities; no title-based merge",
+    "odd, even, holiday, makeup-day and out-of-term weeks follow the explicit calendar; a missing period table leaves clock times null",
+    "missing calendar keeps the raw week pattern and produces no dates",
+    "date-only exams keep TIME DATE and no midnight; cancelled, rescheduled, makeup and deferred exams keep separate states",
+    "ungraded, withheld and zero grades remain distinct and are never converted into each other",
+    "a failed second page keeps the first-page rows and reduces source completeness; a failure is never EMPTY",
+    "grade audit, public summary and default model context never contain grade values; an explicit request and purpose are required",
+    "a blocked capability returns UNKNOWN with ADAPTER_REQUIRED, no items and no simulated record; non-synthetic transports are refused",
+    "a page-number gap is PARTIAL with missing_pages [2], never a complete source",
+    "a partial expansion still converts every valid occurrence and returns skipped dates",
+    "scope=COURSE applies the exact course filter, limit truncation is visible and reported, and an unsupported scope is rejected",
+    "an end time without a start time is rejected before any date branch",
+    "a malformed exam time makes the event converter fail closed instead of emitting time=null",
+    "missing timetable/exam record ids get deterministic TEMPORARY_SCOPED identities; titles never participate"
+  ],
+  "limits": [
+    "All three production adapters remain blocked by missing source evidence; no real timetable, exam or grade read was performed.",
+    "Timetable entries and exams are module-local shapes because no frozen schema exists; their identity rule is documented and must be registered by 2.3 before becoming a public model.",
+    "grade-v1 has additionalProperties=false and no temporary identity slot, so a grade without a source record id stays MISSING_STABLE_ID; only timetable and exam records receive TEMPORARY_SCOPED ids.",
+    "grade-v1 also cannot carry a check time or derivation marker; the envelope carries checked_at and the record keeps source_evidence_id.",
+    "Source coverage must be declared by the transport; undeclared coverage keeps complete=false and, for exams, adds EXAM_COVERAGE_NOT_DECLARED.",
+    "calendar-event-v1 has no ACADEMICS service domain, so converted events use service_domain=UNKNOWN; 5.4 may map it when consuming.",
+    "The privacy module defines policy; no encrypted cache backend is wired here. Callers must use the encrypted store and must call the audit/dashboard helpers.",
+    "The 11 module error codes are not in the frozen error-classification contract because contracts/v0.2 is outside 4.1's exclusive paths; errors.classification_map()/classify() is the bridge and 2.3/6.1 own registration.",
+    "No query registry, MCP tool, todos.py, source registry or batch gate was modified; 6.1 and the integration owner own those steps.",
+    "Offline synthetic evidence only; no live campus login, read, booking, payment or submission."
+  ],
+  "rollback": "Delete src/thu_assistant/academics/, tests/test_academics.py and tests/fixtures/academics/. No frozen contract, query registry, MCP tool or batch record changes, so old clients and the previous batches are unaffected. Pending cursors or caches do not exist for this module.",
+  "cross_module_requests": [
+    "6.1: register timetable, exams and grades read operations from operation_schemas(), keep the explicit-request gate for grades and enrich the MCP error boundary with the classified shape.",
+    "5.4: consume calendar_events('exams'|'timetable'); respect DATE vs DATE_TIME, TENTATIVE/CONFIRMED derivation and the excluded list; grades are never events.",
+    "6.2/7.1: public dashboard summaries must call sensitivity.dashboard_summary and must not read grade values.",
+    "2.3/integration: only after sanitized source evidence arrives, update source-registry.json and adapter-readiness.json, then change CAPABILITIES to IMPLEMENTED and wire a production transport.",
+    "4.2/4.3: reuse domain_models and source_state instead of re-deriving identity or completeness."
+  ],
+  "audit_remediation": {
+    "report": ".local/audits/4.1-audit.md",
+    "fixed_commit": "bbe620a",
+    "fixed": {
+      "P1-1": "collect_pages fills the integer page range and records a gap as missing; pages 1+3 now yield PARTIAL, source_complete=false, missing_pages=[2].",
+      "P1-2": "holiday/makeup/date-range skips are normal and keep EXPANDED; timetable_events converts any expansion with occurrences and returns skipped, with PARTIAL_EXPANSION only for an anomalous partial.",
+      "P1-3": "scope=COURSE requires course, exact course_id/teaching_class_id/title filtering runs before normalization, limit truncates items and is reported in read_scope/truncated/RESULT_LIMIT_REACHED; scope=ALL was removed.",
+      "P1-4": "END_WITHOUT_START is checked before the date/precision branch, so a lone end_time fails closed.",
+      "P2-1": "exam warnings are merged instead of reset; an invalid date keeps EXAM_DATE_INVALID.",
+      "P2-2": "makeup days only join a selected week or replace a natural date; date_range bounds occurrences with OUTSIDE_DECLARED_RANGE; calendar/period-table semesters must agree even without an explicit semester.",
+      "P2-3": "first_value() skips null/blank primaries across semester dates, weekday, parity, week range, exam date/state/release and grade value/scale/state.",
+      "P2-4": "event record ids reuse the existing stable/temporary UID or <source>:<record> without lossy rewriting; equal event_uids become EVENT_UID_CONFLICT.",
+      "P2-5": "exam_event raises ACADEMICS_EVENT_UNSUPPORTED when calendar_time returns null and _base rejects a non-object time.",
+      "P2-6": "semesters without a title stay selectable by id with SEMESTER_TITLE_MISSING; semester/course support-row rejections add warnings and reduce completeness.",
+      "P2-7": "transport exceptions normalize to AcademicsError/ACADEMICS_ERROR without their text; classification_map()/classify() provide typed categories before frozen-contract registration; three unused codes were removed.",
+      "P2-8": "record counts refreshed to the actual outputs (98 module tests, 422 files, Python 746/7, Node 66).",
+      "P2-9": "missing timetable/exam record ids receive deterministic TEMPORARY_SCOPED ids without titles and can be converted to events; grade-v1 cannot carry a temporary slot, so grades stay MISSING_STABLE_ID."
+    },
+    "verification": [
+      "python -m pytest -o addopts='' -q tests/test_academics.py -k 'page_number_gap or partial_expansion or course_scope or end_time_without_start'",
+      "python -m pytest -o addopts='' -q tests/test_academics.py -k 'invalid_exam_date or makeup_day_outside or date_range or semesters_must_agree'",
+      "python -m pytest -o addopts='' -q tests/test_academics.py -k 'null_primary or distinct_source_record_ids or malformed_time'",
+      "python -m pytest -o addopts='' -q tests/test_academics.py -k 'without_a_title or course_index_rejection or semester_row_rejection'",
+      "python -m pytest -o addopts='' -q tests/test_academics.py -k 'classification_map or transport_exception or temporary_identity or duplicate_event_uids'",
+      "python scripts/dev.py check; python scripts/dev.py test"
+    ],
+    "remaining": [
+      "P2-9 grades cannot receive a temporary identity because grade-v1 has additionalProperties=false and only STABLE/MISSING_STABLE_ID/CONFLICT; a missing grade id therefore stays MISSING_STABLE_ID instead of inventing a field.",
+      "P2-7a is closed: the 11 ACADEMICS_* codes are registered in the batch-4 integration commit (X1)."
+    ]
+  },
+  "next": "Batch 5 may start once the gate records batch 4 accepted; this module opens no PR, does not merge main and does not publish a release."
+}

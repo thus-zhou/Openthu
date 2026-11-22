@@ -1,0 +1,132 @@
+{
+  "schema_version": "openthu-distribution-manifest-v1",
+  "description": "Single source list for the complete distribution layout. The wheel and the source archive are both generated from this file; nothing here duplicates bytes that already live in the repository.",
+  "product": {
+    "name": "openthu",
+    "version_source": "thu_assistant.version.__version__",
+    "python_requires": ">=3.12",
+    "validated_python": ["3.12", "3.13"],
+    "node_requires": ">=24",
+    "node_lockfile": "src/thu_assistant/package-lock.json",
+    "changelog": "CHANGELOG.md"
+  },
+  "dependencies": {
+    "runtime": {
+      "cryptography": "50.0.2",
+      "Pillow": "13.0.0",
+      "requests": "2.33.0"
+    },
+    "optional": {
+      "browser": {
+        "playwright": "1.57.0"
+      }
+    },
+    "development": {
+      "pytest": "8.3.4",
+      "build": "1.2.2.post1",
+      "jsonschema": "4.26.0",
+      "playwright": "1.57.0",
+      "wheel": "0.48.0",
+      "setuptools": ">=77"
+    },
+    "node": {
+      "tough-cookie": "6.0.0"
+    }
+  },
+  "licenses": {
+    "openthu": "MIT",
+    "cryptography": "Apache-2.0 OR BSD-3-Clause",
+    "Pillow": "MIT-CMU",
+    "requests": "Apache-2.0",
+    "playwright": "Apache-2.0",
+    "pytest": "MIT",
+    "build": "MIT",
+    "jsonschema": "MIT",
+    "wheel": "MIT",
+    "setuptools": "MIT",
+    "tough-cookie": "BSD-3-Clause",
+    "madmodel-proxy": "MIT",
+    "thu-learn-lib": "MIT"
+  },
+  "license_files": [
+    "LICENSE",
+    "THIRD_PARTY.md",
+    "src/thu_assistant/THIRD_PARTY_NOTICES.txt",
+    "vendor/madmodel-proxy/LICENSE",
+    "vendor/madmodel-proxy/THIRD-PARTY-NOTICES.md",
+    "vendor/madmodel-proxy/vendor/licenses/transformers-LICENSE"
+  ],
+  "bundles": [
+    {
+      "id": "runtime.windows",
+      "source": "runtime/windows",
+      "install": "runtime/windows",
+      "capability": "production-auth",
+      "include": ["*.js", "*.py"],
+      "exclude": [],
+      "must_include": ["access.js", "import-session.py"]
+    },
+    {
+      "id": "vendor.madmodel_proxy",
+      "source": "vendor/madmodel-proxy",
+      "install": "vendor/madmodel-proxy",
+      "capability": "production-auth",
+      "include": ["**/*.js", "**/*.json", "**/*.md", "vendor/**", "LICENSE", "README.md"],
+      "exclude": ["test/**", "docs/**", ".github/**"],
+      "must_include": [
+        "package.json",
+        "proxy.js",
+        "madmodel-auth.js",
+        "platform/credentials.js",
+        "platform/process-lock.js",
+        "platform/paths.js",
+        "platform/file-store.js",
+        "vendor/deepseek-tokenizer.json"
+      ]
+    }
+  ],
+  "resource_map": {
+    "source.windows_auth": "runtime/windows/access.js",
+    "source.madmodel_proxy": "vendor/madmodel-proxy/package.json"
+  },
+  "forbidden": {
+    "names": [
+      ".env",
+      "creds.json",
+      "credentials.json",
+      "cookies.json",
+      "session.json",
+      "token.json",
+      "auth.json",
+      "hosts.yml",
+      "master.key"
+    ],
+    "suffixes": [".dpapi", ".pem", ".key", ".p12", ".pfx", ".sqlite", ".db"],
+    "directories": [
+      ".git",
+      ".local",
+      ".state",
+      ".venv",
+      "artifacts",
+      "build",
+      "cache",
+      "dist",
+      "downloads",
+      "logs",
+      "node_modules",
+      "__pycache__"
+    ]
+  },
+  "artifact_excludes": [
+    ".git/**",
+    ".github/**",
+    ".local/**",
+    "artifacts/**",
+    "build/**",
+    "dist/**",
+    "logs/**",
+    "node_modules/**",
+    "**/__pycache__/**",
+    "**/*.egg-info/**"
+  ]
+}

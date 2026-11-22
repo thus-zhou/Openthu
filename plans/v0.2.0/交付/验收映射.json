@@ -1,0 +1,1008 @@
+{
+  "x-schema-version": 1,
+  "x-contract-version": "acceptance-map-v1",
+  "target_version": "0.2.0",
+  "overall": {
+    "commands": [
+      "python plans/v0.2.0/工具/validate_plan.py",
+      "python contracts/v0.2/validate.py",
+      "python -m pytest tests/test_v020_contracts.py",
+      "python scripts/dev.py check",
+      "python scripts/dev.py test"
+    ],
+    "offline": true,
+    "live_campus_calls": 0,
+    "model_calls": 0,
+    "business_submissions": 0,
+    "release_owner": "Codex",
+    "batch4_integration_test": "tests/test_batch4_integration.py",
+    "batch5_integration_test": "tests/test_batch5_integration.py",
+    "batch6_integration_test": "tests/test_batch6_integration.py",
+    "batch7_integration_test": "tests/test_batch7_integration.py",
+    "batch8_integration_test": "tests/test_batch8_integration.py"
+  },
+  "modules": [
+    {
+      "id": "1.1",
+      "title": "版本基线、架构契约与调度冻结",
+      "batch": 1,
+      "code_paths": [
+        "contracts/v0.2/validate.py",
+        "tests/test_v020_contracts.py"
+      ],
+      "contracts": [
+        "result-envelope-v1",
+        "error-classification-v1",
+        "secure-storage-header-v1",
+        "source-evidence-v1",
+        "media-reference-v1",
+        "calendar-event-v1",
+        "business-facade-v1",
+        "local-read-api-v1"
+      ],
+      "tests": [
+        "contracts/v0.2/validate.py",
+        "tests/test_v020_contracts.py",
+        "plans/v0.2.0/工具/validate_plan.py"
+      ],
+      "docs": [
+        "contracts/v0.2/README.md",
+        "plans/v0.2.0/交付/基线记录.md",
+        "plans/v0.2.0/版本总清单.md"
+      ],
+      "install_assets": [
+        "plans/v0.2.0/",
+        "contracts/v0.2/",
+        "requirements-dev.txt"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "冻结的版本基线、八类契约 + 兼容基线、模块负责表、批次门禁和总体验收映射",
+      "evidence": [
+        "Baseline 2fcc0a6: 315 files, 0 privacy findings; Python 428 passed/2 skipped; Node 54 passed; ubuntu-24.04 and windows-2025 CI passed.",
+        "Contract validator: 8 contracts + 1 compatibility baseline; 9 compatibility samples; 35 rejection samples rejected; 8 extra fixtures.",
+        "Audit-fix tree: 320 files, 0 privacy findings; Python 429 passed/2 skipped; Node 54 passed; 9 schema samples, 35 rejection samples, 8 extra fixtures."
+      ]
+    },
+    {
+      "id": "2.1",
+      "title": "收编安装诊断与统一配置路径",
+      "batch": 2,
+      "code_paths": [
+        "scripts/dev_diagnostics.py",
+        "scripts/dev.py",
+        "src/thu_assistant/configuration.py",
+        "src/thu_assistant/paths.py",
+        "tests/test_configuration.py",
+        "tests/test_dev_diagnostics.py"
+      ],
+      "contracts": [
+        "result-envelope-v1",
+        "business-facade-v1"
+      ],
+      "tests": [
+        "tests/test_configuration.py",
+        "tests/test_dev_diagnostics.py"
+      ],
+      "docs": [
+        "README.md",
+        "docs/INSTALL.md"
+      ],
+      "install_assets": [
+        "scripts/dev.py",
+        "scripts/dev_diagnostics.py"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "统一配置与路径解析；诊断命令接入统一配置；首装依赖与平台提示",
+      "evidence": [
+        "tests/test_configuration.py + tests/test_dev_diagnostics.py: 31 passed on 690cbab",
+        "dev.py check: 367 files, 0 findings; dev.py test: Python 479 passed/5 skipped, Node 54 passed",
+        "plan validator ok (24 modules/9 batches); contract validator ok (9/35/8 samples)",
+        "audit report P1/P2/P3 2.1 items fixed; cross-module legacy path items recorded for 4.2/6.3",
+        "Windows CI a273d0e: 2.1 test files 0 failures; the then-failing 2.2 secure_store was fixed later and the batch is accepted at 4519117",
+        "re-verified head 34c463d: both platforms green; 2.1 tests included; check 369/0",
+        "final re-audit tree: check 371/0; Python 505/5 Linux and Windows; Node 54; module results mirrored for 2.3"
+      ]
+    },
+    {
+      "id": "2.2",
+      "title": "跨平台加密存储与密钥生命周期",
+      "batch": 2,
+      "code_paths": [
+        "src/thu_assistant/secure_store/",
+        "tests/test_secure_store.py"
+      ],
+      "contracts": [
+        "secure-storage-header-v1",
+        "result-envelope-v1"
+      ],
+      "tests": [
+        "tests/test_secure_store.py"
+      ],
+      "docs": [
+        "src/thu_assistant/secure_store/README.md",
+        "docs/HANDOVER.md",
+        "docs/INSTALL.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/secure_store/"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "跨平台认证加密存储、随机主密钥、权限/链接检查、旧 DPAPI 只读兼容",
+      "evidence": [
+        "AES-256-GCM envelope with AESGCM, per-seal random nonce, canonical AAD, optional record_id binding and frozen header schema validation.",
+        "Windows current-user DPAPI and POSIX owner-only random key backends; key/data separation revalidated on rotation; symlink/reparse/permission rejection.",
+        "Rotation preview, verified re-seal, atomic pointer switch, restarted rollback with THU_SECURE_RETIRED_KEY_FILES, previous-record verification, legacy DPAPI read-only recognition.",
+        "33 Linux module tests at a6b54bb, 39 after the 2026-11-17 re-audit; Windows secure-store tests passed on windows-2025.",
+        "Final audit-fix tree at a6b54bb: check 369 files/0 findings; Python 497/5 Linux, 497/5 Windows; Node 54; CI both platforms green.",
+        "Re-audit tree: check 371/0; Python 505/5 Linux and Windows; Node 54; SDDL owner tests cover concrete SIDs, well-known aliases and the built-in administrator alias."
+      ]
+    },
+    {
+      "id": "2.3",
+      "title": "校园来源证据与业务数据契约",
+      "batch": 2,
+      "code_paths": [],
+      "contracts": [
+        "source-evidence-v1",
+        "result-envelope-v1"
+      ],
+      "tests": [
+        "tests/test_source_contracts.py"
+      ],
+      "docs": [
+        "docs/contracts/"
+      ],
+      "install_assets": [
+        "contracts/v0.2/sources/"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "校园来源证据、字段映射、阻塞登记和合成来源夹具",
+      "output_contracts": [
+        "course-v1",
+        "resource-v1",
+        "grade-v1",
+        "order-v1",
+        "attachment-v1",
+        "assignment-v1",
+        "submission-v1",
+        "renewal-v1",
+        "model-image-capability-v1"
+      ],
+      "evidence": [
+        "Source registry: 29 sources, 8 source tasks, 14 adapter-readiness rows.",
+        "Domain model manifest: 10 models; event reuses calendar-event-v1.",
+        "Validator: 9 schema samples, 24 rejection samples, 7 fixtures, ok=true.",
+        "Tests: tests/test_source_contracts.py 6 passed; no live campus, model, payment or submission calls.",
+        "Result mirrored at plans/v0.2.0/交付/模块结果/2.3.json; audit fix d4a2f03 recorded.",
+        "Batch 2 accepted at 4519117; both platforms green at the re-verified head 34c463d."
+      ]
+    },
+    {
+      "id": "3.1",
+      "title": "跨平台认证会话与网关迁移",
+      "batch": 3,
+      "code_paths": [
+        "src/thu_assistant/gateway.js",
+        "src/thu_assistant/gateway_client.py",
+        "src/thu_assistant/session-store.js",
+        "src/thu_assistant/session-policy.js",
+        "src/thu_assistant/browser.py",
+        "src/thu_assistant/crypto-bridge.js",
+        "src/thu_assistant/crypto_service.py",
+        "src/learn_assistant/auth.py",
+        "runtime/windows/access.js",
+        "runtime/windows/import-session.py",
+        "runtime/windows/session-store.py"
+      ],
+      "contracts": [
+        "secure-storage-header-v1",
+        "source-evidence-v1",
+        "result-envelope-v1"
+      ],
+      "tests": [
+        "tests/test_session_gateway.py",
+        "tests/campus-session-v3.test.js",
+        "tests/campus-crypto-bridge.test.js",
+        "tests/test_campus.py",
+        "tests/test_gateway_bridge.py"
+      ],
+      "docs": [
+        "plans/v0.2.0/交付/模块结果/3.1.md"
+      ],
+      "install_assets": [
+        "runtime/windows/"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "跨平台认证会话、网关迁移、Windows 兼容包装和会话边界",
+      "evidence": [
+        "crypto bridge/service: fixed actions, request ids, 2 MiB request and 2 MiB + 64 KiB response bounds, timeout/cancel, no client-selected program or path.",
+        "Session migration: legacy campus-v2.dpapi retained and copied to .before-v3 before a verified campus-v3.secure write.",
+        "Linux missing key: protected session operations fail with SECURE_KEY_NOT_CONFIGURED; public read and static catalog still work.",
+        "Browser state sealed through the gateway; gateway stdout contains no cookie plaintext.",
+        "14 Python (2 Linux skips; 16 pass on Windows) + 7 Node v3 + 5 Node crypto module tests; shared tree Python 645/7, Node 66/0, check 402/0 on Linux and Python 641/11, Node 66/0 on Windows.",
+        "GitHub Actions run 43956001264 at b0ecc64: ubuntu-24.04 and windows-2025 both successful."
+      ]
+    },
+    {
+      "id": "3.2",
+      "title": "统一查询、数据模型与完整性规则",
+      "batch": 3,
+      "code_paths": [
+        "src/thu_assistant/queries.py",
+        "src/thu_assistant/catalog.py",
+        "src/thu_assistant/pagination.js",
+        "src/thu_assistant/domain_models.py",
+        "src/thu_assistant/source_state.py",
+        "src/thu_assistant/cache_policy.py",
+        "tests/test_query_contracts.py"
+      ],
+      "contracts": [
+        "result-envelope-v1",
+        "source-evidence-v1",
+        "calendar-event-v1"
+      ],
+      "tests": [
+        "tests/test_query_contracts.py"
+      ],
+      "docs": [
+        "docs/CAPABILITIES.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/domain_models.py"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "统一数据模型、完整性三态、稳定键、缓存策略和分页语义",
+      "evidence": [
+        "Source-state completeness triad and source-evidence builder; error-code mirror checked against error-classification-v1; evidence URLs sanitized.",
+        "Domain identities, date/time precision, integer status mapping, role digest and same-title/different-id relations validated against course-v1 and query fixtures.",
+        "Cursor c1 bound to parameters, account scope and snapshot-v2 for learn, authenticated pages and account-bound services; cancelled second page keeps the first segment but stays partial.",
+        "tests/test_query_contracts.py: 40 passed; clean-tree full offline suite at 734d41a Python 622 passed/5 skipped, Node 64 passed; check 402 files/0 findings.",
+        "GitHub Actions ubuntu-24.04 and windows-2025 succeeded at final 3.2 audit-fix head 456e7a5 (run 43945010355); the earlier head 4281df0 also passed (run 43942584816).",
+        "Audit remediation 734d41a (follow-up a579c2f) fixes P1-1..P1-4 and the P2 findings; remaining P3 limits are recorded in the module result.",
+        "Result mirrored at plans/v0.2.0/交付/模块结果/3.2.json; no live campus, model or business calls.",
+        "All three batch-3 modules are module-accepted and were reconnected at the single integration commit 400adbe; the joint suite and push/PR CI are green on both platforms."
+      ]
+    },
+    {
+      "id": "3.3",
+      "title": "附件与图片的本地隐私处理",
+      "batch": 3,
+      "code_paths": [
+        "src/thu_assistant/media_assets/",
+        "tests/test_media_assets.py"
+      ],
+      "contracts": [
+        "media-reference-v1",
+        "secure-storage-header-v1",
+        "source-evidence-v1"
+      ],
+      "tests": [
+        "tests/test_media_assets.py"
+      ],
+      "docs": [
+        "docs/CAPABILITIES.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/media_assets/"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "图片/附件本地检查、临时目录、哈希和媒体引用",
+      "evidence": [
+        "Content-signature typing with extension and declared-MIME agreement; disguised HTML/SVG/executable content rejected.",
+        "File boundary: regular file, no symlink/reparse point, POSIX readable bit, one open with fstat identity check, bounded streaming.",
+        "Image limits 8 MiB / 4 per request / 16 MiB total / 16 Mpx / 20000 side; a small PNG declaring 20000x20000 fails before decode.",
+        "Orientation applied and EXIF/GPS/XMP/ICC/comment removed by re-encoding; derived hash differs from source hash and is re-verified on read.",
+        "References bound to account scope (acct_ pseudonym only; none rejected), task, purpose and expiry; cross-account, cross-task and expired resolution rejected.",
+        "Model bundle preview plus request-bound single-use grant; capability probe reads no bytes; no network client imported.",
+        "Temporary area 0700/0600 with .part atomic rename and .media-lock single-owner lock; disk-full, cancel and timeout leave nothing; cleanup keeps live unexpired references and foreign files.",
+        "Encrypted reference state via 2.2 secure store restores across processes and rejects a different account; SecureStore.account_scope() is the sanctioned pseudonym derivation.",
+        "tests/test_media_assets.py: 84 passed at 036a00d; joint batch tree Python 645/7, Node 66/0, check 402/0; validators ok.",
+        "No live campus, model or business calls; Windows conclusions come from windows-2025 CI on the batch-3 tree."
+      ]
+    },
+    {
+      "id": "4.1",
+      "title": "个人课表、考试与成绩只读适配",
+      "batch": 4,
+      "code_paths": [
+        "src/thu_assistant/academics/",
+        "tests/test_academics.py"
+      ],
+      "contracts": [
+        "source-evidence-v1",
+        "result-envelope-v1",
+        "calendar-event-v1"
+      ],
+      "tests": [
+        "tests/test_academics.py"
+      ],
+      "docs": [
+        "docs/CAPABILITIES.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/academics/"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "个人课表、考试、成绩只读适配与来源阻塞记录",
+      "evidence": [
+        "98 module tests at bbe620a; audit 4.1-audit P1-1..P1-4 and P2-1..P2-9 fixed; the 11 ACADEMICS_* codes registered in the batch-4 integration (X1)",
+        "timetable/exams/grades adapters stay BLOCKED_SOURCE_EVIDENCE with ADAPTER_REQUIRED and zero items; events validate against calendar-event-v1; grades validate against grade-v1",
+        "check 422 files/0 findings; Linux Python 746 passed/7 skipped/0 failed, Node 66 passed; 0 live campus/model/business calls",
+        "reconnected at the single batch-4 integration commit; windows-2025 CI is the Windows evidence"
+      ]
+    },
+    {
+      "id": "4.2",
+      "title": "课程资料中心与跨课程检索",
+      "batch": 4,
+      "code_paths": [
+        "src/thu_assistant/resources/",
+        "tests/test_resources.py"
+      ],
+      "contracts": [
+        "source-evidence-v1",
+        "media-reference-v1",
+        "result-envelope-v1"
+      ],
+      "tests": [
+        "tests/test_resources.py"
+      ],
+      "docs": [
+        "docs/CAPABILITIES.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/resources/"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "课程资料中心、跨课程检索、下载清单和稳定资源标识",
+      "evidence": [
+        "98 module tests at c66ee2e; audit 4.2-audit P0-1, P1-1..P1-11 and P2-1..P2-18 fixed; residual []",
+        "AES-GCM index through the 2.2 store, account and semester scoped; version monotonicity and index/archive ordering verified by audit probes",
+        "check 420 files/0 findings; Linux Python 746 passed/7 skipped/0 failed, Node 66 passed; 0 download or upload during indexing",
+        "reconnected at the single batch-4 integration commit; windows-2025 CI is the Windows evidence"
+      ]
+    },
+    {
+      "id": "4.3",
+      "title": "图书馆体育查询一致性与规则读取",
+      "batch": 4,
+      "code_paths": [
+        "src/thu_assistant/precheck.py",
+        "src/thu_assistant/library.py",
+        "src/thu_assistant/spaces.py",
+        "src/thu_assistant/sports.py",
+        "src/thu_assistant/queries.py",
+        "tests/test_library_contracts.py",
+        "tests/test_spaces_contracts.py",
+        "tests/test_sports_contracts.py"
+      ],
+      "contracts": [
+        "source-evidence-v1",
+        "result-envelope-v1",
+        "calendar-event-v1"
+      ],
+      "tests": [
+        "tests/test_library_contracts.py",
+        "tests/test_spaces_contracts.py",
+        "tests/test_sports_contracts.py"
+      ],
+      "docs": [
+        "docs/CAPABILITIES.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/library.py"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "图书馆/体育查询一致性、规则读取和部分结果语义",
+      "evidence": [
+        "52 module tests at e14c11c plus 277 related read regressions passed/1 skipped; audit 4.3-audit P1-1..P1-4 and P2-1..P2-16 fixed",
+        "precheck keeps selection/window/free-scope/eligibility/fees/rules separate; unknown or empty seat rows stay UNKNOWN; ROOM_RULE_UNVERIFIED registered",
+        "check 410 files/0 findings; Linux Python 700 passed/7 skipped/0 failed, Node 66 passed; no write path changed",
+        "reconnected at the single batch-4 integration commit; windows-2025 CI is the Windows evidence"
+      ]
+    },
+    {
+      "id": "4.4",
+      "title": "统一办理框架与跨平台授权凭据",
+      "batch": 4,
+      "code_paths": [
+        "src/thu_assistant/actions.py",
+        "src/thu_assistant/action_store.py",
+        "src/thu_assistant/action_recovery.py",
+        "src/thu_assistant/browser.py",
+        "src/thu_assistant/consent/",
+        "tests/test_action_framework.py"
+      ],
+      "contracts": [
+        "business-facade-v1",
+        "secure-storage-header-v1",
+        "error-classification-v1"
+      ],
+      "tests": [
+        "tests/test_action_framework.py"
+      ],
+      "docs": [
+        "docs/HANDOVER.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/consent/"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "统一办理状态机、可信宿主授权、一次派发和未决恢复",
+      "evidence": [
+        "47 module tests and 199 compatibility tests at cf255de; audit 4.4-audit P1-1..P1-3 and P2-1..P2-14 fixed",
+        "signed one-time host authorization, challenge binding, preflight before consumption, revision-bound transitions and bounded public history",
+        "check 412 files/0 findings; Linux 695 passed/7 skipped; Windows CI 44009070509: 690 passed/12 skipped/0 failed, Node 66 passed",
+        "real local confirmation CLI exercised with a 2.2 key; 0 live campus/payment/booking calls"
+      ]
+    },
+    {
+      "id": "4.5",
+      "title": "模型图片输入与资料引用增强",
+      "batch": 4,
+      "code_paths": [
+        "src/thu_assistant/models.py",
+        "src/thu_assistant/models.js",
+        "src/thu_assistant/model_media.py",
+        "tests/test_model_media.py"
+      ],
+      "contracts": [
+        "media-reference-v1",
+        "source-evidence-v1",
+        "result-envelope-v1"
+      ],
+      "tests": [
+        "tests/test_model_media.py"
+      ],
+      "docs": [
+        "docs/CAPABILITIES.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/model_media.py"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "模型图片输入、资料引用增强和传输前媒体检查",
+      "evidence": [
+        "58 module tests (51 Python + 7 Node) at 2df5772; audit 4.5-audit P1-1..P1-3 and P2-1..P2-12 fixed in scope; P2-3 closed by the batch-4 X1 registration",
+        "empty shipped ProtocolRegistry: image calls fail with MODEL_IMAGE_PROTOCOL_UNVERIFIED or MODEL_IMAGE_INPUT_UNAVAILABLE and send nothing",
+        "check 407 files/0 findings; Linux 706 passed/7 skipped/0 failed, Node 66 passed; one grant per send and no replay after cancel",
+        "reconnected at the single batch-4 integration commit; 0 model calls with images"
+      ]
+    },
+    {
+      "id": "5.1",
+      "title": "图书馆预约、取消与续借适配",
+      "batch": 5,
+      "code_paths": [
+        "src/thu_assistant/library_actions.py",
+        "src/thu_assistant/library_wire.py",
+        "src/thu_assistant/library_contracts.py",
+        "src/thu_assistant/renewal/",
+        "tests/test_library_actions.py",
+        "tests/test_library_renewal.py",
+        "contracts/v0.2/sources/source-registry.json"
+      ],
+      "contracts": [
+        "business-facade-v1",
+        "error-classification-v1",
+        "source-evidence-v1"
+      ],
+      "tests": [
+        "tests/test_library_actions.py",
+        "tests/test_library_renewal.py"
+      ],
+      "docs": [
+        "docs/CAPABILITIES.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/renewal/"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "图书馆预约、取消、续借适配和精确核对",
+      "evidence": [
+        "accepted at 6788e1a after the 5.1 audit (P0=0, P1=7, P2=16 fixed); 127 module tests and 342 collected/341 passed/1 skipped related regression; Linux Python 1052 passed/7 skipped/0 failed, Node 66 passed; check 468 files/0 findings",
+        "seat/room create consumes the 4.3 precheck summary and keeps unknown states, map changes and rule gaps as official handoffs; cancel behaviour is batch-4 code verified by 5.1 tests",
+        "renewal binds one loan, the Primo account and the exact request contract; only a later due instant proves success and no verified request contract exists, so renew_loan stays enabled=false",
+        "branch history was rewritten before integration to drop the absolute worktree path; no PR, merge or release"
+      ]
+    },
+    {
+      "id": "5.2",
+      "title": "体育预约取消与付款状态闭环",
+      "batch": 5,
+      "code_paths": [
+        "src/thu_assistant/sports_actions.py",
+        "src/thu_assistant/sports_transport.py",
+        "tests/test_sports_actions.py"
+      ],
+      "contracts": [
+        "business-facade-v1",
+        "error-classification-v1",
+        "source-evidence-v1"
+      ],
+      "tests": [
+        "tests/test_sports_actions.py"
+      ],
+      "docs": [
+        "docs/CAPABILITIES.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/sports_actions.py"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "体育预约/取消、付款状态闭环和未知结果核对",
+      "evidence": [
+        "55 module tests at f0b2444; audit 5.2-audit P1-1/P1-2 and P2-1..P2-6, P2-8..P2-18 fixed in scope; P2-7 and the browser/auth framework items are recorded 4.4 handoffs",
+        "effective RESV_EFFECT orders prepare an official cancel plan; unobserved dispatch stays UNKNOWN and the ledger records UNKNOWN; expired/cancelled payment maps to FAILED",
+        "preview and platform.amounts agree on whether the source total was compared with a plan amount; payType is a recorded soft match; nine sports codes registered",
+        "117 sports regressions; 306 related transaction/query tests passed/1 skipped; Linux Python 1060 passed/7 skipped/0 failed; Node 66; check 463 files/0 findings",
+        "batch-5 reconnection and two-platform CI are recorded by the integration owner; no delivery PR, main merge or release"
+      ]
+    },
+    {
+      "id": "5.3",
+      "title": "网络学堂作业上传与正式提交",
+      "batch": 5,
+      "code_paths": [
+        "src/thu_assistant/submissions/",
+        "tests/test_submissions.py"
+      ],
+      "contracts": [
+        "media-reference-v1",
+        "business-facade-v1",
+        "source-evidence-v1"
+      ],
+      "tests": [
+        "tests/test_submissions.py"
+      ],
+      "docs": [
+        "docs/CAPABILITIES.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/submissions/"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "作业上传、草稿/正式提交分离和结果核对",
+      "evidence": [
+        "98 module tests and 159 related regression tests at b49f86d; Python full offline 1103 passed/7 skipped/0 failed, Node 66 passed; check 474 files/0 findings",
+        "ordered single-use upload -> draft -> submit sequence behind the 4.4 request gate and side-effect ledger, with a pre-submit recheck",
+        "assignment rules are fail-closed and file identity is re-hashed at preflight and before each upload",
+        "submission-v1 records are emitted only from an observed platform state; no production transport exists (BLOCKED_SOURCE_EVIDENCE)",
+        "5.3-audit P0=0/P1=4/P2=16 fixed; hermes/5.3 merges with hermes/5.4 without a conflict"
+      ]
+    },
+    {
+      "id": "5.4",
+      "title": "统一日程、增量事件与日历导出",
+      "batch": 5,
+      "code_paths": [
+        "src/thu_assistant/todos.py",
+        "src/thu_assistant/events.py",
+        "src/thu_assistant/calendar_export.py",
+        "src/thu_assistant/snapshot_diff.py",
+        "tests/test_events.py",
+        "tests/test_calendar_export.py"
+      ],
+      "contracts": [
+        "calendar-event-v1",
+        "result-envelope-v1",
+        "source-evidence-v1"
+      ],
+      "tests": [
+        "tests/test_events.py",
+        "tests/test_calendar_export.py"
+      ],
+      "docs": [
+        "docs/CAPABILITIES.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/events.py"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "统一日程、增量事件、稳定事件编号和 ICS 导出",
+      "evidence": [
+        "accepted at 6145ed2 after the 5.4 audit (P0=0, P1=4, P2=12 fixed); 58 module tests and 203 related regression tests",
+        "export_calendar is a pure local write and export_agenda is the explicit read-then-export path; academic events respect the request window; agenda collects every snapshot page",
+        "per-UID sequence keeps iCalendar SEQUENCE monotonic across rebuild, scope change and no-key paths; malformed academic events stay in the excluded report (follow-up 6145ed2)",
+        "batch-5 joint tree: check 493 files/0 findings, Linux and Windows full offline suites green, Node 66 passed; 0 live campus/model/business calls",
+        "batch-5 reconnection and two-platform CI are recorded by the integration owner; no delivery PR, main merge or release"
+      ]
+    },
+    {
+      "id": "6.1",
+      "title": "公共业务门面与 MCP CLI 集成",
+      "batch": 6,
+      "code_paths": [
+        "src/thu_assistant/mcp_stdio.py",
+        "src/thu_assistant/queries.py",
+        "src/thu_assistant/__main__.py",
+        "src/thu_assistant/facade/",
+        "src/thu_assistant/local_ops.py"
+      ],
+      "contracts": [
+        "result-envelope-v1",
+        "error-classification-v1",
+        "secure-storage-header-v1",
+        "source-evidence-v1",
+        "media-reference-v1",
+        "calendar-event-v1",
+        "business-facade-v1",
+        "local-read-api-v1",
+        "compatibility-baseline-v1"
+      ],
+      "tests": [
+        "tests/test_facade.py",
+        "tests/test_cli.py",
+        "tests/test_facade_audit.py"
+      ],
+      "docs": [
+        "docs/CAPABILITIES.md",
+        "docs/HANDOVER.md",
+        "README.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/facade/",
+        "src/thu_assistant/local_ops.py"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "公共业务门面、MCP/CLI 接线、29 工具兼容和启用条件",
+      "evidence": [
+        "accepted at aee2559 after the 6.1-audit (P0=0, P1=8, P2=15 fixed or explicitly downgraded)",
+        "68 module tests and 370 related regression tests; real file-keyed ResourceCenter covered; local results validate against result-envelope-v1",
+        "health returns PARTIAL/BLOCKED per row, unregistered reads are refused, unverified sources and switches stay visible in the capability table",
+        "check 504 files/0 findings; Linux full offline suite 1336 passed/7 skipped; Node 66 passed; plan/contract/source validators ok; 0 live campus/model/business calls",
+        "batch-6 integration 4f5c62ee4526839dc69d32c6ba6f90a5833937be: the facade implements the 6.2 consumer protocol (services/todos/calendar/resources), the 4.2 provider attribute moved to resource_provider, and the dashboard prints its URL before serving (X1-X4)"
+      ]
+    },
+    {
+      "id": "6.2",
+      "title": "本地看板读取 API 与进程边界",
+      "batch": 6,
+      "code_paths": [
+        "src/thu_assistant/local_api/",
+        "tests/test_local_api.py"
+      ],
+      "contracts": [
+        "local-read-api-v1",
+        "business-facade-v1",
+        "result-envelope-v1"
+      ],
+      "tests": [
+        "tests/test_local_api.py"
+      ],
+      "docs": [
+        "docs/CAPABILITIES.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/local_api/"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "本地只读 API、回环监听、分页和同源安全边界",
+      "evidence": [
+        "accepted at 198aeb1 after the 6.2-audit (P0=0, P1=3, P2=16 fixed or explicitly scoped)",
+        "162 module tests and 57 related regression tests; 18 audit probes re-run with fixed behaviour; every response validates against result-envelope-v1",
+        "two executor pools keep health/services alive with eight stuck adapters; single-use bootstrap, strict envelope validation, list-shaped link filtering and the 8 MiB response ceiling are covered",
+        "check 505 files/0 findings; Linux full offline suite 1430 passed/7 skipped; Node 66 passed; plan/contract/source validators ok; 0 live campus/model/business calls",
+        "batch-6 integration 4f5c62ee4526839dc69d32c6ba6f90a5833937be: /resources forwards the 4.2 semester, /todos and /calendar report agenda/todos and agenda/calendar from one snapshot, the cancel token reaches the 5.4 read and a busy port is refused on Windows via SO_EXCLUSIVEADDRUSE (X1-X3, X6)"
+      ]
+    },
+    {
+      "id": "6.3",
+      "title": "完整发行布局与安装升级迁移",
+      "batch": 6,
+      "code_paths": [
+        "pyproject.toml",
+        "MANIFEST.in",
+        "requirements.txt",
+        "requirements-dev.txt",
+        "setup.py",
+        "build_support/",
+        "scripts/package_release.py",
+        "scripts/migrate_state.py",
+        "scripts/configure_mcp.py",
+        "scripts/dev_diagnostics.py",
+        "src/thu_assistant/version.py",
+        "src/thu_assistant/upgrade.py",
+        "src/thu_assistant/doctor.py",
+        "src/thu_assistant/paths.py",
+        "src/thu_assistant/gateway_client.py",
+        "src/thu_assistant/gateway.js",
+        "src/learn_assistant/mcp_stdio.py",
+        ".github/workflows/ci.yml"
+      ],
+      "contracts": [
+        "compatibility-baseline-v1",
+        "secure-storage-header-v1"
+      ],
+      "tests": [
+        "tests/test_distribution.py",
+        "tests/test_upgrade.py"
+      ],
+      "docs": [
+        "README.md",
+        "docs/INSTALL.md",
+        "docs/UPGRADE.md",
+        "CHANGELOG.md",
+        "THIRD_PARTY.md"
+      ],
+      "install_assets": [
+        "pyproject.toml",
+        "MANIFEST.in",
+        "requirements.txt",
+        "requirements-dev.txt",
+        "setup.py",
+        "build_support/",
+        "scripts/package_release.py",
+        "scripts/migrate_state.py",
+        "src/thu_assistant/doctor.py"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "完整发行布局、依赖锁、配置生成、安装升级迁移和候选包",
+      "evidence": [
+        "accepted at 6f5df60 after the 6.3-audit (P0=0, P1=7, P2=14 fixed)",
+        "49 module tests; two candidate builds are byte-identical; verify binds the artifact to HEAD and checks Requires-Python, Requires-Dist, seven entry points, exact licence paths and per-file bundled hashes",
+        "batch-6 integration 4f5c62ee4526839dc69d32c6ba6f90a5833937be: wheel 208 members including facade/ and local_api/, 54 bundled files, sdist 463 members; install-check outside the repository resolves only bundled resources, starts 29 MCP tools, runs openthu-doctor and leaves the synthetic user state unchanged",
+        "migration refuses DPAPI ciphertext on another platform, path traversal, duplicate items, program-directory targets and a symlinked same-root target; complete=false while a decision is pending"
+      ]
+    },
+    {
+      "id": "7.1",
+      "title": "轻量本地看板与统一使用体验",
+      "batch": 7,
+      "code_paths": [
+        "src/thu_assistant/web_assets/",
+        "tests/test_web_assets.py"
+      ],
+      "contracts": [
+        "local-read-api-v1",
+        "calendar-event-v1",
+        "result-envelope-v1"
+      ],
+      "tests": [
+        "tests/test_web_assets.py",
+        "tests/test_batch7_integration.py"
+      ],
+      "docs": [
+        "README.md",
+        "docs/CAPABILITIES.md"
+      ],
+      "install_assets": [
+        "src/thu_assistant/web_assets/"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "轻量本地看板、统一空/错/部分状态和响应式体验",
+      "evidence": [
+        "e2b45fa: 77 module tests, 231 related regression tests; full offline Linux Python 1649 passed/7 skipped, Node 66 passed; check 538 files/0 findings.",
+        "audit 7.1-audit P0=0/P1=3/P2=14 fixed: CLI static_dir wiring, wheel/sdist shell assets, resource-page read generation, navigation/wording/timezone/link-whitelist.",
+        "Batch 7 integration: both CLI construction paths pass web_assets.static_dir(); the wheel/sdist package data includes index.html, app.css and app.js; tests/test_batch7_integration.py proves route parity with local-read-api-v1."
+      ]
+    },
+    {
+      "id": "7.2",
+      "title": "跨平台回归、隐私与故障注入",
+      "batch": 7,
+      "code_paths": [
+        "scripts/regression_report.py"
+      ],
+      "contracts": [
+        "result-envelope-v1",
+        "error-classification-v1",
+        "secure-storage-header-v1",
+        "source-evidence-v1",
+        "media-reference-v1",
+        "calendar-event-v1",
+        "business-facade-v1",
+        "local-read-api-v1",
+        "compatibility-baseline-v1"
+      ],
+      "tests": [
+        "tests/release_regression/",
+        "tests/security_regression/"
+      ],
+      "docs": [
+        "docs/MAINTENANCE.md"
+      ],
+      "install_assets": [
+        ".github/workflows/"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "跨平台回归、隐私扫描、故障注入和验证报告生成",
+      "evidence": [
+        "3eeb2d3: 100 module cases (99 passed, 1 Windows-only skip) and full offline Linux Python 1670 passed/8 skipped, Node 66 passed; check 545 files/0 findings.",
+        "audit 7.2-audit P0=0/P1=6/P2=10 fixed: platform identity, commit binding, evidence floor, fail-closed markers, archive/POSIX privacy, nodeid sanitising, report/gate accounting.",
+        "Coverage matrix 24 modules/63 features/8 criteria/45 legacy files; release-gate fails closed on the Linux-only host and real Windows evidence remains an 8.1 obligation."
+      ]
+    },
+    {
+      "id": "7.3",
+      "title": "能力文档、用户手册与升级记录",
+      "batch": 7,
+      "code_paths": [],
+      "contracts": [
+        "result-envelope-v1",
+        "error-classification-v1",
+        "secure-storage-header-v1",
+        "source-evidence-v1",
+        "media-reference-v1",
+        "calendar-event-v1",
+        "business-facade-v1",
+        "local-read-api-v1",
+        "compatibility-baseline-v1"
+      ],
+      "tests": [
+        "tests/test_docs_consistency.py",
+        "tests/test_facade_failure_envelopes.py",
+        "tests/test_batch7_integration.py"
+      ],
+      "docs": [
+        "README.md",
+        "docs/",
+        "CHANGELOG.md"
+      ],
+      "install_assets": [
+        "docs/"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "能力矩阵、用户手册、升级记录和贡献维护文档",
+      "evidence": [
+        "9726535: 36 module cases (28 documentation consistency + 8 facade failure envelopes); full offline Linux Python 1607 passed/7 skipped, Node 66 passed; check 535 files/0 findings.",
+        "audit 7.3-audit P0=0/P1=4/P2=12 fixed: README Chromium, executable Linux key creation, schema-valid image example, facade _local_failure binding, plus the entry-point/changelog/tools/evidence/error-code/table findings.",
+        "81 registrations (63 READ, 15 CAMPUS_WRITE, 2 LOCAL_WRITE, 1 MODEL); 29 MCP tools; candidate notes stay candidate-not-released; batch integration updated the dashboard wording to the wired CLI."
+      ]
+    },
+    {
+      "id": "8.1",
+      "title": "全版本集成、候选构建与交审",
+      "batch": 8,
+      "code_paths": [
+        "contracts/v0.2/local-read-api.schema.json",
+        "src/thu_assistant/local_api/contract.py",
+        "src/thu_assistant/local_api/samples.py",
+        "src/thu_assistant/local_api/server.py",
+        "src/thu_assistant/actions.py",
+        "scripts/regression_report.py",
+        ".github/workflows/ci.yml"
+      ],
+      "contracts": [
+        "result-envelope-v1",
+        "error-classification-v1",
+        "secure-storage-header-v1",
+        "source-evidence-v1",
+        "media-reference-v1",
+        "calendar-event-v1",
+        "business-facade-v1",
+        "local-read-api-v1",
+        "compatibility-baseline-v1"
+      ],
+      "tests": [
+        "tests/test_batch8_integration.py",
+        "tests/test_local_api.py",
+        "tests/test_error_registry.py",
+        "tests/test_plan_validation.py",
+        "tests/test_remediation_state_scope.py",
+        "tests/release_regression/"
+      ],
+      "docs": [
+        "plans/v0.2.0/交付/集成清单.md",
+        "plans/v0.2.0/交付/候选版本记录.md",
+        "docs/contracts/source-matrix.md",
+        "CHANGELOG.md"
+      ],
+      "install_assets": [
+        "dist/",
+        "SHA256SUMS"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "全版本集成、候选构建、恢复安装验证和交审说明",
+      "evidence": [
+        "8.1-audit P0=0/P1=3/P2=9 closed; total-audit 17/17 (P1x4, P2x11, P3x2) closed at 43f19ef/4a03ecd; pre-batch-9 optimization landed at 71dbe9f",
+        "foreign or expired cursors on /todos and /calendar return 400 CURSOR_EXPIRED; a cursor from another route or account returns 400 CURSOR_QUERY_MISMATCH",
+        "CI push 44468735503 and PR 44468740959 at 71dbe9f green on both platforms: Linux Python 1843/8 + Node 66 (1909/8), Windows Python 1830/21 + Node 66 (1896/21), 0 unmapped files, release gate PASS 9/9 checks, 0 gaps",
+        "candidate build/verify/install-check pass at 71dbe9f (4 artifacts, source 568, wheel 214/54 bundled, sdist 499); batch 8 merged at 5ec73d9 and version PR #2 head carries the candidate"
+      ]
+    },
+    {
+      "id": "9.1",
+      "title": "Codex 整体审查与正式发行管理",
+      "batch": 9,
+      "code_paths": [],
+      "contracts": [
+        "result-envelope-v1",
+        "error-classification-v1",
+        "secure-storage-header-v1",
+        "source-evidence-v1",
+        "media-reference-v1",
+        "calendar-event-v1",
+        "business-facade-v1",
+        "local-read-api-v1",
+        "compatibility-baseline-v1"
+      ],
+      "tests": [
+        "tests/release_regression/"
+      ],
+      "docs": [
+        "CHANGELOG.md",
+        "docs/MAINTENANCE.md"
+      ],
+      "install_assets": [
+        "dist/",
+        "SHA256SUMS"
+      ],
+      "acceptance_commands": [
+        "python scripts/dev.py check",
+        "python scripts/dev.py test"
+      ],
+      "completion_standard": "Codex 独立审查、必要修复、正式合并、标签和 Release 验证",
+      "evidence": []
+    }
+  ]
+}
