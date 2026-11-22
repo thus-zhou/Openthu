@@ -620,27 +620,6 @@ def test_minimal_windows_env_strips_inherited_psmodulepath(monkeypatch):
     assert all(key.casefold() != "psmodulepath" for key in env)
 
 
-def test_powershell_env_isolates_module_path_for_pwsh7_and_51_fallback(tmp_path, monkeypatch):
-    monkeypatch.setenv("PSModulePath", str(tmp_path / "polluted-modules"))
-    monkeypatch.setenv("SystemRoot", r"C:\Windows")
-
-    win_ps = str(Path(r"C:\Windows") / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe")
-    env_51 = keys_module._powershell_env(win_ps)
-    assert env_51["PSModulePath"] == str(
-        Path(r"C:\Windows") / "System32" / "WindowsPowerShell" / "v1.0" / "Modules"
-    )
-
-    pwsh_dir = tmp_path / "pwsh7"
-    (pwsh_dir / "Modules").mkdir(parents=True)
-    pwsh_exe = pwsh_dir / "pwsh.exe"
-    env_7 = keys_module._powershell_env(str(pwsh_exe))
-    assert env_7["PSModulePath"] == str(pwsh_dir / "Modules")
-
-    pwsh_bare = tmp_path / "pwsh-bare" / "pwsh.exe"
-    assert all(key.casefold() != "psmodulepath" for key in keys_module._powershell_env(str(pwsh_bare)))
-    assert all(key.casefold() != "psmodulepath" for key in keys_module._powershell_env("pwsh.exe"))
-
-
 def test_subprocess_environment_excludes_psmodulepath(tmp_path, monkeypatch):
     monkeypatch.setenv("PSModulePath", str(tmp_path / "polluted"))
     env = subprocess_environment(
@@ -652,41 +631,9 @@ def test_subprocess_environment_excludes_psmodulepath(tmp_path, monkeypatch):
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows ACL only")
-def test_windows_key_round_trip_with_polluted_pwsh7_module_path_and_51_fallback(
-    tmp_path, monkeypatch
-):
-    fake_modules = tmp_path / "fake-pwsh7-modules"
-    security_mod = fake_modules / "Microsoft.PowerShell.Security"
-    security_mod.mkdir(parents=True)
-    (security_mod / "Microsoft.PowerShell.Security.psd1").write_text(
-        "@{ RootModule = 'missing.dll'; ModuleVersion = '7.0.0.0' }\n",
-        encoding="utf-8",
-    )
-    pwsh7_modules = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "PowerShell" / "7" / "Modules"
-    monkeypatch.setenv("PSModulePath", os.pathsep.join([str(fake_modules), str(pwsh7_modules)]))
-    win_ps = str(
-        Path(os.environ.get("SystemRoot", r"C:\Windows"))
-        / "System32"
-        / "WindowsPowerShell"
-        / "v1.0"
-        / "powershell.exe"
-    )
-    monkeypatch.setattr(keys_module, "_powershell", lambda: win_ps)
+def test_windows_key_round_trip_ignores_ambient_powershell_module_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("PSModulePath", str(tmp_path / "unused-modules"))
 
-    default_key = tmp_path / "default-keys" / "master.key"
-    create_key_file(default_key, "windows-dpapi")
-    default_provider = load_provider(default_key, "windows-dpapi")
-    default_store = SecureStore(default_provider, tmp_path / "default-data")
-    write_session(default_store)
-    assert read_session(default_store) == b"synthetic-session"
-    assert (
-        keys_module._windows_acl_snapshot_win32(default_key)
-        == keys_module._windows_acl_snapshot_powershell(default_key)
-    )
-
-    monkeypatch.setattr(
-        keys_module, "_windows_acl_snapshot", keys_module._windows_acl_snapshot_powershell
-    )
     key = tmp_path / "keys" / "master.key"
     create_key_file(key, "windows-dpapi")
     provider = load_provider(key, "windows-dpapi")
@@ -694,77 +641,19 @@ def test_windows_key_round_trip_with_polluted_pwsh7_module_path_and_51_fallback(
     write_session(store)
     assert read_session(store) == b"synthetic-session"
 
-    result = subprocess.run(
-        ["icacls", str(key), "/grant", "*S-1-1-0:F"],
-        capture_output=True,
-        text=True,
-        timeout=20,
-        check=False,
-    )
-    assert result.returncode == 0
-    with pytest.raises(SecureKeyPermissionError):
-        load_provider(key, "windows-dpapi")
-
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows ACL only")
-def test_windows_key_round_trip_with_pwsh7_if_installed_and_fail_closed_on_acl_error(
-    tmp_path, monkeypatch
-):
-    pwsh7 = (
-        Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
-        / "PowerShell"
-        / "7"
-        / "pwsh.exe"
-    )
-    if pwsh7.is_file():
-        broken_51 = tmp_path / "fake-ps51-modules"
-        security_mod = broken_51 / "Microsoft.PowerShell.Security"
-        security_mod.mkdir(parents=True)
-        (security_mod / "Microsoft.PowerShell.Security.psd1").write_text(
-            "@{ RootModule = 'missing.dll'; ModuleVersion = '5.1.0.0' }\n",
-            encoding="utf-8",
-        )
-        win51_modules = (
-            Path(os.environ.get("SystemRoot", r"C:\Windows"))
-            / "System32"
-            / "WindowsPowerShell"
-            / "v1.0"
-            / "Modules"
-        )
-        monkeypatch.setenv("PSModulePath", os.pathsep.join([str(broken_51), str(win51_modules)]))
-        monkeypatch.setattr(keys_module, "_powershell", lambda: str(pwsh7))
-        monkeypatch.setattr(
-            keys_module, "_windows_acl_snapshot", keys_module._windows_acl_snapshot_powershell
-        )
-
-        pwsh_key = tmp_path / "pwsh7-keys" / "master.key"
-        create_key_file(pwsh_key, "windows-dpapi")
-        provider = load_provider(pwsh_key, "windows-dpapi")
-        store = SecureStore(provider, tmp_path / "pwsh7-data")
-        write_session(store)
-        assert read_session(store) == b"synthetic-session"
-
-        result = subprocess.run(
-            ["icacls", str(pwsh_key), "/grant", "*S-1-1-0:F"],
-            capture_output=True,
-            text=True,
-            timeout=20,
-            check=False,
-        )
-        assert result.returncode == 0
-        with pytest.raises(SecureKeyPermissionError):
-            load_provider(pwsh_key, "windows-dpapi")
-
+def test_windows_keys_fail_closed_when_native_acl_query_fails(tmp_path, monkeypatch):
     with pytest.raises(SecureKeyPermissionError):
-        keys_module._windows_acl_snapshot_win32(tmp_path / "does-not-exist.key")
+        keys_module._windows_acl_snapshot(tmp_path / "does-not-exist.key")
 
     existing_key = tmp_path / "keys" / "existing.key"
     create_key_file(existing_key, "windows-dpapi")
 
-    def fail_acl(_path):
-        raise SecureKeyPermissionError("acl-snapshot-query")
+    def fail_acl():
+        raise OSError("ACL query unavailable")
 
-    monkeypatch.setattr(keys_module, "_windows_acl_snapshot", fail_acl)
+    monkeypatch.setattr(keys_module, "_win32_acl_apis", fail_acl)
     blocked_key = tmp_path / "blocked-keys" / "master.key"
     with pytest.raises(SecureKeyPermissionError):
         create_key_file(blocked_key, "windows-dpapi")

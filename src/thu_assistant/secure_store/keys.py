@@ -187,73 +187,6 @@ def _minimal_windows_env() -> dict[str, str]:
     return env
 
 
-def _powershell() -> str:
-    """Prefer PowerShell 7; fall back to Windows PowerShell on older hosts."""
-    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
-    candidates = [
-        Path(program_files) / "PowerShell" / "7" / "pwsh.exe",
-        Path(os.environ.get("SystemRoot", r"C:\Windows"))
-        / "System32"
-        / "WindowsPowerShell"
-        / "v1.0"
-        / "powershell.exe",
-    ]
-    for candidate in candidates:
-        if candidate.is_file():
-            return str(candidate)
-    return "powershell.exe"
-
-
-def _powershell_env(shell: str) -> dict[str, str]:
-    """Isolate PowerShell's module search path from the caller's shell."""
-    env = _minimal_windows_env()
-    for key in list(env):
-        if key.casefold() == "psmodulepath":
-            env.pop(key, None)
-    shell_path = Path(shell)
-    if shell_path.name.casefold() == "pwsh.exe":
-        if shell_path.is_absolute():
-            modules = shell_path.parent / "Modules"
-            if modules.is_dir():
-                env["PSModulePath"] = str(modules)
-    else:
-        root = env.get("SystemRoot", r"C:\Windows")
-        env["PSModulePath"] = str(
-            Path(root) / "System32" / "WindowsPowerShell" / "v1.0" / "Modules"
-        )
-    return env
-
-
-def _windows_acl_snapshot_powershell(path: Path) -> tuple[str, str]:
-    """Return the current user SID and the file's SDDL through PowerShell."""
-    script = (
-        "[Console]::Out.Write("
-        "([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value)"
-        " + \"`n\" + (Get-Acl -LiteralPath $env:OPENTHU_ACL_PATH -ErrorAction Stop).Sddl)"
-    )
-    shell = _powershell()
-    env = _powershell_env(shell)
-    env["OPENTHU_ACL_PATH"] = str(path)
-    try:
-        result = subprocess.run(
-            [shell, "-NoProfile", "-NonInteractive", "-Command", script],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=20,
-            check=False,
-            env=env,
-            stdin=subprocess.DEVNULL,
-        )
-    except (OSError, subprocess.SubprocessError):
-        raise SecureKeyPermissionError("acl-snapshot-process") from None
-    lines = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
-    if result.returncode != 0 or len(lines) < 2:
-        raise SecureKeyPermissionError("acl-snapshot-query")
-    return lines[0], lines[1]
-
-
 @lru_cache(maxsize=1)
 def _win32_acl_apis():
     from ctypes import wintypes
@@ -309,8 +242,10 @@ def _win32_acl_apis():
     return advapi32, kernel32, wintypes
 
 
-def _windows_acl_snapshot_win32(path: Path) -> tuple[str, str]:
+def _windows_acl_snapshot(path: Path) -> tuple[str, str]:
     """Return the current user SID and the file's SDDL via Win32 advapi32."""
+    if os.name != "nt" or not hasattr(ctypes, "WinDLL"):
+        raise SecureKeyPermissionError("acl-snapshot-unavailable")
     try:
         advapi32, kernel32, wintypes = _win32_acl_apis()
         token = wintypes.HANDLE()
@@ -372,13 +307,6 @@ def _windows_acl_snapshot_win32(path: Path) -> tuple[str, str]:
     if not current_sid or not sddl:
         raise SecureKeyPermissionError("acl-snapshot-query")
     return current_sid, sddl
-
-
-def _windows_acl_snapshot(path: Path) -> tuple[str, str]:
-    """Return the current user SID and the file's SDDL, failing closed on errors."""
-    if os.name == "nt" and hasattr(ctypes, "WinDLL"):
-        return _windows_acl_snapshot_win32(path)
-    return _windows_acl_snapshot_powershell(path)
 
 
 _SDDL_SECTIONS = re.compile(r"O:(.*?)(?:G:|D:|S:|$)")
