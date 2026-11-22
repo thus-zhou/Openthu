@@ -4,9 +4,8 @@ Batch 8 is the serial integration gate: it turns the accepted batches into one
 installable, restorable candidate.  These cases cover facts only the integration
 owner can prove on the merged tree:
 
-* every module delivery commit and every accepted batch integration commit is
-  an ancestor of the candidate tree, and the batch gate names batch 8 as the
-  single ready batch with 8.1 implemented but not accepted;
+* every recorded delivery is in the reviewed candidate history, including
+  after a protected squash merge of the exact same tree;
 * the contract set is complete and the running local-read API router declares
   exactly the frozen parameters, including the 8.1 request-side ``cursor``
   revision, so no route needs an out-of-contract extension;
@@ -55,7 +54,28 @@ def _require_git() -> None:
         pytest.skip("shallow clone has no module history; CI checks out full history here")
 
 
-def test_every_module_and_batch_delivery_is_an_ancestor_of_the_candidate() -> None:
+def _verified_squash_history() -> str:
+    search = _git("log", "--first-parent", "--format=%H", "-n", "1",
+                  "--grep=^Openthu-Reviewed-Head: ", "HEAD")
+    squash = search.stdout.strip()
+    assert search.returncode == 0 and re.fullmatch(r"[0-9a-f]{40}", squash), (
+        "Missing reviewed squash provenance for deliveries outside HEAD history"
+    )
+    trailer = _git("show", "-s", "--format=%(trailers:key=Openthu-Reviewed-Head,valueonly)", squash)
+    reviewed = trailer.stdout.strip()
+    assert trailer.returncode == 0 and re.fullmatch(r"[0-9a-f]{40}", reviewed)
+    candidate_tree = _git("rev-parse", f"{reviewed}^{{tree}}")
+    squash_tree = _git("rev-parse", f"{squash}^{{tree}}")
+    assert candidate_tree.returncode == squash_tree.returncode == 0
+    assert candidate_tree.stdout == squash_tree.stdout, "Squash tree differs from the reviewed tree"
+    parent_line = _git("rev-list", "--parents", "-n", "1", squash)
+    assert parent_line.returncode == 0 and len(parent_line.stdout.split()) == 2
+    base = parent_line.stdout.split()[1]
+    assert _git("merge-base", "--is-ancestor", base, reviewed).returncode == 0
+    return reviewed
+
+
+def test_every_module_and_batch_delivery_is_in_the_reviewed_history() -> None:
     _require_git()
     gate = _delivery_json("批次门禁.json")
     by_batch = {item["batch"]: item for item in gate["batches"]}
@@ -76,9 +96,15 @@ def test_every_module_and_batch_delivery_is_an_ancestor_of_the_candidate() -> No
         assert re.fullmatch(r"[0-9a-f]{40}", commit), (batch, commit)
         commits[f"batch-{batch}"] = commit
 
-    for label, commit in commits.items():
-        result = _git("merge-base", "--is-ancestor", commit, "HEAD")
-        assert result.returncode == 0, f"{label} {commit} is not an ancestor of HEAD"
+    missing = {
+        label: commit for label, commit in commits.items()
+        if _git("merge-base", "--is-ancestor", commit, "HEAD").returncode != 0
+    }
+    if missing:
+        reviewed = _verified_squash_history()
+        for label, commit in missing.items():
+            result = _git("merge-base", "--is-ancestor", commit, reviewed)
+            assert result.returncode == 0, f"{label} {commit} is not in the reviewed history"
 
 
 def test_the_batch_gate_accepts_batch_8_and_opens_batch_9() -> None:
