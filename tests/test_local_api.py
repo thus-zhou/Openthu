@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -27,6 +28,8 @@ from thu_assistant.local_api import contract, paging, projection, security
 from thu_assistant.local_api import samples as sample_module
 from thu_assistant.local_api.client import LocalApiClient
 from thu_assistant.local_api.server import Response
+from thu_assistant.secure_store import SecureKeyPermissionError
+from thu_assistant.secure_store import keys as secure_keys
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACTS = ROOT / 'contracts' / 'v0.2'
@@ -567,12 +570,15 @@ def test_csrf_helper_rejects_a_missing_or_wrong_token(server, client) -> None:
     assert server._sessions.check_csrf(client.cookie, None) is False
 
 
-@pytest.mark.skipif(os.name == 'nt', reason='POSIX permission bits')
 def test_bootstrap_file_is_owner_only_and_holds_no_account_data(tmp_path) -> None:
     instance = make_server(state_dir=tmp_path)
     try:
         info = instance.bootstrap_file.stat()
-        assert info.st_mode & 0o777 == 0o600
+        if os.name == 'nt':
+            assert secure_keys._windows_acl_owner_only(instance.bootstrap_file.parent) is True
+            assert secure_keys._windows_acl_owner_only(instance.bootstrap_file) is True
+        else:
+            assert info.st_mode & 0o777 == 0o600
         record = json.loads(instance.bootstrap_file.read_text(encoding='utf-8'))
         assert record['schema'] == security.BOOTSTRAP_SCHEMA
         assert set(record) == {'schema', 'instance_id', 'port', 'base_url', 'token', 'pid',
@@ -616,6 +622,162 @@ def test_bootstrap_file_with_loose_permissions_is_rejected(tmp_path) -> None:
     with pytest.raises(local_api.LocalApiError) as error:
         security.read_bootstrap(path, clock=FakeWallClock())
     assert error.value.code == 'LOCAL_API_BOOTSTRAP_INVALID'
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows ACL only')
+def test_windows_bootstrap_hardens_custom_state_dir_with_broad_parent_acl(tmp_path) -> None:
+    custom = tmp_path / 'custom-state'
+    custom.mkdir()
+    result = subprocess.run(
+        ['icacls', str(custom), '/grant', '*S-1-1-0:(OI)(CI)F'],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    instance = make_server(state_dir=custom)
+    try:
+        assert secure_keys._windows_acl_owner_only(instance.bootstrap_file.parent) is True
+        assert secure_keys._windows_acl_owner_only(instance.bootstrap_file) is True
+        _, sddl = secure_keys._windows_acl_snapshot(instance.bootstrap_file)
+        assert 'WD' not in secure_keys._sddl_ace_trustees(sddl)
+        client = LocalApiClient.from_bootstrap(instance.bootstrap_file, clock=FakeWallClock())
+        client.bootstrap()
+        status, payload = client.get('/api/v1/health')
+        assert status == 200
+        assert payload['status'] == 'OK'
+    finally:
+        instance.stop()
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows ACL only')
+def test_windows_bootstrap_publish_fails_closed_on_preexisting_broad_directory(tmp_path) -> None:
+    bootstrap_dir = tmp_path / 'local-api'
+    bootstrap_dir.mkdir()
+    result = subprocess.run(
+        ['icacls', str(bootstrap_dir), '/grant', '*S-1-1-0:F'],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    channel = security.BootstrapChannel(tmp_path, instance_id='a' * 32)
+    with pytest.raises(local_api.LocalApiError) as error:
+        channel.publish(port=12345, base_url='http://127.0.0.1:12345', pid=os.getpid())
+    assert error.value.code == 'LOCAL_API_BOOTSTRAP_UNAVAILABLE'
+    assert not list(bootstrap_dir.iterdir())
+
+    server_instance = local_api.LocalApiServer(facade=FixtureFacade(), state_dir=tmp_path)
+    with pytest.raises(local_api.LocalApiError) as server_error:
+        server_instance.start()
+    assert server_error.value.code == 'LOCAL_API_START_FAILED'
+    assert not list(bootstrap_dir.iterdir())
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows ACL only')
+def test_windows_bootstrap_read_rejects_broad_file_and_broad_parent_acl(tmp_path) -> None:
+    first = make_server(state_dir=tmp_path / 'state-file-broad')
+    try:
+        result = subprocess.run(
+            ['icacls', str(first.bootstrap_file), '/grant', '*S-1-1-0:F'],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        with pytest.raises(local_api.LocalApiError) as err:
+            security.read_bootstrap(first.bootstrap_file, clock=FakeWallClock())
+        assert err.value.code == 'LOCAL_API_BOOTSTRAP_INVALID'
+    finally:
+        first.stop()
+
+    second = make_server(state_dir=tmp_path / 'state-dir-broad')
+    try:
+        result = subprocess.run(
+            ['icacls', str(second.bootstrap_file.parent), '/grant', '*S-1-1-0:F'],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        with pytest.raises(local_api.LocalApiError) as err:
+            security.read_bootstrap(second.bootstrap_file, clock=FakeWallClock())
+        assert err.value.code == 'LOCAL_API_BOOTSTRAP_INVALID'
+    finally:
+        second.stop()
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows ACL only')
+def test_windows_bootstrap_fails_closed_when_acl_cannot_be_verified(tmp_path, monkeypatch) -> None:
+    existing = make_server(state_dir=tmp_path / 'existing')
+    try:
+        def fail_snapshot(_path):
+            raise SecureKeyPermissionError('acl-snapshot-query')
+
+        monkeypatch.setattr(secure_keys, '_windows_acl_snapshot', fail_snapshot)
+        with pytest.raises(local_api.LocalApiError) as read_err:
+            security.read_bootstrap(existing.bootstrap_file, clock=FakeWallClock())
+        assert read_err.value.code == 'LOCAL_API_BOOTSTRAP_INVALID'
+
+        blocked = tmp_path / 'blocked'
+        channel = security.BootstrapChannel(blocked, instance_id='b' * 32)
+        with pytest.raises(local_api.LocalApiError) as pub_err:
+            channel.publish(port=12345, base_url='http://127.0.0.1:12345', pid=os.getpid())
+        assert pub_err.value.code == 'LOCAL_API_BOOTSTRAP_UNAVAILABLE'
+        assert not channel.path.exists()
+        assert not list((blocked / 'local-api').glob('*.tmp'))
+    finally:
+        existing.stop()
+
+
+def test_simulated_windows_publish_fails_before_writing_token_when_temp_acl_unverified(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(security.os, 'name', 'nt')
+    monkeypatch.setattr(secure_keys, '_harden_windows_acl', lambda path, *, directory=False: None)
+    monkeypatch.setattr(secure_keys, '_windows_acl_owner_only', lambda path: Path(path).name == 'local-api')
+    channel = security.BootstrapChannel(tmp_path, instance_id='c' * 32)
+    with pytest.raises(local_api.LocalApiError) as err:
+        channel.publish(port=12345, base_url='http://127.0.0.1:12345', pid=os.getpid())
+    assert err.value.code == 'LOCAL_API_BOOTSTRAP_UNAVAILABLE'
+    assert not channel.path.exists()
+    assert not list((tmp_path / 'local-api').iterdir())
+
+
+def test_simulated_windows_read_rejects_unverified_parent_or_file_acl(tmp_path, monkeypatch) -> None:
+    bootstrap_dir = tmp_path / 'local-api'
+    bootstrap_dir.mkdir()
+    target = bootstrap_dir / 'bootstrap-d.json'
+    target.write_text(json.dumps({
+        'schema': security.BOOTSTRAP_SCHEMA,
+        'instance_id': 'd' * 32,
+        'port': 1234,
+        'base_url': 'http://127.0.0.1:1234',
+        'token': 't' * 43,
+        'pid': 1,
+        'created_at': '2026-11-17T00:00:00+00:00',
+        'expires_at': '2026-11-18T00:00:00+00:00',
+        'api_version': 'local-read-api-v1',
+    }), encoding='utf-8')
+
+    monkeypatch.setattr(security.os, 'name', 'nt')
+    monkeypatch.setattr(secure_keys, '_windows_acl_owner_only', lambda path: Path(path) != target)
+    with pytest.raises(local_api.LocalApiError) as err_file:
+        security.read_bootstrap(target, clock=FakeWallClock())
+    assert err_file.value.code == 'LOCAL_API_BOOTSTRAP_INVALID'
+
+    monkeypatch.setattr(secure_keys, '_windows_acl_owner_only', lambda path: Path(path) != bootstrap_dir)
+    with pytest.raises(local_api.LocalApiError) as err_dir:
+        security.read_bootstrap(target, clock=FakeWallClock())
+    assert err_dir.value.code == 'LOCAL_API_BOOTSTRAP_INVALID'
+
+    monkeypatch.setattr(secure_keys, '_windows_acl_owner_only', lambda path: True)
+    record = security.read_bootstrap(target, clock=FakeWallClock())
+    assert record['token'] == 't' * 43
 
 
 def test_access_log_never_contains_tokens_or_query_values(tmp_path, caplog) -> None:

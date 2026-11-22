@@ -35,6 +35,8 @@ from typing import Any, Callable, Mapping
 from urllib.parse import urlsplit
 
 from . import contract
+from ..secure_store import keys as _secure_keys
+from ..secure_store.errors import SecureStoreError
 
 BOOTSTRAP_SCHEMA = 'openthu-local-api-bootstrap-v1'
 COOKIE_NAME = 'openthu_local_session'
@@ -236,6 +238,42 @@ def cookie_value(header: str | None) -> str | None:
     return values[0] if values else None
 
 
+def _windows_verify_owner_only(path: Path) -> bool:
+    """Verify Windows ACL owner-only protection; fail closed on any error."""
+    try:
+        return bool(_secure_keys._windows_acl_owner_only(path))
+    except (OSError, SecureStoreError):
+        return False
+
+
+def _windows_ensure_directory(directory: Path) -> None:
+    """Ensure the bootstrap directory exists with owner-only Windows ACLs."""
+    if directory.is_symlink():
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500)
+    existed = directory.exists()
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        info = directory.lstat()
+    except OSError:
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500) from None
+    if (
+        stat.S_ISLNK(info.st_mode)
+        or not stat.S_ISDIR(info.st_mode)
+        or _secure_keys._is_reparse_point(info)
+    ):
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500)
+    if existed:
+        if not _windows_verify_owner_only(directory):
+            raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500)
+        return
+    try:
+        _secure_keys._harden_windows_acl(directory, directory=True)
+    except (OSError, SecureStoreError):
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500) from None
+    if not _windows_verify_owner_only(directory):
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500)
+
+
 class BootstrapChannel:
     """The protected local handover of a single-use bootstrap token."""
 
@@ -253,12 +291,97 @@ class BootstrapChannel:
         self._used = False
         self._lock = threading.RLock()
 
-    def publish(self, *, port: int, base_url: str, pid: int) -> Path:
-        self.directory.mkdir(parents=True, exist_ok=True)
+    def _publish_windows(self, payload: dict[str, Any]) -> Path:
+        _windows_ensure_directory(self.directory)
+        if self.path.is_symlink():
+            raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500)
+        if self.path.exists():
+            try:
+                existing_info = self.path.lstat()
+            except OSError:
+                raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500) from None
+            if (
+                stat.S_ISLNK(existing_info.st_mode)
+                or not stat.S_ISREG(existing_info.st_mode)
+                or _secure_keys._is_reparse_point(existing_info)
+            ):
+                raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500)
+        temp = self.directory / f'.{self.path.name}.{os.getpid()}.{secrets.token_hex(6)}.tmp'
+        replaced = False
         try:
-            os.chmod(self.directory, 0o700)
+            temp.unlink(missing_ok=True)
+            create_flags = (
+                os.O_WRONLY
+                | os.O_CREAT
+                | os.O_EXCL
+                | getattr(os, 'O_NOFOLLOW', 0)
+                | getattr(os, 'O_BINARY', 0)
+            )
+            handle = os.open(temp, create_flags, 0o600)
+            os.close(handle)
+            before = temp.lstat()
+            if (
+                stat.S_ISLNK(before.st_mode)
+                or not stat.S_ISREG(before.st_mode)
+                or _secure_keys._is_reparse_point(before)
+            ):
+                raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500)
+            try:
+                _secure_keys._harden_windows_acl(temp, directory=False)
+            except (OSError, SecureStoreError):
+                raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500) from None
+            if not _windows_verify_owner_only(temp):
+                raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500)
+            write_flags = (
+                os.O_WRONLY
+                | os.O_TRUNC
+                | getattr(os, 'O_NOFOLLOW', 0)
+                | getattr(os, 'O_BINARY', 0)
+            )
+            handle = os.open(temp, write_flags)
+            try:
+                after = os.fstat(handle)
+                if not stat.S_ISREG(after.st_mode) or (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino):
+                    raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500)
+            except BaseException:
+                os.close(handle)
+                raise
+            with os.fdopen(handle, 'w', encoding='utf-8') as stream:
+                json.dump(payload, stream, ensure_ascii=True, sort_keys=True)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temp, self.path)
+            replaced = True
+            final_info = self.path.lstat()
+            if (
+                stat.S_ISLNK(final_info.st_mode)
+                or not stat.S_ISREG(final_info.st_mode)
+                or _secure_keys._is_reparse_point(final_info)
+                or not _windows_verify_owner_only(self.path)
+            ):
+                raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500)
+        except contract.LocalApiError:
+            if replaced:
+                try:
+                    self.path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            raise
         except OSError:
-            pass
+            if replaced:
+                try:
+                    self.path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE', http_status=500) from None
+        finally:
+            try:
+                temp.unlink(missing_ok=True)
+            except OSError:
+                pass
+        return self.path
+
+    def publish(self, *, port: int, base_url: str, pid: int) -> Path:
         self.expires_at = self._clock() + self._ttl
         payload = {
             'schema': BOOTSTRAP_SCHEMA,
@@ -271,6 +394,13 @@ class BootstrapChannel:
             'expires_at': _iso(self.expires_at),
             'api_version': contract.CONTRACT_VERSION,
         }
+        if os.name == 'nt':
+            return self._publish_windows(payload)
+        self.directory.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(self.directory, 0o700)
+        except OSError:
+            pass
         temp = self.directory / f'.{self.path.name}.{os.getpid()}.tmp'
         try:
             temp.unlink(missing_ok=True)
@@ -329,8 +459,78 @@ def _iso(epoch: float) -> str:
     return datetime.fromtimestamp(float(epoch), timezone.utc).isoformat(timespec='seconds')
 
 
+def _read_private_bootstrap_windows(path: Path) -> bytes:
+    """Verify Windows parent/file ACLs and descriptor identity before reading."""
+    try:
+        before = path.lstat()
+    except FileNotFoundError:
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE',
+                                     http_status=401) from None
+    except OSError:
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID',
+                                     http_status=401) from None
+    if (
+        stat.S_ISLNK(before.st_mode)
+        or not stat.S_ISREG(before.st_mode)
+        or _secure_keys._is_reparse_point(before)
+    ):
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401)
+    try:
+        parent_info = path.parent.lstat()
+    except OSError:
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID',
+                                     http_status=401) from None
+    if (
+        stat.S_ISLNK(parent_info.st_mode)
+        or not stat.S_ISDIR(parent_info.st_mode)
+        or _secure_keys._is_reparse_point(parent_info)
+    ):
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401)
+    if not _windows_verify_owner_only(path.parent) or not _windows_verify_owner_only(path):
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401)
+    flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0)
+    try:
+        descriptor = os.open(path, flags)
+    except FileNotFoundError:
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_UNAVAILABLE',
+                                     http_status=401) from None
+    except OSError:
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID',
+                                     http_status=401) from None
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or (info.st_dev, info.st_ino) != (before.st_dev, before.st_ino):
+            raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401)
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(descriptor, 65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > 65536:
+                raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401)
+            chunks.append(chunk)
+        data = b''.join(chunks)
+    finally:
+        os.close(descriptor)
+    try:
+        after = path.lstat()
+    except OSError:
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID',
+                                     http_status=401) from None
+    if (
+        _secure_keys._is_reparse_point(after)
+        or (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino)
+    ):
+        raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401)
+    return data
+
+
 def _read_private_bootstrap(path: Path) -> bytes:
     """Read from one verified descriptor; never follow a symlink."""
+    if os.name == 'nt':
+        return _read_private_bootstrap_windows(path)
     if os.name != 'posix' and os.path.islink(path):
         raise contract.LocalApiError('LOCAL_API_BOOTSTRAP_INVALID', http_status=401)
     flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)

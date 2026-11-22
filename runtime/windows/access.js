@@ -34,10 +34,16 @@ function dpapi(mode, input) {
     '$raw=[Convert]::FromBase64String([Console]::In.ReadToEnd().Trim())',
     `$out=[Security.Cryptography.ProtectedData]::${mode === 'protect' ? 'Protect' : 'Unprotect'}($raw,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)`,
     '[Console]::Out.Write([Convert]::ToBase64String($out))'].join(';');
-  const binary = path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const systemRoot = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows';
+  const binary = path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const env = {...process.env};
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase() === 'psmodulepath') delete env[key];
+  }
+  env.PSModulePath = path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'Modules');
   return Buffer.from(execFileSync(binary, ['-NoProfile', '-NonInteractive', '-Command', script], {
     input: Buffer.from(input).toString('base64'), windowsHide: true,
-    stdio: ['pipe', 'pipe', 'pipe'], timeout: 15000,
+    stdio: ['pipe', 'pipe', 'pipe'], timeout: 15000, env,
   }).toString().trim(), 'base64');
 }
 

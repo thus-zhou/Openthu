@@ -226,7 +226,7 @@ class LocalApiServer:
             self.bootstrap_file = self._bootstrap.publish(port=self.port,
                                                           base_url=self.base_url,
                                                           pid=os.getpid())
-        except OSError:
+        except (OSError, contract.LocalApiError):
             self._read_executor.shutdown(wait=False, cancel_futures=True)
             self._priority_executor.shutdown(wait=False, cancel_futures=True)
             self._read_executor = None

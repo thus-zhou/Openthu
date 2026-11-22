@@ -24,7 +24,6 @@ const ENV_ALLOW = [
   'PATH', 'PATHEXT', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'COMSPEC',
   'HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA',
   'USERNAME', 'USERDOMAIN', 'PYTHONUTF8', 'PYTHONNOUSERSITE',
-  'PSModulePath',
 ];
 
 const failure = (code, detail) => Object.assign(new Error(code), {code, detail});

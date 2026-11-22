@@ -742,13 +742,35 @@ def verify(dist: Path = DIST, *, expected_commit: str | None = None) -> dict:
 PROBE = """
 import json, os, sys
 from pathlib import Path
+import cryptography
+import PIL
+import requests
 import thu_assistant
 from thu_assistant import paths
+
+prefix = Path(sys.prefix).resolve()
+base_prefix = Path(sys.base_prefix).resolve()
+deps = {{
+    "cryptography": Path(cryptography.__file__).resolve(),
+    "Pillow": Path(PIL.__file__).resolve(),
+    "requests": Path(requests.__file__).resolve(),
+}}
+pkg_file = Path(thu_assistant.__file__).resolve()
+
+def _inside(target: Path, root: Path) -> bool:
+    try:
+        target.relative_to(root)
+        return True
+    except ValueError:
+        return False
 
 required = {ids!r}
 manifest = paths.resource_manifest()
 by_id = {{row["id"]: row for row in manifest}}
 missing = [rid for rid in required if not by_id[rid]["available"]]
+outside = [name for name, loc in deps.items() if not _inside(loc, prefix)]
+if not _inside(pkg_file, prefix):
+    outside.append("openthu")
 print(json.dumps({{
     "file": thu_assistant.__file__,
     "version": thu_assistant.__version__,
@@ -756,7 +778,173 @@ print(json.dumps({{
     "locations": {{rid: by_id[rid]["location"] for rid in sorted(by_id)}},
     "missing": missing,
     "cwd": os.getcwd(),
+    "isolated_venv": prefix != base_prefix,
+    "outside_prefix": outside,
+    "installed_dependencies": sorted(deps),
 }}))
+"""
+
+
+STAGE_WHEELHOUSE_SCRIPT = r"""
+import base64, csv, email.parser, hashlib, importlib.metadata, io, json, re, sys, zipfile
+from pathlib import Path
+
+try:
+    from packaging.requirements import Requirement
+    from packaging.tags import sys_tags
+    from packaging.utils import canonicalize_name, canonicalize_version
+except ImportError:
+    from pip._vendor.packaging.requirements import Requirement
+    from pip._vendor.packaging.tags import sys_tags
+    from pip._vendor.packaging.utils import canonicalize_name, canonicalize_version
+
+wheel_path = Path(sys.argv[1])
+dest_dir = Path(sys.argv[2])
+
+
+def fail(reason):
+    print(json.dumps({"ok": False, "error": reason}))
+    raise SystemExit(1)
+
+
+def parse_wheel_tag(dist):
+    raw = dist.read_text("WHEEL") or ""
+    tags = []
+    for line in raw.splitlines():
+        key, sep, value = line.partition(":")
+        if sep and key.strip().lower() == "tag":
+            tags.append(value.strip())
+    if not tags:
+        return "py3-none-any"
+    if len(tags) == 1:
+        return tags[0]
+    triples = [tuple(tag.split("-", 2)) for tag in tags if tag.count("-") == 2]
+    if triples:
+        pys = sorted({p for p, _, _ in triples})
+        abis = sorted({a for _, a, _ in triples})
+        plats = sorted({pl for _, _, pl in triples})
+        if len(pys) * len(abis) * len(plats) == len(triples):
+            return f"{'.'.join(pys)}-{'.'.join(abis)}-{'.'.join(plats)}"
+    supported = [str(tag) for tag in sys_tags()]
+    return next((tag for tag in supported if tag in tags), tags[0])
+
+
+def parse_record(dist):
+    text = dist.read_text("RECORD")
+    if not text:
+        return None
+    expected = {}
+    for row in csv.reader(io.StringIO(text)):
+        if not row:
+            continue
+        rel = row[0].replace("\\", "/")
+        digest = row[1] if len(row) > 1 else ""
+        size = row[2] if len(row) > 2 else ""
+        expected[rel] = (digest, size)
+    return expected
+
+
+def pack_dist(dist, out_dir):
+    name = canonicalize_name(dist.metadata["Name"]).replace("-", "_")
+    version = re.sub(r"[^A-Za-z0-9.]+", "_", str(canonicalize_version(dist.version)))
+    tag = parse_wheel_tag(dist)
+    out_whl = out_dir / f"{name}-{version}-{tag}.whl"
+    files = list(dist.files or ())
+    if not files:
+        fail(f"missing-files:{dist.metadata['Name']}")
+    expected_record = parse_record(dist)
+    record_rel = None
+    for f in files:
+        posix = f.as_posix()
+        if posix.endswith(".dist-info/RECORD"):
+            record_rel = posix
+            break
+    if record_rel is None:
+        dist_info = next((f.parts[0] for f in files if f.parts and f.parts[0].endswith(".dist-info")), None)
+        if not dist_info:
+            fail(f"missing-dist-info:{dist.metadata['Name']}")
+        record_rel = f"{dist_info}/RECORD"
+    skip_dist_info = {"RECORD", "RECORD.jws", "RECORD.p7s", "INSTALLER", "REQUESTED", "direct_url.json"}
+    rows = []
+    with zipfile.ZipFile(out_whl, "w", zipfile.ZIP_DEFLATED) as archive:
+        seen_paths = set()
+        for f in files:
+            parts = f.parts
+            if not parts or ".." in parts or f.is_absolute():
+                continue
+            if "__pycache__" in parts or f.suffix in {".pyc", ".pyo"}:
+                continue
+            if parts[0].endswith(".dist-info") and len(parts) == 2 and parts[1] in skip_dist_info:
+                continue
+            rel = f.as_posix()
+            if rel in seen_paths:
+                continue
+            full = Path(dist.locate_file(f))
+            if full.is_symlink() or not full.is_file():
+                continue
+            data = full.read_bytes()
+            if expected_record is not None and rel in expected_record:
+                exp_hash, exp_size = expected_record[rel]
+                if exp_hash.startswith("sha256="):
+                    actual_hash = "sha256=" + base64.urlsafe_b64encode(
+                        hashlib.sha256(data).digest()
+                    ).rstrip(b"=").decode("ascii")
+                    if actual_hash != exp_hash:
+                        fail(f"record-hash-mismatch:{dist.metadata['Name']}:{rel}")
+                if exp_size and int(exp_size) != len(data):
+                    fail(f"record-size-mismatch:{dist.metadata['Name']}:{rel}")
+            archive.writestr(rel, data)
+            seen_paths.add(rel)
+            digest_b64 = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode("ascii")
+            rows.append([rel, f"sha256={digest_b64}", str(len(data))])
+        rows.append([record_rel, "", ""])
+        buf = io.StringIO(newline="")
+        writer = csv.writer(buf, lineterminator="\n")
+        writer.writerows(rows)
+        archive.writestr(record_rel, buf.getvalue().encode("utf-8"))
+    with zipfile.ZipFile(out_whl) as verify_zip:
+        if verify_zip.testzip() is not None:
+            fail(f"bad-wheel:{out_whl.name}")
+
+
+with zipfile.ZipFile(wheel_path) as whl:
+    meta_name = next((n for n in whl.namelist() if n.endswith(".dist-info/METADATA")), None)
+    if not meta_name:
+        fail("wheel-metadata-missing")
+    meta = email.parser.Parser().parsestr(whl.read(meta_name).decode("utf-8", "replace"))
+
+root_name = canonicalize_name(meta.get("Name", "openthu"))
+queue = [(Requirement(raw), "") for raw in (meta.get_all("Requires-Dist") or [])]
+visited = set()
+dists = {}
+
+while queue:
+    req, active_extra = queue.pop(0)
+    if req.marker and not req.marker.evaluate({"extra": active_extra}):
+        continue
+    pkg = canonicalize_name(req.name)
+    if pkg == root_name:
+        continue
+    try:
+        dist = importlib.metadata.distribution(pkg)
+    except importlib.metadata.PackageNotFoundError:
+        fail(f"missing-dependency:{req}")
+    if req.specifier and not req.specifier.contains(dist.version, prereleases=True):
+        fail(f"version-mismatch:{req}:{dist.version}")
+    dists[pkg] = dist
+    extras_to_visit = ("",) + tuple(sorted(req.extras))
+    for extra in extras_to_visit:
+        state = (pkg, extra)
+        if state in visited:
+            continue
+        visited.add(state)
+        for sub in (dist.requires or ()):
+            queue.append((Requirement(sub), extra))
+
+for pkg in sorted(dists):
+    pack_dist(dists[pkg], dest_dir)
+
+print(json.dumps({"ok": True, "packages": sorted(dists)}))
 """
 
 
@@ -770,15 +958,69 @@ def _install_environment() -> dict[str, str]:
     return env
 
 
-def install_check(wheel: Path, *, python: str | None = None) -> dict:
+def _validate_wheelhouse(path: Path) -> Path:
+    resolved = Path(path)
+    if resolved.is_symlink() or not resolved.is_dir():
+        raise ReleaseError("INSTALL_WHEELHOUSE_INVALID", str(path))
+    wheels = sorted(resolved.glob("*.whl"))
+    if not wheels:
+        raise ReleaseError("INSTALL_WHEELHOUSE_INVALID", "no wheel files found")
+    for wheel_file in wheels:
+        if wheel_file.is_symlink() or not wheel_file.is_file():
+            raise ReleaseError("INSTALL_WHEELHOUSE_INVALID", wheel_file.name)
+        try:
+            with zipfile.ZipFile(wheel_file) as archive:
+                if archive.testzip() is not None:
+                    raise ReleaseError("INSTALL_WHEELHOUSE_INVALID", wheel_file.name)
+        except (OSError, zipfile.BadZipFile):
+            raise ReleaseError("INSTALL_WHEELHOUSE_INVALID", wheel_file.name) from None
+    return resolved.resolve()
+
+
+def _stage_local_wheelhouse(
+    wheel: Path,
+    destination: Path,
+    *,
+    python: str,
+    env: dict[str, str],
+    cwd: Path,
+) -> list[str]:
+    result = subprocess.run(
+        [python, "-c", STAGE_WHEELHOUSE_SCRIPT, str(wheel.resolve()), str(destination)],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    if result.returncode:
+        detail = result.stdout.strip() or result.stderr.strip()
+        raise ReleaseError("INSTALL_DEPENDENCY_UNAVAILABLE", detail[-300:])
+    try:
+        payload = json.loads(result.stdout)
+    except ValueError:
+        raise ReleaseError("INSTALL_DEPENDENCY_UNAVAILABLE", result.stdout[-300:]) from None
+    if not payload.get("ok"):
+        raise ReleaseError("INSTALL_DEPENDENCY_UNAVAILABLE", str(payload.get("error", "")))
+    return list(payload.get("packages", []))
+
+
+def install_check(
+    wheel: Path,
+    *,
+    python: str | None = None,
+    wheelhouse: Path | None = None,
+) -> dict:
     python = python or sys.executable
     required = ["source.windows_auth", "source.madmodel_proxy"]
     env = _install_environment()
     with tempfile.TemporaryDirectory(prefix="openthu-install-") as tmp:
         root = Path(tmp)
+        workdir = root / "elsewhere"
+        workdir.mkdir()
         environment = root / "venv"
         created = subprocess.run(
-            [python, "-m", "venv", "--system-site-packages", str(environment)],
+            [python, "-m", "venv", str(environment)],
             capture_output=True,
             text=True,
             check=False,
@@ -786,6 +1028,32 @@ def install_check(wheel: Path, *, python: str | None = None) -> dict:
         )
         if created.returncode:
             raise ReleaseError("INSTALL_VENV_FAILED", created.stderr.strip()[:200])
+        pyvenv_cfg = environment / "pyvenv.cfg"
+        cfg_text = (
+            pyvenv_cfg.read_text(encoding="utf-8", errors="replace")
+            if pyvenv_cfg.is_file()
+            else ""
+        )
+        if not any(
+            line.strip().casefold() == "include-system-site-packages = false"
+            for line in cfg_text.splitlines()
+        ):
+            raise ReleaseError("INSTALL_VENV_NOT_ISOLATED", str(pyvenv_cfg))
+        if wheelhouse is not None:
+            find_links = _validate_wheelhouse(Path(wheelhouse))
+            dependency_source = "wheelhouse"
+        else:
+            staged = root / "wheelhouse"
+            staged.mkdir()
+            _stage_local_wheelhouse(
+                Path(wheel),
+                staged,
+                python=python,
+                env=env,
+                cwd=workdir,
+            )
+            find_links = staged
+            dependency_source = "local-cache"
         target_python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         installed = subprocess.run(
             [
@@ -794,7 +1062,8 @@ def install_check(wheel: Path, *, python: str | None = None) -> dict:
                 "pip",
                 "install",
                 "--no-index",
-                "--no-deps",
+                "--find-links",
+                str(find_links),
                 "--force-reinstall",
                 "--disable-pip-version-check",
                 str(wheel),
@@ -806,8 +1075,6 @@ def install_check(wheel: Path, *, python: str | None = None) -> dict:
         )
         if installed.returncode:
             raise ReleaseError("INSTALL_PIP_FAILED", installed.stderr.strip()[:300])
-        workdir = root / "elsewhere"
-        workdir.mkdir()
         probe = subprocess.run(
             [str(target_python), "-I", "-c", PROBE.format(ids=required)],
             cwd=workdir,
@@ -819,6 +1086,10 @@ def install_check(wheel: Path, *, python: str | None = None) -> dict:
         if probe.returncode:
             raise ReleaseError("INSTALL_PROBE_FAILED", probe.stderr.strip()[:300])
         report = json.loads(probe.stdout)
+        if not report.get("isolated_venv"):
+            raise ReleaseError("INSTALL_VENV_NOT_ISOLATED", str(environment))
+        if report.get("outside_prefix"):
+            raise ReleaseError("INSTALL_NOT_ISOLATED", ",".join(report["outside_prefix"]))
         if report["missing"]:
             raise ReleaseError("INSTALL_RESOURCE_MISSING", ",".join(report["missing"]))
         if report["source_root"] is not None:
@@ -891,6 +1162,7 @@ def install_check(wheel: Path, *, python: str | None = None) -> dict:
         report["mcp_tools"] = len(tools)
         report["doctor_ok"] = True
         report["user_state_unchanged"] = True
+        report["dependency_source"] = dependency_source
         report["venv"] = "temporary"
         return report
 
@@ -919,6 +1191,12 @@ def main(argv=None) -> int:
     parser.add_argument("--dist", type=Path, default=DIST, help="artifact directory")
     parser.add_argument("--wheel", type=Path, default=None, help="wheel for install-check")
     parser.add_argument(
+        "--wheelhouse",
+        type=Path,
+        default=None,
+        help="verified local wheel directory for offline dependency resolution during install-check",
+    )
+    parser.add_argument(
         "--expected-commit",
         default=None,
         metavar="SHA",
@@ -943,7 +1221,7 @@ def main(argv=None) -> int:
     wheel = args.wheel or next(iter(sorted(args.dist.glob("*.whl"))), None)
     if wheel is None:
         raise ReleaseError("RELEASE_ARTIFACT_MISSING", "*.whl")
-    print(json.dumps(install_check(wheel), ensure_ascii=False))
+    print(json.dumps(install_check(wheel, wheelhouse=args.wheelhouse), ensure_ascii=False))
     return 0
 
 

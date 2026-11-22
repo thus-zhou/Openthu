@@ -638,7 +638,76 @@ def test_wheel_installs_outside_the_repository_without_source_fallback(installed
     assert report["locations"]["source.madmodel_proxy"] == "bundled"
     assert report["locations"]["package.gateway"] == "package"
     assert report["mcp_tools"] == 29
+    assert report["isolated_venv"] is True
+    assert report["outside_prefix"] == []
+    assert report["doctor_ok"] is True
+    assert report["user_state_unchanged"] is True
+    assert set(manifest()["dependencies"]["runtime"]) <= set(report["installed_dependencies"])
     assert "site-packages" in report["file"] or "dist-packages" in report["file"]
+
+
+def test_install_check_accepts_a_verified_explicit_wheelhouse(candidate, tmp_path):
+    module = candidate["module"]
+    wheel = next(candidate["dist"].glob("*.whl"))
+    wheelhouse = tmp_path / "wheelhouse"
+    wheelhouse.mkdir()
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    staged = module._stage_local_wheelhouse(
+        wheel,
+        wheelhouse,
+        python=sys.executable,
+        env=module._install_environment(),
+        cwd=workdir,
+    )
+    assert {"cryptography", "pillow", "requests"} <= set(staged)
+    report = module.install_check(wheel, wheelhouse=wheelhouse)
+    assert report["dependency_source"] == "wheelhouse"
+    assert report["isolated_venv"] is True
+    assert report["outside_prefix"] == []
+    assert report["mcp_tools"] == 29
+    assert report["doctor_ok"] is True
+    assert report["user_state_unchanged"] is True
+
+
+def test_install_check_fails_closed_when_wheelhouse_misses_declared_dependency(candidate, tmp_path):
+    module = candidate["module"]
+    wheel = next(candidate["dist"].glob("*.whl"))
+    wheelhouse = tmp_path / "incomplete-wheelhouse"
+    wheelhouse.mkdir()
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    module._stage_local_wheelhouse(
+        wheel,
+        wheelhouse,
+        python=sys.executable,
+        env=module._install_environment(),
+        cwd=workdir,
+    )
+    removed = list(wheelhouse.glob("requests-*.whl"))
+    assert removed
+    for item in removed:
+        item.unlink()
+    with pytest.raises(module.ReleaseError) as caught:
+        module.install_check(wheel, wheelhouse=wheelhouse)
+    assert caught.value.code == "INSTALL_PIP_FAILED"
+
+
+def test_install_check_rejects_empty_or_invalid_wheelhouse(candidate, tmp_path):
+    module = candidate["module"]
+    wheel = next(candidate["dist"].glob("*.whl"))
+    empty = tmp_path / "empty-wheelhouse"
+    empty.mkdir()
+    with pytest.raises(module.ReleaseError) as empty_err:
+        module.install_check(wheel, wheelhouse=empty)
+    assert empty_err.value.code == "INSTALL_WHEELHOUSE_INVALID"
+
+    corrupt = tmp_path / "corrupt-wheelhouse"
+    corrupt.mkdir()
+    (corrupt / "bad-1.0-py3-none-any.whl").write_bytes(b"not-a-zip")
+    with pytest.raises(module.ReleaseError) as corrupt_err:
+        module.install_check(wheel, wheelhouse=corrupt)
+    assert corrupt_err.value.code == "INSTALL_WHEELHOUSE_INVALID"
 
 
 # --- diagnostics name the missing capability -------------------------------

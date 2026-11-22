@@ -167,7 +167,6 @@ def subprocess_environment(
         "PYTHONPATH",
         "PYTHONUTF8",
         "PYTHONNOUSERSITE",
-        "PSModulePath",
     )
     env = {name: source[name] for name in allowed if name in source}
     env.update(

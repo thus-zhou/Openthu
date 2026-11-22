@@ -7,6 +7,7 @@ identifier, and neither falls back to plaintext.
 """
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import os
 import re
@@ -14,6 +15,7 @@ import stat
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 
 from .errors import (
@@ -170,7 +172,6 @@ def _minimal_windows_env() -> dict[str, str]:
         "TEMP",
         "TMP",
         "COMSPEC",
-        "PSModulePath",
         "USERPROFILE",
         "HOMEDRIVE",
         "HOMEPATH",
@@ -203,18 +204,39 @@ def _powershell() -> str:
     return "powershell.exe"
 
 
-def _windows_acl_snapshot(path: Path) -> tuple[str, str]:
+def _powershell_env(shell: str) -> dict[str, str]:
+    """Isolate PowerShell's module search path from the caller's shell."""
+    env = _minimal_windows_env()
+    for key in list(env):
+        if key.casefold() == "psmodulepath":
+            env.pop(key, None)
+    shell_path = Path(shell)
+    if shell_path.name.casefold() == "pwsh.exe":
+        if shell_path.is_absolute():
+            modules = shell_path.parent / "Modules"
+            if modules.is_dir():
+                env["PSModulePath"] = str(modules)
+    else:
+        root = env.get("SystemRoot", r"C:\Windows")
+        env["PSModulePath"] = str(
+            Path(root) / "System32" / "WindowsPowerShell" / "v1.0" / "Modules"
+        )
+    return env
+
+
+def _windows_acl_snapshot_powershell(path: Path) -> tuple[str, str]:
     """Return the current user SID and the file's SDDL through PowerShell."""
     script = (
         "[Console]::Out.Write("
         "([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value)"
         " + \"`n\" + (Get-Acl -LiteralPath $env:OPENTHU_ACL_PATH -ErrorAction Stop).Sddl)"
     )
-    env = _minimal_windows_env()
+    shell = _powershell()
+    env = _powershell_env(shell)
     env["OPENTHU_ACL_PATH"] = str(path)
     try:
         result = subprocess.run(
-            [_powershell(), "-NoProfile", "-NonInteractive", "-Command", script],
+            [shell, "-NoProfile", "-NonInteractive", "-Command", script],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -230,6 +252,133 @@ def _windows_acl_snapshot(path: Path) -> tuple[str, str]:
     if result.returncode != 0 or len(lines) < 2:
         raise SecureKeyPermissionError("acl-snapshot-query")
     return lines[0], lines[1]
+
+
+@lru_cache(maxsize=1)
+def _win32_acl_apis():
+    from ctypes import wintypes
+
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+    kernel32.GetCurrentProcess.argtypes = []
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel32.LocalFree.restype = ctypes.c_void_p
+
+    advapi32.OpenProcessToken.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.HANDLE),
+    ]
+    advapi32.OpenProcessToken.restype = wintypes.BOOL
+    advapi32.GetTokenInformation.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    advapi32.GetTokenInformation.restype = wintypes.BOOL
+    advapi32.ConvertSidToStringSidW.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    advapi32.ConvertSidToStringSidW.restype = wintypes.BOOL
+    advapi32.GetNamedSecurityInfoW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    advapi32.GetNamedSecurityInfoW.restype = wintypes.DWORD
+    advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW.argtypes = [
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW.restype = wintypes.BOOL
+    return advapi32, kernel32, wintypes
+
+
+def _windows_acl_snapshot_win32(path: Path) -> tuple[str, str]:
+    """Return the current user SID and the file's SDDL via Win32 advapi32."""
+    try:
+        advapi32, kernel32, wintypes = _win32_acl_apis()
+        token = wintypes.HANDLE()
+        if not advapi32.OpenProcessToken(
+            kernel32.GetCurrentProcess(), 0x0008, ctypes.byref(token)
+        ):
+            raise SecureKeyPermissionError("acl-snapshot-query")
+        try:
+            needed = wintypes.DWORD(0)
+            advapi32.GetTokenInformation(token, 1, None, 0, ctypes.byref(needed))
+            if needed.value < ctypes.sizeof(ctypes.c_void_p):
+                raise SecureKeyPermissionError("acl-snapshot-query")
+            buf = ctypes.create_string_buffer(needed.value)
+            if not advapi32.GetTokenInformation(
+                token, 1, buf, needed.value, ctypes.byref(needed)
+            ):
+                raise SecureKeyPermissionError("acl-snapshot-query")
+            sid_ptr = ctypes.c_void_p.from_buffer(buf).value
+            if not sid_ptr:
+                raise SecureKeyPermissionError("acl-snapshot-query")
+            sid_str_ptr = ctypes.c_void_p()
+            if not advapi32.ConvertSidToStringSidW(sid_ptr, ctypes.byref(sid_str_ptr)):
+                raise SecureKeyPermissionError("acl-snapshot-query")
+            if not sid_str_ptr.value:
+                raise SecureKeyPermissionError("acl-snapshot-query")
+            try:
+                current_sid = ctypes.wstring_at(sid_str_ptr.value).strip()
+            finally:
+                kernel32.LocalFree(sid_str_ptr.value)
+        finally:
+            kernel32.CloseHandle(token)
+
+        sec_info = 0x1 | 0x2 | 0x4  # OWNER | GROUP | DACL
+        sd_ptr = ctypes.c_void_p()
+        rc = advapi32.GetNamedSecurityInfoW(
+            str(path), 1, sec_info, None, None, None, None, ctypes.byref(sd_ptr)
+        )
+        if rc != 0 or not sd_ptr.value:
+            raise SecureKeyPermissionError("acl-snapshot-query")
+        try:
+            sddl_ptr = ctypes.c_void_p()
+            sddl_len = wintypes.DWORD(0)
+            if not advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                sd_ptr.value, 1, sec_info, ctypes.byref(sddl_ptr), ctypes.byref(sddl_len)
+            ):
+                raise SecureKeyPermissionError("acl-snapshot-query")
+            if not sddl_ptr.value:
+                raise SecureKeyPermissionError("acl-snapshot-query")
+            try:
+                sddl = ctypes.wstring_at(sddl_ptr.value).strip()
+            finally:
+                kernel32.LocalFree(sddl_ptr.value)
+        finally:
+            kernel32.LocalFree(sd_ptr.value)
+    except SecureKeyPermissionError:
+        raise
+    except (OSError, ValueError, ctypes.ArgumentError):
+        raise SecureKeyPermissionError("acl-snapshot-query") from None
+    if not current_sid or not sddl:
+        raise SecureKeyPermissionError("acl-snapshot-query")
+    return current_sid, sddl
+
+
+def _windows_acl_snapshot(path: Path) -> tuple[str, str]:
+    """Return the current user SID and the file's SDDL, failing closed on errors."""
+    if os.name == "nt" and hasattr(ctypes, "WinDLL"):
+        return _windows_acl_snapshot_win32(path)
+    return _windows_acl_snapshot_powershell(path)
 
 
 _SDDL_SECTIONS = re.compile(r"O:(.*?)(?:G:|D:|S:|$)")
